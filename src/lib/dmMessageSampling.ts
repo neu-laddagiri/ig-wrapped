@@ -7,6 +7,12 @@ export interface SelectedMessageForApi {
   text: string;
 }
 
+export interface SamplingOptions {
+  mostActiveMonth?: string;
+  isGroup: boolean;
+  useRealNames: boolean;
+}
+
 const MAX_MESSAGES = 100;
 const MAX_MESSAGE_CHARS = 500;
 
@@ -32,27 +38,20 @@ function monthKeyFromTimestampMs(timestamp_ms: number): string | undefined {
   return formatMonthKey(ts);
 }
 
+/** Build sender label map: real names or Person 1 / Person 2 / … */
 export function buildSenderLabels(
   senders: string[],
-  isGroup: boolean
+  useRealNames: boolean
 ): Map<string, string> {
   const unique = [...new Set(senders.filter(Boolean))];
   const map = new Map<string, string>();
 
-  if (isGroup) {
-    unique.forEach((s, i) => map.set(s, `Person ${i + 1}`));
-  } else if (unique.length >= 2) {
-    map.set(unique[0], "User A");
-    map.set(unique[1], "User B");
-    for (let i = 2; i < unique.length; i++) {
-      map.set(unique[i], `Person ${i + 1}`);
-    }
-  } else if (unique.length === 1) {
-    map.set(unique[0], "User A");
-  } else {
-    unique.forEach((s, i) => map.set(s, `Person ${i + 1}`));
+  if (useRealNames) {
+    unique.forEach((s) => map.set(s, s));
+    return map;
   }
 
+  unique.forEach((s, i) => map.set(s, `Person ${i + 1}`));
   return map;
 }
 
@@ -60,9 +59,9 @@ type TextMessage = DmMessageSample & { text: string };
 
 export function prepareSelectedMessages(
   textMessages: DmMessageSample[],
-  mostActiveMonth: string | undefined,
-  isGroup: boolean
+  options: SamplingOptions
 ): SelectedMessageForApi[] {
+  const { mostActiveMonth, isGroup: _isGroup, useRealNames } = options;
   if (!textMessages.length) return [];
 
   const withText: TextMessage[] = textMessages
@@ -87,7 +86,7 @@ export function prepareSelectedMessages(
 
   const labels = buildSenderLabels(
     withText.map((m) => m.sender_name),
-    isGroup
+    useRealNames
   );
 
   const seen = new Set<string>();
@@ -99,7 +98,7 @@ export function prepareSelectedMessages(
     seen.add(key);
 
     merged.push({
-      sender: labels.get(m.sender_name) ?? "User",
+      sender: labels.get(m.sender_name) ?? (useRealNames ? m.sender_name : "Person"),
       timestamp_ms: m.timestamp_ms,
       text: maskSensitiveText(m.text).slice(0, MAX_MESSAGE_CHARS),
     });
@@ -110,16 +109,39 @@ export function prepareSelectedMessages(
   return merged;
 }
 
-export function anonymizeSenderStats(
+export function formatSenderStats(
   messagesBySender: Record<string, number>,
-  isGroup: boolean
+  useRealNames: boolean
 ): Record<string, number> {
   const senders = Object.keys(messagesBySender);
-  const labels = buildSenderLabels(senders, isGroup);
+  const labels = buildSenderLabels(senders, useRealNames);
   const result: Record<string, number> = {};
   for (const [name, count] of Object.entries(messagesBySender)) {
-    const label = labels.get(name) ?? "User";
+    const label = labels.get(name) ?? name;
     result[label] = (result[label] ?? 0) + count;
   }
   return result;
+}
+
+/** Display label for UI message balance chips */
+export function displaySenderLabel(
+  rawName: string,
+  labelMap: Map<string, string>
+): string {
+  return labelMap.get(rawName) ?? rawName;
+}
+
+export function buildSenderLabelMap(
+  messagesBySender: Record<string, number>,
+  useRealNames: boolean
+): Map<string, string> {
+  return buildSenderLabels(Object.keys(messagesBySender), useRealNames);
+}
+
+/** @deprecated Use formatSenderStats */
+export function anonymizeSenderStats(
+  messagesBySender: Record<string, number>,
+  _isGroup: boolean
+): Record<string, number> {
+  return formatSenderStats(messagesBySender, false);
 }

@@ -3,6 +3,7 @@ export type DmAiSummaryTone =
   | "savage"
   | "real"
   | "wholesome"
+  | "drama"
   | "funny";
 
 export interface DmAiSummaryResult {
@@ -31,6 +32,8 @@ export interface DmSummaryApiRequest {
   threadTitle: string;
   participantCount: number;
   isGroup: boolean;
+  useRealNames: boolean;
+  participants?: string[];
   stats: {
     totalMessages: number;
     linkCount: number;

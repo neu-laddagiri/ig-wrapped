@@ -51,29 +51,45 @@ interface DmsTabProps {
   onDmAiSummariesChange?: (summaries: DmAiSummariesMap) => void;
 }
 
+import {
+  buildSenderLabelMap,
+  displaySenderLabel,
+} from "@/lib/dmMessageSampling";
+
 function formatDate(ts?: number): string {
   if (!ts) return "Not available";
   const formatted = formatTimestamp(ts);
   return formatted === "—" ? "Not available" : formatted;
 }
 
-function DetailRow({
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h5 className="mb-2.5 text-[11px] font-semibold uppercase tracking-widest text-white/35">
+      {children}
+    </h5>
+  );
+}
+
+function MiniStat({
   label,
   value,
 }: {
   label: string;
-  value: React.ReactNode;
+  value: string;
 }) {
   return (
-    <div className="flex justify-between gap-4 border-b border-white/5 py-2 text-sm">
-      <span className="shrink-0 text-white/45">{label}</span>
-      <span className="text-right text-white/85">{value}</span>
+    <div className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5">
+      <p className="text-[10px] uppercase tracking-wider text-white/35">
+        {label}
+      </p>
+      <p className="mt-0.5 text-sm font-medium text-white/90">{value}</p>
     </div>
   );
 }
 
 function ThreadExpandedPanel({
   thread,
+  showThreadNames,
   showFirstMessagePreview,
   showParticipants,
   onToggleParticipants,
@@ -81,128 +97,244 @@ function ThreadExpandedPanel({
   onAiSummaryChange,
 }: {
   thread: NormalizedDmThread;
+  showThreadNames: boolean;
   showFirstMessagePreview: boolean;
   showParticipants: boolean;
   onToggleParticipants: () => void;
   aiSummary?: DmAiSummarySaved;
   onAiSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
 }) {
+  const senderLabelMap = buildSenderLabelMap(
+    thread.messagesBySender,
+    showThreadNames
+  );
+  const senders = Object.entries(thread.messagesBySender).sort(
+    (a, b) => b[1] - a[1]
+  );
+  const topCount = senders[0]?.[1] ?? 0;
+
+  const legacyPanel = (
+    <DmAiSummarySection
+      thread={thread}
+      showThreadNames={showThreadNames}
+      saved={aiSummary}
+      onSummaryChange={onAiSummaryChange}
+    />
+  );
+
   if (!thread.hasDetailedInsights) {
     return (
-      <div className="border-t border-white/10 bg-white/[0.02] px-4 py-4">
+      <div className="border-t border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-5 sm:px-5">
         <p className="text-sm text-white/50">
           Detailed stats are not available for this thread. Re-upload your
-          Instagram ZIP to refresh DM insights with the latest parser.
+          Instagram ZIP to refresh DM insights.
         </p>
-        <p className="mt-2 text-xs text-white/35">
-          {formatNumber(thread.totalMessages)} messages recorded ·{" "}
-          {thread.folder.replace("_", " ")}
-        </p>
-        <DmAiSummarySection
-          thread={thread}
-          saved={aiSummary}
-          onSummaryChange={onAiSummaryChange}
-        />
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <MiniStat
+            label="Messages"
+            value={formatNumber(thread.totalMessages)}
+          />
+          <MiniStat label="Folder" value={thread.folder.replace("_", " ")} />
+        </div>
+        {legacyPanel}
       </div>
     );
   }
 
-  const senders = Object.entries(thread.messagesBySender).sort(
-    (a, b) => b[1] - a[1]
-  );
-
   return (
-    <div className="border-t border-white/10 bg-white/[0.02] px-4 py-4">
-      <p className="mb-3 text-sm italic text-white/55">{thread.funSummary}</p>
+    <div className="border-t border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-5 sm:px-5">
+      <p className="mb-4 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs italic text-white/50">
+        {thread.funSummary}
+      </p>
 
-      <div className="grid gap-0 sm:grid-cols-2">
-        <DetailRow label="First message" value={formatDate(thread.firstMessageAt)} />
-        <DetailRow
-          label="First message sender"
-          value={thread.firstMessageSender ?? "Not available"}
-        />
-        <DetailRow label="Last active" value={formatDate(thread.lastMessageAt)} />
-        <DetailRow
-          label="Last message sender"
-          value={thread.lastMessageSender ?? "Not available"}
-        />
-        <DetailRow
-          label="Most active month"
-          value={thread.mostActiveMonth ?? "Not available"}
-        />
-        <DetailRow
-          label="Total messages"
-          value={formatNumber(thread.totalMessages)}
-        />
-        <DetailRow label="Links shared" value={formatNumber(thread.linkCount)} />
-        <DetailRow
-          label="Reels / posts"
-          value={formatNumber(thread.reelOrPostCount)}
-        />
-        <DetailRow label="Photos" value={formatNumber(thread.photoCount)} />
-        <DetailRow label="Videos" value={formatNumber(thread.videoCount)} />
-        <DetailRow label="Audio files" value={formatNumber(thread.audioCount)} />
-        <DetailRow label="Reactions" value={formatNumber(thread.reactionCount)} />
-        <DetailRow label="Calls" value={formatNumber(thread.callCount)} />
-        <DetailRow
-          label="Avg message length"
-          value={
-            thread.averageMessageLength != null
-              ? `${thread.averageMessageLength} chars`
-              : "Not available"
-          }
-        />
-      </div>
-
-      {showFirstMessagePreview ? (
-        <div className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3">
-          <p className="text-[10px] uppercase tracking-wider text-amber-300/80">
-            First message preview
-          </p>
-          <p className="mt-1 text-sm text-amber-100/90">
-            {thread.firstMessageText?.trim()
-              ? thread.firstMessageText.length > 200
-                ? `${thread.firstMessageText.slice(0, 200)}…`
-                : thread.firstMessageText
-              : "No text preview available."}
-          </p>
+      <section className="mb-5">
+        <SectionTitle>Thread overview</SectionTitle>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+          <MiniStat
+            label="Total messages"
+            value={formatNumber(thread.totalMessages)}
+          />
+          <MiniStat
+            label="First message"
+            value={formatDate(thread.firstMessageAt)}
+          />
+          <MiniStat
+            label="Last active"
+            value={formatDate(thread.lastMessageAt)}
+          />
+          <MiniStat
+            label="Most active month"
+            value={thread.mostActiveMonth ?? "Not available"}
+          />
+          <MiniStat
+            label="Avg length"
+            value={
+              thread.averageMessageLength != null
+                ? `${thread.averageMessageLength} chars`
+                : "Not available"
+            }
+          />
+          <MiniStat label="Folder" value={thread.folder.replace("_", " ")} />
         </div>
-      ) : (
-        (thread.firstMessageAt || thread.firstMessageSender) && (
-          <p className="mt-3 text-xs text-white/45">
-            {thread.firstMessageAt && (
-              <span>First message: {formatDate(thread.firstMessageAt)}</span>
-            )}
-            {thread.firstMessageSender && (
-              <span>
-                {thread.firstMessageAt ? " · " : ""}
-                Sender: {thread.firstMessageSender}
-              </span>
-            )}
-          </p>
-        )
-      )}
+      </section>
 
-      {senders.length > 0 && (
-        <div className="mt-4">
-          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-white/40">
-            Messages by sender
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {senders.map(([name, count]) => (
-              <span
-                key={`sender-${thread.id}-${name}`}
-                className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs text-white/70"
-              >
-                {name}: {count}
-              </span>
-            ))}
+      <section className="mb-5">
+        <SectionTitle>Activity timeline</SectionTitle>
+        <div className="grid gap-2 sm:grid-cols-2">
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
+            <span className="text-white/40">First message · </span>
+            <span className="text-white/85">
+              {formatDate(thread.firstMessageAt)}
+              {thread.firstMessageSender && (
+                <span className="text-white/55">
+                  {" "}
+                  ·{" "}
+                  {showThreadNames
+                    ? thread.firstMessageSender
+                    : displaySenderLabel(
+                        thread.firstMessageSender,
+                        senderLabelMap
+                      )}
+                </span>
+              )}
+            </span>
+          </div>
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
+            <span className="text-white/40">Last active · </span>
+            <span className="text-white/85">
+              {formatDate(thread.lastMessageAt)}
+              {thread.lastMessageSender && (
+                <span className="text-white/55">
+                  {" "}
+                  ·{" "}
+                  {showThreadNames
+                    ? thread.lastMessageSender
+                    : displaySenderLabel(
+                        thread.lastMessageSender,
+                        senderLabelMap
+                      )}
+                </span>
+              )}
+            </span>
           </div>
         </div>
+      </section>
+
+      <section className="mb-5">
+        <SectionTitle>Shared content</SectionTitle>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <MiniStat label="Links" value={formatNumber(thread.linkCount)} />
+          <MiniStat
+            label="Reels / posts"
+            value={formatNumber(thread.reelOrPostCount)}
+          />
+          <MiniStat label="Photos" value={formatNumber(thread.photoCount)} />
+          <MiniStat label="Videos" value={formatNumber(thread.videoCount)} />
+          <MiniStat label="Audio" value={formatNumber(thread.audioCount)} />
+          <MiniStat
+            label="Reactions"
+            value={formatNumber(thread.reactionCount)}
+          />
+          <MiniStat label="Calls" value={formatNumber(thread.callCount)} />
+        </div>
+      </section>
+
+      {senders.length > 0 && (
+        <section className="mb-5">
+          <SectionTitle>Message balance</SectionTitle>
+          <div className="space-y-2">
+            {senders.map(([name, count]) => {
+              const pct =
+                thread.totalMessages > 0
+                  ? Math.round((count / thread.totalMessages) * 100)
+                  : 0;
+              const label = showThreadNames
+                ? name
+                : displaySenderLabel(name, senderLabelMap);
+              return (
+                <div key={`${thread.id}-bal-${name}`}>
+                  <div className="mb-1 flex justify-between text-xs">
+                    <span className="truncate text-white/70">{label}</span>
+                    <span className="shrink-0 text-white/45">
+                      {formatNumber(count)} ({pct}%)
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4]"
+                      style={{
+                        width: `${Math.max(pct, count === topCount && pct < 4 ? 4 : 0)}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
+      <section className="mb-5">
+        <SectionTitle>First message</SectionTitle>
+        {showFirstMessagePreview ? (
+          <div className="rounded-xl border border-amber-500/25 bg-amber-500/10 p-3">
+            <p className="text-[10px] uppercase tracking-wider text-amber-300/80">
+              Preview · may contain private content
+            </p>
+            {(thread.firstMessageAt || thread.firstMessageSender) && (
+              <p className="mt-1 text-xs text-amber-200/60">
+                {thread.firstMessageAt &&
+                  formatDate(thread.firstMessageAt)}
+                {thread.firstMessageSender && (
+                  <span>
+                    {thread.firstMessageAt ? " · " : ""}
+                    {showThreadNames
+                      ? thread.firstMessageSender
+                      : displaySenderLabel(
+                          thread.firstMessageSender,
+                          senderLabelMap
+                        )}
+                  </span>
+                )}
+              </p>
+            )}
+            <p className="mt-2 text-sm text-amber-100/90">
+              {thread.firstMessageText?.trim()
+                ? thread.firstMessageText.length > 200
+                  ? `${thread.firstMessageText.slice(0, 200)}…`
+                  : thread.firstMessageText
+                : "No text preview available."}
+            </p>
+          </div>
+        ) : (
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm text-white/70">
+            {thread.firstMessageAt || thread.firstMessageSender ? (
+              <>
+                {thread.firstMessageAt && (
+                  <span>{formatDate(thread.firstMessageAt)}</span>
+                )}
+                {thread.firstMessageSender && (
+                  <span>
+                    {thread.firstMessageAt ? " · " : ""}
+                    Sender:{" "}
+                    {showThreadNames
+                      ? thread.firstMessageSender
+                      : displaySenderLabel(
+                          thread.firstMessageSender,
+                          senderLabelMap
+                        )}
+                  </span>
+                )}
+              </>
+            ) : (
+              "Not available"
+            )}
+          </div>
+        )}
+      </section>
+
       {thread.isGroup && (
-        <div className="mt-4">
+        <section className="mb-5">
           <button
             type="button"
             onClick={onToggleParticipants}
@@ -215,21 +347,26 @@ function ThreadExpandedPanel({
               {thread.participants.map((p, i) => (
                 <span
                   key={`${thread.id}-p-${i}-${p}`}
-                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-0.5 text-xs text-white/65"
+                  className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/70"
                 >
-                  {p}
+                  {showThreadNames ? p : `Person ${i + 1}`}
                 </span>
               ))}
             </div>
           )}
-        </div>
+        </section>
       )}
 
-      <DmAiSummarySection
-        thread={thread}
-        saved={aiSummary}
-        onSummaryChange={onAiSummaryChange}
-      />
+      <section>
+        <SectionTitle>AI summary</SectionTitle>
+        <DmAiSummarySection
+          thread={thread}
+          showThreadNames={showThreadNames}
+          saved={aiSummary}
+          onSummaryChange={onAiSummaryChange}
+          embedded
+        />
+      </section>
     </div>
   );
 }
@@ -574,6 +711,7 @@ export function DmsTab({
                   {isOpen && (
                     <ThreadExpandedPanel
                       thread={thread}
+                      showThreadNames={showThreadNames}
                       showFirstMessagePreview={showFirstMessagePreview}
                       showParticipants={participantsOpen.has(thread.id)}
                       onToggleParticipants={() => toggleParticipants(thread.id)}

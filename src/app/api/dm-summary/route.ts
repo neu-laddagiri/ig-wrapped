@@ -5,53 +5,70 @@ import type {
   DmSummaryApiRequest,
 } from "@/types/dmAiSummary";
 
-const SYSTEM_PROMPT = `You are writing an Instagram Wrapped-style DM recap for one specific chat. Sound like a funny, sharp friend who actually read the messages — not a therapist, not a corporate analyst, not ChatGPT.
+function buildSystemPrompt(useRealNames: boolean): string {
+  const nameRule = useRealNames
+    ? `- Use participant names from the prompt naturally in whoCarries, patterns, roast, and awards. Do NOT use "User A", "User B", or "Person 1" when real names are provided.`
+    : `- Use only anonymized sender labels from the sample (Person 1, Person 2, etc.). Never invent real names.`;
 
-Your job: make this recap feel like it could ONLY describe THIS chat.
+  return `You are writing an Instagram Wrapped-style DM recap. Be funny, dramatic, specific, and socially perceptive. Sound like a sharp friend reading the chat and saying what everyone is thinking — not a therapist, not corporate HR, not ChatGPT.
+
+If the messages show flirting, romantic tension, situationship energy, mixed signals, jealousy jokes, late-night chaos, or "are they just friends?" vibes — call it out directly but playfully. Do not be sterile. Do not dodge the obvious. Do not sanitize flirty/romantic patterns into bland "friendship and communication."
+
+If the message sample contains repeated flirty, romantic, or situationship-coded language, say the dynamic clearly using careful vibe-based wording (e.g. "the flirting is doing push-ups in the corner", "will-they-won't-they planning committee", "this would be obvious to everyone except the people in the chat").
+
+RELATIONSHIP / FLIRTING LENS — infer from the sample which energies are present (mention only what the receipts support):
+- Pure friendship vs group-chat chaos
+- Flirty energy / romantic tension / situationship energy
+- One-sided effort vs mutual effort / balanced chemistry
+- Late-night chaos / party-nightlife logistics
+- Planning-but-never-following-through energy
+- Reels-only friendship / link-dumping with no real conversation
+- Emotional support side quest
+- Academic or social-life conflict / study-abroad romance subplot
+- Mixed signals / "almost meeting up" energy
+- Soft concern ("get home safe", checking in) that reads more than platonic
+
+Look for: compliments, teasing, playful arguing, repeated hangout plans, missed connections, "where are you" / "come here" / "are you out", double-texting, inside jokes, romantic ambiguity.
 
 VOICE:
-- Funny, specific, punchy, culturally aware (memes, reels, group chat chaos, late-night texts).
+- Funny, dramatic, punchy, screenshot-worthy, slightly messy in a fun way.
 - Use "this chat gives…", "the vibe is…", "based on the receipts…" energy.
-- Light roasting is encouraged. Playful savage > polite vagueness.
-- Gen Z aware without forced slang or cringe.
 - Short sentences. No filler. No over-explaining.
 
-BANNED (never write these vibes):
-- Corporate/therapy speak: "mix of connection and communication", "healthy dynamic", "open dialogue", "mutual respect", "navigate", "hold space", "it's clear that both parties…"
-- Generic AI fluff that could describe any chat.
-- Long quotes from private messages.
-- Serious accusations, cruelty, slurs, hate toward protected traits.
-- Sexual content involving minors.
-- Medical/legal/mental health diagnoses.
-- Doxxing or revealing addresses, phone numbers, emails, real names.
-- Claiming certainty about relationships, intentions, or cheating.
+NAME RULES:
+${nameRule}
 
-SPECIFICITY RULES (critical):
-- Reference concrete patterns from the sample: who texts more, reel/link spam, one-word replies, planning vs chaos, double-texting, ghosting arcs, emoji energy, time gaps, repeated phrases/topics.
-- Cite stats when useful (message counts, most active month, media/links).
-- signaturePatterns: 3-5 bullets, each about a DISTINCT behavior seen in the sample — not generic traits.
-- whoCarries: name the anonymized sender label + their % of messages + a funny read on what they contribute.
-- roast: the star section — 2-4 sentences, the funniest/most savage (but safe) take on the whole dynamic.
-- wrappedAward: format as "Award Name — one-sentence reason tied to this chat".
-- confidenceNote: one short line, self-aware, not a disclaimer essay.
+BANNED:
+- Sterile dodge phrases: "mix of connection and communication", "healthy dynamic", "open dialogue", "mutual respect", "navigate", "hold space", "it's complicated" without specifics
+- Generic fluff that could describe any chat
+- Long quotes from private messages
+- Serious accusations (cheating, abuse, etc.), cruelty, slurs, hate toward protected traits
+- Medical/legal/mental health diagnoses
+- Doxxing addresses, phone numbers, or emails
+- Claiming certainty about what people "really" feel — use vibe-based language instead
 
-Return ONLY valid JSON with exactly these keys:
-chatVibe (1 punchy sentence),
-oneSentenceSummary (1 strong sentence — the headline),
-whoCarries,
-signaturePatterns (array of 3-5 strings),
-funniestDynamic,
-roast,
-greenFlags (array of 2-4 strings),
-redFlags (array of 2-4 playful strings),
-wrappedAward,
-confidenceNote`;
+OUTPUT STYLE (same JSON keys, dramatic content):
+- chatVibe: 1 punchy sentence. Example energy: "Study abroad rom-com energy with a suspicious amount of 'where are you tonight?' logistics."
+- oneSentenceSummary: 1 strong headline calling out the MAIN dynamic (flirtation subplot, logistics chaos, mutual chaos, etc.)
+- whoCarries: cite message counts/%. If balanced, say chemistry/effort feels mutual. If one-sided, call it out with humor.
+- signaturePatterns: 3-5 bullets — distinct repeated behaviors from the sample, including flirting/ambiguity if present
+- funniestDynamic: genuinely funny read on the weird social rhythm of this chat
+- roast: STRONGEST section — 2-4 sentences, funniest/most dramatic safe take. This is the screenshot line.
+- greenFlags: 2-4 — care, check-ins, consistent replies, plans, safety messages, warmth
+- redFlags: 2-4 PLAYFUL only — vague plans, late replies, mixed signals, one person carrying logistics, overthinking, "almost meeting up" energy. No serious accusations.
+- wrappedAward: fun specific award + reason. Examples: "Most Likely To Turn Logistics Into A Flirtation Arc — …", "The Will-They-Won't-They Planning Committee Award — …"
+- confidenceNote: 1 short self-aware line, not a disclaimer essay
+
+Return ONLY valid JSON with keys:
+chatVibe, oneSentenceSummary, whoCarries, signaturePatterns, funniestDynamic, roast, greenFlags, redFlags, wrappedAward, confidenceNote`;
+}
 
 const TONE_GUIDANCE: Record<Exclude<DmAiSummaryTone, "funny">, string> = {
-  wrapped: `TONE: Wrapped (default). Year-end awards show energy. Punchy labels, funny superlatives, stat callbacks. Balanced humor — roast AND celebrate. Think Spotify Wrapped narrator meets group chat lore.`,
-  savage: `TONE: Savage. Sharper roast. More bite, more jokes at the dynamic (not at people as human beings). Playful phrases welcome: "this chat needs a project manager", "emotional support side quest", "planning committee from hell", "reel dealer with a texting addiction". Still safe — no cruelty, no protected-trait jokes, no serious accusations.`,
-  real: `TONE: Real. Less jokes, more honest dynamic analysis. Still casual and specific — never corporate. Call out the actual power balance, effort gap, and communication style with receipts.`,
-  wholesome: `TONE: Wholesome. Warm, positive, friendship-forward. Highlight care, consistency, inside jokes, loyalty, and green flags. Still fun and specific — not saccharine or generic.`,
+  wrapped: `TONE: Wrapped. Fun, dramatic, screenshot-worthy, balanced. Year-end awards energy with stat callbacks. If flirting/tension is in the sample, name it — don't bury it under logistics.`,
+  savage: `TONE: Savage. Roast-heavy, more direct about mixed signals and flirty tension. Example energy: "The flirting is doing push-ups in the corner while everyone pretends this is just logistics." Still playful and safe — no cruelty.`,
+  real: `TONE: Real. Honest social analysis, fewer jokes, never corporate. Still mention flirting, romantic ambiguity, or one-sided effort if the receipts show it. Straight talk, not sterile.`,
+  wholesome: `TONE: Wholesome. Warm, positive, green-flag forward. Can gently mention cute/flirty energy if present. Focus on care, consistency, memorable moments.`,
+  drama: `TONE: Drama. Maximum tea energy. Focus on tension, ambiguity, flirting, chaotic planning, jealousy jokes, late-night arcs, and "everyone knows except them" energy. Most dramatic and socially aware — still safe, no serious accusations.`,
 };
 
 const MAX_SELECTED_MESSAGES = 100;
@@ -67,7 +84,8 @@ function isValidTone(tone: unknown): tone is DmAiSummaryTone {
     tone === "funny" ||
     tone === "savage" ||
     tone === "wrapped" ||
-    tone === "wholesome"
+    tone === "wholesome" ||
+    tone === "drama"
   );
 }
 
@@ -84,6 +102,7 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
   const participantCount =
     typeof body.participantCount === "number" ? body.participantCount : 0;
   const isGroup = body.isGroup === true;
+  const useRealNames = body.useRealNames === true;
   const tone = body.tone;
 
   if (!isValidTone(tone)) return "Invalid tone.";
@@ -103,7 +122,7 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
     .map((m) => {
       if (!isRecord(m)) return null;
       const sender =
-        typeof m.sender === "string" ? m.sender.slice(0, 40) : "User";
+        typeof m.sender === "string" ? m.sender.slice(0, 80) : "User";
       const timestamp_ms =
         typeof m.timestamp_ms === "number" ? m.timestamp_ms : 0;
       const text =
@@ -124,14 +143,23 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
         Object.entries(stats.messagesBySender)
           .filter(([, v]) => typeof v === "number")
           .slice(0, 20)
-          .map(([k, v]) => [String(k).slice(0, 40), v as number])
+          .map(([k, v]) => [String(k).slice(0, 80), v as number])
       )
     : {};
+
+  const participants = Array.isArray(body.participants)
+    ? body.participants
+        .filter((p): p is string => typeof p === "string")
+        .map((p) => p.slice(0, 80))
+        .slice(0, 30)
+    : undefined;
 
   return {
     threadTitle: threadTitle || "DM thread",
     participantCount,
     isGroup,
+    useRealNames,
+    participants,
     tone,
     stats: {
       totalMessages,
@@ -167,40 +195,58 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
   };
 }
 
+function extractJsonBlock(content: string): string {
+  const trimmed = content.trim();
+  if (trimmed.startsWith("{")) return trimmed;
+
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) return fenced[1].trim();
+
+  const start = trimmed.indexOf("{");
+  const end = trimmed.lastIndexOf("}");
+  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+
+  return trimmed;
+}
+
 function parseAiJson(content: string): DmAiSummaryResult | null {
-  try {
-    const parsed = JSON.parse(content);
-    if (!isRecord(parsed)) return null;
+  const candidates = [content, extractJsonBlock(content)];
 
-    const str = (k: string) =>
-      typeof parsed[k] === "string" ? (parsed[k] as string).trim() : "";
-    const arr = (k: string) =>
-      Array.isArray(parsed[k])
-        ? (parsed[k] as unknown[])
-            .filter((v) => typeof v === "string")
-            .map((v) => (v as string).trim().slice(0, 400))
-            .filter(Boolean)
-            .slice(0, 5)
-        : [];
+  for (const raw of candidates) {
+    try {
+      const parsed = JSON.parse(raw);
+      if (!isRecord(parsed)) continue;
 
-    const result: DmAiSummaryResult = {
-      chatVibe: str("chatVibe"),
-      oneSentenceSummary: str("oneSentenceSummary"),
-      whoCarries: str("whoCarries"),
-      signaturePatterns: arr("signaturePatterns"),
-      funniestDynamic: str("funniestDynamic"),
-      roast: str("roast"),
-      greenFlags: arr("greenFlags"),
-      redFlags: arr("redFlags"),
-      wrappedAward: str("wrappedAward"),
-      confidenceNote: str("confidenceNote"),
-    };
+      const str = (k: string) =>
+        typeof parsed[k] === "string" ? (parsed[k] as string).trim() : "";
+      const arr = (k: string) =>
+        Array.isArray(parsed[k])
+          ? (parsed[k] as unknown[])
+              .filter((v) => typeof v === "string")
+              .map((v) => (v as string).trim().slice(0, 400))
+              .filter(Boolean)
+              .slice(0, 5)
+          : [];
 
-    if (!result.oneSentenceSummary && !result.chatVibe) return null;
-    return result;
-  } catch {
-    return null;
+      const result: DmAiSummaryResult = {
+        chatVibe: str("chatVibe"),
+        oneSentenceSummary: str("oneSentenceSummary"),
+        whoCarries: str("whoCarries"),
+        signaturePatterns: arr("signaturePatterns"),
+        funniestDynamic: str("funniestDynamic"),
+        roast: str("roast"),
+        greenFlags: arr("greenFlags"),
+        redFlags: arr("redFlags"),
+        wrappedAward: str("wrappedAward"),
+        confidenceNote: str("confidenceNote"),
+      };
+
+      if (result.oneSentenceSummary || result.chatVibe) return result;
+    } catch {
+      continue;
+    }
   }
+  return null;
 }
 
 function formatSenderBreakdown(
@@ -237,45 +283,80 @@ function buildUserPrompt(req: DmSummaryApiRequest): string {
       ? "1:1 or two-person thread"
       : `small group (${req.participantCount} people)`;
 
+  const nameContext = req.useRealNames
+    ? `PARTICIPANT NAMES (use these in your recap):
+${req.participants?.length ? req.participants.join(", ") : "See sender labels in sample"}`
+  : `SENDER LABELS: anonymized only (Person 1, Person 2, etc.) — do not invent real names.`;
+
   return `${TONE_GUIDANCE[tone]}
 
-THREAD CONTEXT (use anonymized labels only — never invent real names):
-- Label: ${req.threadTitle}
-- Type: ${chatType}
-- Participant count: ${req.participantCount}
+${nameContext}
 
-HARD STATS (weave these into your recap):
+THREAD:
+- Title: ${req.threadTitle}
+- Type: ${chatType}
+
+STATS:
 - Total messages: ${req.stats.totalMessages}
-- Messages by sender: ${formatSenderBreakdown(req.stats.messagesBySender, req.stats.totalMessages)}
+- By sender: ${formatSenderBreakdown(req.stats.messagesBySender, req.stats.totalMessages)}
 - First message: ${req.stats.firstMessageAt ?? "unknown"}
 - Last active: ${req.stats.lastMessageAt ?? "unknown"}
 - Most active month: ${req.stats.mostActiveMonth ?? "unknown"}
-- Links shared: ${req.stats.linkCount}
-- Reels/posts shared: ${req.stats.reelOrPostCount}
+- Links: ${req.stats.linkCount} | Reels/posts: ${req.stats.reelOrPostCount}
 - Photos: ${req.stats.photoCount} | Videos: ${req.stats.videoCount} | Audio: ${req.stats.audioCount}
-- Total media: ${req.stats.mediaCount}
-- Reactions: ${req.stats.reactionCount}
-- Calls: ${req.stats.callCount}
-- Avg message length: ${req.stats.averageMessageLength != null ? `${req.stats.averageMessageLength} chars` : "unknown"}
+- Reactions: ${req.stats.reactionCount} | Calls: ${req.stats.callCount}
+- Avg length: ${req.stats.averageMessageLength ?? "unknown"} chars
 
-MESSAGE SAMPLE (${sortedSample.length} messages, chronological, anonymized, truncated):
+MESSAGE SAMPLE (${sortedSample.length} messages, chronological):
 ${sample}
 
 FINAL INSTRUCTIONS:
-- Avoid generic statements. Every section must feel unique to THIS chat.
-- Reference concrete repeated patterns from the sample above.
-- Do not quote messages longer than a short phrase.
-- Make the roast the funniest section.
+- Be specific to THIS chat only — every section should feel unique to these receipts.
+- If flirty/romantic/situationship patterns appear in the sample, name them. Do NOT default to generic friendship language.
+- Make roast the most dramatic, screenshot-worthy section.
+- Reference concrete repeated behaviors (compliments, late-night texts, plan chaos, teasing, concern, jealousy jokes, etc.) when present.
 - Return JSON only.`;
-
 }
 
 function temperatureForTone(tone: DmAiSummaryTone): number {
   const resolved = resolveTone(tone);
+  if (resolved === "drama") return 0.97;
   if (resolved === "savage") return 0.95;
-  if (resolved === "wrapped") return 0.9;
-  if (resolved === "wholesome") return 0.8;
-  return 0.75;
+  if (resolved === "wrapped") return 0.92;
+  if (resolved === "wholesome") return 0.82;
+  return 0.78;
+}
+
+function mapProviderError(status: number, errText: string): string {
+  const lower = errText.toLowerCase();
+
+  if (
+    status === 429 ||
+    lower.includes("rate limit") ||
+    lower.includes("rate_limit") ||
+    lower.includes("quota") ||
+    lower.includes("resource exhausted") ||
+    lower.includes("too many requests")
+  ) {
+    return "AI summary limit reached. Try again later or check your AI provider quota.";
+  }
+
+  if (status === 401 || (status === 403 && !lower.includes("quota"))) {
+    return "AI authentication failed. Check AI_API_KEY on the server.";
+  }
+
+  if (
+    status === 404 ||
+    (lower.includes("model") && lower.includes("not found"))
+  ) {
+    return "AI model not found. Check AI_MODEL on the server.";
+  }
+
+  if (status >= 500) {
+    return "The AI provider is temporarily unavailable. Try again in a few minutes.";
+  }
+
+  return "The AI provider returned an error. Try again in a moment.";
 }
 
 export async function GET() {
@@ -288,10 +369,7 @@ export async function POST(request: Request) {
   const apiKey = process.env.AI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json(
-      {
-        error:
-          "AI summaries are not configured yet. The site owner needs to set AI_API_KEY on the server.",
-      },
+      { error: "AI summaries are not configured yet." },
       { status: 503 }
     );
   }
@@ -325,7 +403,10 @@ export async function POST(request: Request) {
         temperature: temperatureForTone(validated.tone),
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "system",
+            content: buildSystemPrompt(validated.useRealNames),
+          },
           { role: "user", content: buildUserPrompt(validated) },
         ],
       }),
@@ -333,12 +414,13 @@ export async function POST(request: Request) {
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
-      console.error("AI provider error:", response.status, errText.slice(0, 500));
+      console.error(
+        "[dm-summary] provider error",
+        response.status,
+        errText.slice(0, 800)
+      );
       return NextResponse.json(
-        {
-          error:
-            "The AI provider returned an error. Check AI_API_KEY, AI_MODEL, and AI_BASE_URL.",
-        },
+        { error: mapProviderError(response.status, errText) },
         { status: 502 }
       );
     }
@@ -346,23 +428,28 @@ export async function POST(request: Request) {
     const data = await response.json();
     const content = data?.choices?.[0]?.message?.content;
     if (typeof content !== "string") {
+      console.error("[dm-summary] empty AI content", JSON.stringify(data).slice(0, 300));
       return NextResponse.json(
-        { error: "AI returned an empty response." },
+        { error: "AI returned an empty response. Try regenerating." },
         { status: 502 }
       );
     }
 
     const summary = parseAiJson(content);
     if (!summary) {
+      console.error("[dm-summary] JSON parse failed", content.slice(0, 500));
       return NextResponse.json(
-        { error: "Could not parse AI summary. Try again." },
+        {
+          error:
+            "The AI response could not be formatted. Try regenerating.",
+        },
         { status: 502 }
       );
     }
 
     return NextResponse.json({ summary });
   } catch (err) {
-    console.error("dm-summary route error:", err);
+    console.error("[dm-summary] route error:", err);
     return NextResponse.json(
       { error: "Failed to generate summary. Try again later." },
       { status: 500 }
