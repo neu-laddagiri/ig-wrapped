@@ -49,9 +49,14 @@ export async function getCurrentUser(): Promise<User | null> {
 
 function stripFilePaths(
   parsed: CreateSnapshotInput["parsedData"],
-  includeMessagePreviews: boolean
+  includeMessagePreviews: boolean,
+  showThreadNames: boolean
 ) {
-  return sanitizeParsedForCloudSave(parsed, includeMessagePreviews);
+  return sanitizeParsedForCloudSave(
+    parsed,
+    includeMessagePreviews,
+    showThreadNames
+  );
 }
 
 function guessInstagramUsername(
@@ -73,7 +78,8 @@ export function createAnalysisSnapshot(
 ): AnalysisSnapshot {
   const parsed = stripFilePaths(
     input.parsedData,
-    input.dmShowFirstMessagePreview
+    input.dmShowFirstMessagePreview,
+    input.dmShowThreadNames
   );
   return {
     version: ANALYSIS_SNAPSHOT_VERSION,

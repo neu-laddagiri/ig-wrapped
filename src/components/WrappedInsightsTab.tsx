@@ -15,15 +15,16 @@ import {
   Sparkles,
   TrendingUp,
   Brain,
-  Calendar,
 } from "lucide-react";
-import type { NetworkStats, WrappedInsights } from "@/types/instagram";
+import type { NetworkStats, WrappedInsights, MostActiveEraData } from "@/types/instagram";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber, formatPercent } from "@/lib/formatters";
+import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
 interface WrappedInsightsTabProps {
   wrapped: WrappedInsights | null;
   network: NetworkStats | null;
+  mostActiveEra: MostActiveEraData | null;
 }
 
 function InsightPlaceholder({
@@ -57,7 +58,11 @@ function InsightPlaceholder({
   );
 }
 
-export function WrappedInsightsTab({ wrapped, network }: WrappedInsightsTabProps) {
+export function WrappedInsightsTab({
+  wrapped,
+  network,
+  mostActiveEra,
+}: WrappedInsightsTabProps) {
   if (!wrapped) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
@@ -156,12 +161,7 @@ export function WrappedInsightsTab({ wrapped, network }: WrappedInsightsTabProps
             description="How much of your activity is passive story viewing vs. active engagement."
             icon={Eye}
           />
-          <InsightPlaceholder
-            title="Most active era"
-            value="Coming soon"
-            description="Timeline analysis will reveal your peak Instagram months."
-            icon={Calendar}
-          />
+          <MostActiveEraCard era={mostActiveEra} compact />
           <InsightPlaceholder
             title="Top interaction type"
             value={topType?.count ? topType.label : "—"}
@@ -176,6 +176,12 @@ export function WrappedInsightsTab({ wrapped, network }: WrappedInsightsTabProps
           />
         </div>
       </div>
+
+      {mostActiveEra && mostActiveEra.topMonths.length > 1 && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <MostActiveMonthsChart era={mostActiveEra} />
+        </div>
+      )}
     </div>
   );
 }

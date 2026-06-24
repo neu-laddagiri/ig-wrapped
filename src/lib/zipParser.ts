@@ -6,6 +6,7 @@ import { parseMessages } from "@/lib/parsers/messagesParser";
 import { parseAdsPrivacy } from "@/lib/parsers/adsParser";
 import { parseSecurity } from "@/lib/parsers/securityParser";
 import { parseDataCoverage } from "@/lib/parsers/dataCoverageParser";
+import { computeMostActiveEra } from "@/lib/mostActiveEra";
 
 export type ParseProgress = {
   stage: string;
@@ -104,12 +105,20 @@ export async function parseInstagramZip(
 
   onProgress?.({ stage: "Done!", percent: 100 });
 
+  const mostActiveEra = computeMostActiveEra({
+    files: jsonMap,
+    messages,
+    network,
+    ads,
+  });
+
   return {
     network,
     wrapped,
     messages,
     ads,
     security,
+    mostActiveEra,
     coverage,
     totalFiles,
     jsonFiles,

@@ -43,6 +43,16 @@ export function formatMonthKey(ts: number): string {
   }
 }
 
+export function formatMonthLabel(monthKey: string): string {
+  try {
+    const date = parseISO(`${monthKey}-01`);
+    if (!isValid(date)) return monthKey;
+    return format(date, "MMMM yyyy");
+  } catch {
+    return monthKey;
+  }
+}
+
 export function linkedInSearchUrl(username: string): string {
   const query = `site:linkedin.com/in ${username}`;
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;

@@ -167,7 +167,9 @@ export function SaveFullAnalysisPanel({
           </p>
           <p className="mt-2 text-xs text-white/35">
             This saves your parsed analysis snapshot and app progress. It does
-            not upload your original ZIP or media files.
+            not upload your original ZIP or media files. Saved analyses include
+            limited, sanitized DM samples so AI summaries can work later. Raw
+            ZIPs, media files, and full message histories are not saved.
           </p>
         </div>
       </div>

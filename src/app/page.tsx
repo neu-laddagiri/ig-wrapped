@@ -1,12 +1,13 @@
 "use client";
 
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Cloud } from "lucide-react";
 import { Hero } from "@/components/Hero";
 import { UploadCard } from "@/components/UploadCard";
 import { PrivacyBadges } from "@/components/PrivacyBadges";
 import { DataCoverage } from "@/components/DataCoverage";
+import { ExportSuccessBanner } from "@/components/ExportSuccessBanner";
 import { AccountMenu } from "@/components/AccountMenu";
 import { AccountStatusCard } from "@/components/AccountStatusCard";
 import { AuthModal } from "@/components/AuthModal";
@@ -27,6 +28,7 @@ import { ExportDataTab } from "@/components/ExportDataTab";
 import { SavedAnalysesTab } from "@/components/SavedAnalysesTab";
 import { FunStatsTab } from "@/components/FunStatsTab";
 import { parseInstagramZip } from "@/lib/zipParser";
+import { resolveMostActiveEra } from "@/lib/mostActiveEra";
 import {
   computeFileFingerprint,
   saveLinkedInProgress,
@@ -38,7 +40,17 @@ import type { LinkedInHelperEntry, ParsedExportData } from "@/types/instagram";
 function restoreParsedFromSnapshot(
   parsed: SavedAnalysisRow["full_analysis_json"]["parsed"]
 ): ParsedExportData {
-  return { ...parsed, filePaths: [] };
+  return {
+    ...parsed,
+    filePaths: [],
+    mostActiveEra: parsed.mostActiveEra ?? null,
+    security: parsed.security
+      ? {
+          ...parsed.security,
+          events: parsed.security.events ?? [],
+        }
+      : null,
+  };
 }
 
 export default function Home() {
@@ -62,6 +74,30 @@ export default function Home() {
   const [loadingText, setLoadingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const [exportGuideExpanded, setExportGuideExpanded] = useState(true);
+  const [dataCoverageExpanded, setDataCoverageExpanded] = useState(false);
+  const [dashboardBanner, setDashboardBanner] = useState<{
+    visible: boolean;
+    mode: "upload" | "saved";
+  }>({ visible: false, mode: "upload" });
+
+  const dashboardRef = useRef<HTMLDivElement>(null);
+  const pendingScrollRef = useRef(false);
+
+  const scrollToDashboard = useCallback(() => {
+    requestAnimationFrame(() => {
+      dashboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!parsedData || !pendingScrollRef.current) return;
+    pendingScrollRef.current = false;
+    const timer = window.setTimeout(() => {
+      scrollToDashboard();
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [parsedData, fileName, scrollToDashboard]);
 
   const handleFileSelect = useCallback(async (file: File) => {
     setError(null);
@@ -85,6 +121,10 @@ export default function Home() {
       setExpandedGroupThreads([]);
       setDmAiSummaries({});
       setActiveTab("overview");
+      setExportGuideExpanded(false);
+      setDataCoverageExpanded(false);
+      pendingScrollRef.current = true;
+      setDashboardBanner({ visible: true, mode: "upload" });
     } catch (err) {
       setParsedData(null);
       setFileFingerprint("");
@@ -116,6 +156,9 @@ export default function Home() {
     setCurrentSavedId(row.id);
     setIsLoadedFromCloud(true);
     setError(null);
+    setExportGuideExpanded(false);
+    setDataCoverageExpanded(false);
+    setDashboardBanner({ visible: true, mode: "saved" });
 
     const fp = row.file_fingerprint ?? snapshot.fileFingerprint;
     if (fp && row.linkedin_progress_json?.length) {
@@ -143,6 +186,9 @@ export default function Home() {
     setIsLoadedFromCloud(false);
     setActiveTab("overview");
     setError(null);
+    setExportGuideExpanded(true);
+    setDataCoverageExpanded(false);
+    setDashboardBanner({ visible: false, mode: "upload" });
   }, []);
 
   return (
@@ -175,13 +221,17 @@ export default function Home() {
               loadingText={loadingText}
               error={error}
               fileName={fileName}
+              compact={Boolean(parsedData && !isLoading)}
             />
 
-            <PrivacyBadges />
+            {!parsedData && <PrivacyBadges />}
           </div>
 
           <div className="mt-10">
-            <ExportGuide />
+            <ExportGuide
+              expanded={exportGuideExpanded}
+              onExpandedChange={setExportGuideExpanded}
+            />
           </div>
 
           <AnimatePresence mode="wait">
@@ -230,9 +280,17 @@ export default function Home() {
                   onClearLocal={handleClearLocalSession}
                 />
 
-                <DataCoverage items={parsedData.coverage} />
+                <DataCoverage
+                  items={parsedData.coverage}
+                  expanded={dataCoverageExpanded}
+                  onExpandedChange={setDataCoverageExpanded}
+                />
 
-                <div className="space-y-6">
+                <div
+                  ref={dashboardRef}
+                  id="dashboard"
+                  className="scroll-mt-24 space-y-6"
+                >
                   <DashboardTabs
                     activeTab={activeTab}
                     onTabChange={setActiveTab}
@@ -258,6 +316,7 @@ export default function Home() {
                       <WrappedInsightsTab
                         wrapped={parsedData.wrapped}
                         network={parsedData.network}
+                        mostActiveEra={resolveMostActiveEra(parsedData)}
                       />
                     )}
                     {activeTab === "funstats" && (
@@ -266,6 +325,7 @@ export default function Home() {
                         wrapped={parsedData.wrapped}
                         messages={parsedData.messages}
                         ads={parsedData.ads}
+                        mostActiveEra={resolveMostActiveEra(parsedData)}
                         showThreadNames={dmShowThreadNames}
                       />
                     )}
@@ -280,6 +340,7 @@ export default function Home() {
                         }
                         dmAiSummaries={dmAiSummaries}
                         onDmAiSummariesChange={setDmAiSummaries}
+                        isLoadedFromCloud={isLoadedFromCloud}
                       />
                     )}
                     {activeTab === "ads" && (
@@ -347,6 +408,16 @@ export default function Home() {
         open={authOpen}
         onClose={() => setAuthOpen(false)}
         onSuccess={() => setAuthOpen(false)}
+      />
+
+      <ExportSuccessBanner
+        visible={dashboardBanner.visible && Boolean(parsedData)}
+        mode={dashboardBanner.mode}
+        onDismiss={() => setDashboardBanner((b) => ({ ...b, visible: false }))}
+        onJumpToDashboard={() => {
+          scrollToDashboard();
+          setDashboardBanner((b) => ({ ...b, visible: false }));
+        }}
       />
     </>
   );

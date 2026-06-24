@@ -36,12 +36,59 @@ export interface WrappedInsights {
   postsViewed: number;
 }
 
+export type ActivityTypeKey =
+  | "dms"
+  | "likedPosts"
+  | "likedComments"
+  | "postComments"
+  | "savedPosts"
+  | "storiesViewed"
+  | "storyLikes"
+  | "pollInteractions"
+  | "emojiSliders"
+  | "quizzes"
+  | "videosWatched"
+  | "postsViewed"
+  | "following"
+  | "followers"
+  | "adsVideosWatched"
+  | "adsPostsViewed";
+
+export interface MostActiveEraMonth {
+  month: string;
+  label: string;
+  count: number;
+}
+
+export interface MostActiveEraData {
+  mostActiveMonth: string;
+  mostActiveMonthLabel: string;
+  mostActiveMonthCount: number;
+  topActivityType?: string;
+  topActivityTypes?: string[];
+  topActivityCaption?: string;
+  topMonths: MostActiveEraMonth[];
+  monthlyTotals: MostActiveEraMonth[];
+}
+
 export interface DmMessageSample {
   sender_name: string;
   timestamp_ms: number;
   content?: string;
   share_link?: string;
   share_text?: string;
+}
+
+/** Sanitized AI-ready sample persisted in cloud saves (not full message history) */
+export interface DmAiSummarySample {
+  createdAt: string;
+  realNamesAvailable: boolean;
+  messages: {
+    senderLabel: string;
+    senderName?: string;
+    timestamp_ms?: number;
+    text: string;
+  }[];
 }
 
 export interface DmThreadAnalytics {
@@ -84,6 +131,8 @@ export interface DmThreadAnalytics {
   funSummary: string;
   /** Local-only text messages for optional AI summarization — stripped on cloud save */
   textMessages?: DmMessageSample[];
+  /** Sanitized sample for AI summaries when loaded from cloud save */
+  aiSummarySample?: DmAiSummarySample;
 }
 
 export interface DmAnalytics {
@@ -119,6 +168,47 @@ export interface SecurityData {
   profileActivityCount: number;
   privacyChangeCount: number;
   passwordChangeCount: number;
+  events?: SecurityEvent[];
+  suspiciousLoginAnalysis?: SuspiciousLoginAnalysis;
+}
+
+export type SecurityEventType =
+  | "login"
+  | "logout"
+  | "profile_activity"
+  | "privacy_change"
+  | "password_change"
+  | "signup"
+  | "unknown";
+
+export type SecuritySeverity = "low" | "medium" | "high";
+
+export interface SecurityEvent {
+  id: string;
+  type: SecurityEventType;
+  label: string;
+  timestamp?: number;
+  dateLabel?: string;
+  location?: string;
+  device?: string;
+  ipAddress?: string;
+  sourcePath?: string;
+  severity: SecuritySeverity;
+  notes?: string[];
+}
+
+export interface FlaggedSecurityEvent {
+  event: SecurityEvent;
+  reason: string;
+  severity: SecuritySeverity;
+}
+
+export interface SuspiciousLoginAnalysis {
+  securityScore: number;
+  eventsReviewed: number;
+  worthReviewingCount: number;
+  flaggedEvents: FlaggedSecurityEvent[];
+  suggestions: string[];
 }
 
 export type CoverageCategoryId =
@@ -152,6 +242,7 @@ export interface ParsedExportData {
   messages: DmAnalytics | null;
   ads: AdsPrivacyData | null;
   security: SecurityData | null;
+  mostActiveEra: MostActiveEraData | null;
   coverage: DataCoverageItem[];
   totalFiles: number;
   jsonFiles: number;

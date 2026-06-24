@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import {
   LogIn,
   LogOut,
@@ -8,16 +9,118 @@ import {
   Key,
   AlertTriangle,
   Clock,
+  UserPlus,
+  MapPin,
+  Monitor,
+  ChevronDown,
 } from "lucide-react";
-import type { SecurityData } from "@/types/instagram";
+import type {
+  SecurityData,
+  SecurityEvent,
+  SecurityEventType,
+} from "@/types/instagram";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
+import {
+  formatSecurityEventTime,
+  resolveSuspiciousLoginAnalysis,
+} from "@/lib/securityAnalysis";
 
 interface SecurityTabProps {
   security: SecurityData | null;
 }
 
+type TimelineFilter =
+  | "all"
+  | "login"
+  | "privacy_change"
+  | "password_change"
+  | "profile_activity";
+
+const PAGE_SIZE = 20;
+
+const EVENT_ICONS: Record<SecurityEventType, typeof LogIn> = {
+  login: LogIn,
+  logout: LogOut,
+  profile_activity: User,
+  privacy_change: Shield,
+  password_change: Key,
+  signup: UserPlus,
+  unknown: Clock,
+};
+
+const EVENT_COLORS: Record<SecurityEventType, string> = {
+  login: "text-emerald-400 border-emerald-500/30 bg-emerald-500/10",
+  logout: "text-blue-400 border-blue-500/30 bg-blue-500/10",
+  profile_activity: "text-pink-400 border-pink-500/30 bg-pink-500/10",
+  privacy_change: "text-purple-400 border-purple-500/30 bg-purple-500/10",
+  password_change: "text-orange-400 border-orange-500/30 bg-orange-500/10",
+  signup: "text-cyan-400 border-cyan-500/30 bg-cyan-500/10",
+  unknown: "text-white/50 border-white/20 bg-white/5",
+};
+
+function matchesFilter(event: SecurityEvent, filter: TimelineFilter): boolean {
+  if (filter === "all") return true;
+  if (filter === "login") return event.type === "login" || event.type === "logout";
+  return event.type === filter;
+}
+
+function TimelineEventRow({ event }: { event: SecurityEvent }) {
+  const Icon = EVENT_ICONS[event.type] ?? Clock;
+  const color = EVENT_COLORS[event.type] ?? EVENT_COLORS.unknown;
+
+  return (
+    <li className="flex gap-3 rounded-xl border border-white/8 bg-white/[0.03] p-3">
+      <div
+        className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${color}`}
+      >
+        <Icon className="h-4 w-4" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <p className="text-sm font-medium text-white">{event.label}</p>
+          <span className="text-xs text-white/40">
+            {formatSecurityEventTime(event)}
+          </span>
+        </div>
+        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/45">
+          {event.device && (
+            <span className="inline-flex items-center gap-1">
+              <Monitor className="h-3 w-3" />
+              {event.device}
+            </span>
+          )}
+          {event.location && (
+            <span className="inline-flex items-center gap-1">
+              <MapPin className="h-3 w-3" />
+              {event.location}
+            </span>
+          )}
+          {event.ipAddress && (
+            <span className="text-white/35">IP: {event.ipAddress}</span>
+          )}
+        </div>
+      </div>
+    </li>
+  );
+}
+
 export function SecurityTab({ security }: SecurityTabProps) {
+  const [filter, setFilter] = useState<TimelineFilter>("all");
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  const analysis = useMemo(
+    () => (security ? resolveSuspiciousLoginAnalysis(security) : null),
+    [security]
+  );
+
+  const filteredEvents = useMemo(() => {
+    const events = security?.events ?? [];
+    return events.filter((e) => matchesFilter(e, filter));
+  }, [security?.events, filter]);
+
+  const visibleEvents = filteredEvents.slice(0, visibleCount);
+
   if (!security) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
@@ -34,56 +137,191 @@ export function SecurityTab({ security }: SecurityTabProps) {
     );
   }
 
+  const filters: { id: TimelineFilter; label: string }[] = [
+    { id: "all", label: "All" },
+    { id: "login", label: "Logins" },
+    { id: "privacy_change", label: "Privacy changes" },
+    { id: "password_change", label: "Password changes" },
+    { id: "profile_activity", label: "Profile activity" },
+  ];
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <SummaryCard label="Logins" value={formatNumber(security.loginCount)} icon={LogIn} accent="green" />
-        <SummaryCard label="Logouts" value={formatNumber(security.logoutCount)} icon={LogOut} accent="blue" />
-        <SummaryCard label="Profile activity" value={formatNumber(security.profileActivityCount)} icon={User} accent="pink" />
-        <SummaryCard label="Privacy changes" value={formatNumber(security.privacyChangeCount)} icon={Shield} accent="purple" />
-        <SummaryCard label="Password changes" value={formatNumber(security.passwordChangeCount)} icon={Key} accent="orange" />
+        <SummaryCard
+          label="Logins"
+          value={formatNumber(security.loginCount)}
+          icon={LogIn}
+          accent="green"
+        />
+        <SummaryCard
+          label="Logouts"
+          value={formatNumber(security.logoutCount)}
+          icon={LogOut}
+          accent="blue"
+        />
+        <SummaryCard
+          label="Profile activity"
+          value={formatNumber(security.profileActivityCount)}
+          icon={User}
+          accent="pink"
+        />
+        <SummaryCard
+          label="Privacy changes"
+          value={formatNumber(security.privacyChangeCount)}
+          icon={Shield}
+          accent="purple"
+        />
+        <SummaryCard
+          label="Password changes"
+          value={formatNumber(security.passwordChangeCount)}
+          icon={Key}
+          accent="orange"
+        />
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6">
-          <div className="flex items-center gap-2">
-            <Clock className="h-5 w-5 text-[#515BD4]" />
-            <h3 className="font-semibold text-white">Account timeline</h3>
-          </div>
-          <p className="mt-4 text-sm leading-relaxed text-white/45">
-            A visual timeline of your account history will be available in a
-            future update. For now, review login and profile activity counts
-            above.
-          </p>
-        </div>
-
-        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-6">
-          <div className="flex items-center gap-2">
-            <AlertTriangle className="h-5 w-5 text-amber-400" />
-            <h3 className="font-semibold text-amber-100">Security notes</h3>
-          </div>
-          <ul className="mt-4 space-y-2 text-sm text-amber-200/80">
-            <li>• Review login activity for unfamiliar devices or locations.</li>
-            <li>• Check password change history for unauthorized updates.</li>
-            <li>• Privacy setting changes may indicate account modifications.</li>
-          </ul>
-        </div>
-      </div>
-
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6">
         <div className="flex items-center gap-2">
-          <Shield className="h-5 w-5 text-white/50" />
-          <h3 className="font-semibold text-white">
-            Suspicious login checker
-          </h3>
-          <span className="rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-wider text-white/40">
-            Coming soon
-          </span>
+          <Clock className="h-5 w-5 text-[#515BD4]" />
+          <h3 className="font-semibold text-white">Account timeline</h3>
         </div>
-        <p className="mt-3 text-sm text-white/45">
-          Future versions will flag logins from unusual locations, devices, or
-          time patterns based on your export data.
+        <p className="mt-1 text-xs text-white/40">
+          Security and account events from your export, newest first.
         </p>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {filters.map((f) => (
+            <button
+              key={f.id}
+              type="button"
+              onClick={() => {
+                setFilter(f.id);
+                setVisibleCount(PAGE_SIZE);
+              }}
+              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
+                filter === f.id
+                  ? "bg-gradient-to-r from-[#F58529]/30 via-[#DD2A7B]/30 to-[#515BD4]/30 text-white"
+                  : "border border-white/10 bg-white/5 text-white/55 hover:text-white/75"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {filteredEvents.length > 0 ? (
+          <>
+            <ul className="mt-4 space-y-2">
+              {visibleEvents.map((event) => (
+                <TimelineEventRow key={event.id} event={event} />
+              ))}
+            </ul>
+            {visibleCount < filteredEvents.length && (
+              <button
+                type="button"
+                onClick={() => setVisibleCount((n) => n + PAGE_SIZE)}
+                className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[#DD2A7B] hover:underline"
+              >
+                <ChevronDown className="h-3.5 w-3.5" />
+                Show more ({filteredEvents.length - visibleCount} remaining)
+              </button>
+            )}
+          </>
+        ) : (
+          <p className="mt-4 text-sm text-white/45">
+            No detailed timeline events found in this export.
+          </p>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <AlertTriangle className="h-5 w-5 text-amber-400" />
+          <h3 className="font-semibold text-amber-50">Suspicious login checker</h3>
+        </div>
+        <p className="mt-1 text-xs text-amber-200/50">
+          Heuristic review only — flagged items could be normal if this was you.
+        </p>
+
+        {analysis ? (
+          <div className="mt-4 space-y-4">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-white/40">
+                  Security score
+                </p>
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {analysis.securityScore}/100
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-white/40">
+                  Events reviewed
+                </p>
+                <p className="mt-1 text-2xl font-bold text-white">
+                  {formatNumber(analysis.eventsReviewed)}
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
+                <p className="text-[10px] uppercase tracking-wider text-white/40">
+                  Worth reviewing
+                </p>
+                <p className="mt-1 text-2xl font-bold text-amber-200">
+                  {formatNumber(analysis.worthReviewingCount)}
+                </p>
+              </div>
+            </div>
+
+            {analysis.flaggedEvents.length > 0 ? (
+              <ul className="space-y-2">
+                {analysis.flaggedEvents.slice(0, 15).map((flag) => (
+                  <li
+                    key={`${flag.event.id}-${flag.reason}`}
+                    className={`rounded-xl border p-3 text-sm ${
+                      flag.severity === "high"
+                        ? "border-red-500/25 bg-red-500/8 text-red-100/90"
+                        : flag.severity === "medium"
+                          ? "border-amber-500/25 bg-amber-500/8 text-amber-100/90"
+                          : "border-white/10 bg-white/[0.03] text-white/70"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-medium">{flag.event.label}</span>
+                      <span className="text-xs opacity-70">
+                        {formatSecurityEventTime(flag.event)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-xs leading-relaxed opacity-90">
+                      {flag.reason}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-amber-100/80">
+                No potentially unusual patterns detected in your export. Still
+                worth reviewing login history periodically.
+              </p>
+            )}
+
+            <div className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+              <p className="text-xs font-semibold uppercase tracking-wider text-white/40">
+                Suggested actions
+              </p>
+              <ul className="mt-2 space-y-1.5">
+                {analysis.suggestions.map((s) => (
+                  <li key={s} className="text-xs text-white/60">
+                    • {s}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-4 text-sm text-amber-100/70">
+            Not enough security event detail to run the checker on this export.
+          </p>
+        )}
       </div>
     </div>
   );

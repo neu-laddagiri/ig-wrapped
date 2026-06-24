@@ -20,7 +20,8 @@ import { formatTimestamp } from "@/lib/formatters";
 import type { NormalizedDmThread } from "@/lib/dmThreads";
 import {
   formatSenderStats,
-  prepareSelectedMessages,
+  resolveAiReadyMessages,
+  threadHasAiSample,
 } from "@/lib/dmMessageSampling";
 
 const TONE_OPTIONS: { value: DmAiSummaryTone; label: string; hint: string }[] =
@@ -62,6 +63,8 @@ interface DmAiSummarySectionProps {
   onSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
   /** When true, skip outer section chrome (used inside DmsTab expanded panel) */
   embedded?: boolean;
+  /** True when analysis was loaded from cloud without a fresh ZIP upload */
+  isLoadedFromCloud?: boolean;
 }
 
 function SummaryCards({ summary }: { summary: DmAiSummaryResult }) {
@@ -207,6 +210,7 @@ export function DmAiSummarySection({
   saved,
   onSummaryChange,
   embedded = false,
+  isLoadedFromCloud = false,
 }: DmAiSummarySectionProps) {
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [tone, setTone] = useState<DmAiSummaryTone>(saved?.tone ?? "wrapped");
@@ -219,8 +223,8 @@ export function DmAiSummarySection({
     () => LOADING_LINES[Math.floor(Math.random() * LOADING_LINES.length)]
   );
 
-  const hasSample =
-    Array.isArray(thread.textMessages) && thread.textMessages.length > 0;
+  const hasSample = threadHasAiSample(thread);
+  const missingCloudSample = isLoadedFromCloud && !hasSample;
 
   useEffect(() => {
     if (!showThreadNames) setUseRealNames(false);
@@ -244,11 +248,7 @@ export function DmAiSummarySection({
 
   const buildPayload = useCallback(() => {
     const realNames = showThreadNames && useRealNames;
-    const selectedMessages = prepareSelectedMessages(thread.textMessages ?? [], {
-      mostActiveMonth: thread.mostActiveMonth,
-      isGroup: thread.isGroup,
-      useRealNames: realNames,
-    });
+    const selectedMessages = resolveAiReadyMessages(thread, realNames);
     return {
       threadTitle: thread.title,
       participantCount: thread.participantCount,
@@ -364,7 +364,7 @@ export function DmAiSummarySection({
                 setTone(saved.tone === "funny" ? "wrapped" : saved.tone);
                 setShowConfirm(true);
               }}
-              disabled={loading || !hasSample}
+              disabled={loading || !hasSample || missingCloudSample}
               className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/10 disabled:opacity-40"
             >
               <RefreshCw className="h-3.5 w-3.5" />
@@ -399,8 +399,9 @@ export function DmAiSummarySection({
 
           {!hasSample && (
             <p className="text-xs text-white/45">
-              No message sample available for this thread. Re-upload your
-              Instagram ZIP to enable AI summaries.
+              {missingCloudSample
+                ? "AI summaries for saved analyses require an updated save. Re-upload your Instagram ZIP and save the analysis again to enable AI summaries from cloud saves."
+                : "No message sample available for this thread. Re-upload your Instagram ZIP to enable AI summaries."}
             </p>
           )}
 
@@ -445,7 +446,7 @@ export function DmAiSummarySection({
                       onChange={(e) =>
                         setTone(e.target.value as DmAiSummaryTone)
                       }
-                      disabled={!hasSample || aiConfigured === false}
+                      disabled={!hasSample || missingCloudSample || aiConfigured === false}
                       className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none disabled:opacity-40"
                     >
                       {TONE_OPTIONS.map((o) => (
@@ -482,7 +483,7 @@ export function DmAiSummarySection({
               <button
                 type="button"
                 onClick={() => setShowConfirm(true)}
-                disabled={!hasSample || loading || aiConfigured === false}
+                disabled={!hasSample || missingCloudSample || loading || aiConfigured === false}
                 className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#DD2A7B]/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Sparkles className="h-4 w-4" />
@@ -496,7 +497,11 @@ export function DmAiSummarySection({
       {error && (
         <ErrorCard
           message={error}
-          onRetry={hasSample && aiConfigured !== false ? generate : undefined}
+          onRetry={
+            hasSample && !missingCloudSample && aiConfigured !== false
+              ? generate
+              : undefined
+          }
         />
       )}
     </>

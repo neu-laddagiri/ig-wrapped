@@ -2,10 +2,11 @@ import type {
   AdsPrivacyData,
   DmAnalytics,
   DmThreadAnalytics,
+  MostActiveEraData,
   NetworkStats,
   WrappedInsights,
 } from "@/types/instagram";
-import { formatPercent } from "@/lib/formatters";
+import { formatMonthLabel, formatPercent } from "@/lib/formatters";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 
 export interface FunStatCard {
@@ -36,8 +37,9 @@ export function computeFunStats(params: {
   wrapped: WrappedInsights | null;
   messages: DmAnalytics | null;
   ads: AdsPrivacyData | null;
+  mostActiveEra?: MostActiveEraData | null;
 }): FunStatCard[] {
-  const { network, wrapped, messages, ads } = params;
+  const { network, wrapped, messages, ads, mostActiveEra } = params;
   const threads = normalizeDmThreads(messages);
 
   const biggestYapper = threads.length
@@ -78,9 +80,11 @@ export function computeFunStats(params: {
         (b.lastMessageTimestamp ?? 0) - (a.lastMessageTimestamp ?? 0)
     )[0];
 
-  const mostActiveMonth = messages?.messagesByMonth.length
+  const dmPeakMonth = messages?.messagesByMonth.length
     ? [...messages.messagesByMonth].sort((a, b) => b.count - a.count)[0]
     : null;
+
+  const eraPeak = mostActiveEra;
 
   const totalInteractions = wrapped
     ? wrapped.likedPosts +
@@ -189,13 +193,22 @@ export function computeFunStats(params: {
       available: Boolean(mostRecent),
     },
     {
+      id: "active-era",
+      title: "Most active era",
+      value: eraPeak?.mostActiveMonthLabel ?? "—",
+      description: eraPeak
+        ? `${eraPeak.mostActiveMonthCount.toLocaleString()} tracked actions${eraPeak.topActivityCaption ? ` · ${eraPeak.topActivityCaption}` : ""}`
+        : "Peak month across all timestamped Instagram activity.",
+      available: Boolean(eraPeak),
+    },
+    {
       id: "active-month",
-      title: "Most active month",
-      value: mostActiveMonth?.month ?? "—",
-      description: mostActiveMonth
-        ? `${mostActiveMonth.count.toLocaleString()} messages that month`
+      title: "Most active DM month",
+      value: dmPeakMonth ? formatMonthLabel(dmPeakMonth.month) : "—",
+      description: dmPeakMonth
+        ? `${dmPeakMonth.count.toLocaleString()} messages that month`
         : "Peak DM month across all threads.",
-      available: Boolean(mostActiveMonth),
+      available: Boolean(dmPeakMonth),
     },
     {
       id: "follow-back",

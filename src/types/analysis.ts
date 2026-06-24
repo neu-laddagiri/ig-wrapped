@@ -7,8 +7,9 @@ import type {
 } from "@/types/instagram";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import { normalizeDmThreads } from "@/lib/dmThreads";
+import { buildAiSummarySampleForCloud } from "@/lib/dmMessageSampling";
 
-export const ANALYSIS_SNAPSHOT_VERSION = 3;
+export const ANALYSIS_SNAPSHOT_VERSION = 4;
 
 export interface AnalysisSnapshot {
   version: typeof ANALYSIS_SNAPSHOT_VERSION;
@@ -76,23 +77,48 @@ export interface CreateSnapshotInput {
   analysisMode?: string;
 }
 
-function sanitizeThread(
+function enrichThreadForCloudSave(
   thread: DmThreadAnalytics,
-  includePreviews: boolean
+  includePreviews: boolean,
+  showThreadNames: boolean
 ): DmThreadAnalytics {
-  const { textMessages: _textMessages, ...withoutSamples } = thread;
-  if (includePreviews) return withoutSamples;
-  const { firstMessagePreview: _removed, ...rest } = withoutSamples;
-  return rest;
+  const {
+    textMessages,
+    firstMessagePreview,
+    aiSummarySample: existingSample,
+    ...rest
+  } = thread;
+
+  let aiSummarySample = existingSample;
+  if (textMessages?.length) {
+    const built = buildAiSummarySampleForCloud(textMessages, {
+      mostActiveMonth: thread.mostActiveMonth,
+      isGroup: thread.isGroupChat,
+      showThreadNames,
+    });
+    if (built) aiSummarySample = built;
+  }
+
+  const result: DmThreadAnalytics = {
+    ...rest,
+    aiSummarySample,
+  };
+
+  if (includePreviews && firstMessagePreview) {
+    result.firstMessagePreview = firstMessagePreview;
+  }
+
+  return result;
 }
 
 function sanitizeMessages(
   messages: DmAnalytics | null,
-  includePreviews: boolean
+  includePreviews: boolean,
+  showThreadNames: boolean
 ): DmAnalytics | null {
   if (!messages) return null;
   const sanitize = (t: DmThreadAnalytics) =>
-    sanitizeThread(t, includePreviews);
+    enrichThreadForCloudSave(t, includePreviews, showThreadNames);
   const threads = normalizeDmThreads(messages).map(sanitize);
   const topThreads = (
     Array.isArray(messages.topThreads) ? messages.topThreads : threads
@@ -110,11 +136,12 @@ function sanitizeMessages(
 
 export function sanitizeParsedForCloudSave(
   parsed: ParsedExportData,
-  includeMessagePreviews: boolean
+  includeMessagePreviews: boolean,
+  showThreadNames: boolean
 ): ParsedExportDataForSave {
   const { filePaths: _removed, messages, ...rest } = parsed;
   return {
     ...rest,
-    messages: sanitizeMessages(messages, includeMessagePreviews),
+    messages: sanitizeMessages(messages, includeMessagePreviews, showThreadNames),
   };
 }

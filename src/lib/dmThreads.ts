@@ -1,4 +1,4 @@
-import type { DmAnalytics, DmMessageSample, DmThreadAnalytics } from "@/types/instagram";
+import type { DmAnalytics, DmMessageSample, DmThreadAnalytics, DmAiSummarySample } from "@/types/instagram";
 
 /** Canonical DM thread shape for UI rendering */
 export interface NormalizedDmThread {
@@ -32,6 +32,8 @@ export interface NormalizedDmThread {
   hasDetailedInsights: boolean;
   /** Local-only message sample for optional AI summarization */
   textMessages?: DmMessageSample[];
+  /** Sanitized sample restored from cloud save */
+  aiSummarySample?: DmAiSummarySample;
 }
 
 export type DmSortKey =
@@ -232,6 +234,7 @@ function rawToNormalized(raw: RawThread, index: number): NormalizedDmThread {
       }),
     hasDetailedInsights: threadHasDetailedInsights(raw),
     textMessages: raw.textMessages,
+    aiSummarySample: raw.aiSummarySample,
   };
 
   base.displayTitle = computeDisplayTitle(base, false);

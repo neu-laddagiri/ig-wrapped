@@ -49,6 +49,7 @@ interface DmsTabProps {
   onShowFirstMessagePreviewChange?: (value: boolean) => void;
   dmAiSummaries?: DmAiSummariesMap;
   onDmAiSummariesChange?: (summaries: DmAiSummariesMap) => void;
+  isLoadedFromCloud?: boolean;
 }
 
 import {
@@ -95,6 +96,7 @@ function ThreadExpandedPanel({
   onToggleParticipants,
   aiSummary,
   onAiSummaryChange,
+  isLoadedFromCloud,
 }: {
   thread: NormalizedDmThread;
   showThreadNames: boolean;
@@ -103,6 +105,7 @@ function ThreadExpandedPanel({
   onToggleParticipants: () => void;
   aiSummary?: DmAiSummarySaved;
   onAiSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
+  isLoadedFromCloud?: boolean;
 }) {
   const senderLabelMap = buildSenderLabelMap(
     thread.messagesBySender,
@@ -119,6 +122,7 @@ function ThreadExpandedPanel({
       showThreadNames={showThreadNames}
       saved={aiSummary}
       onSummaryChange={onAiSummaryChange}
+      isLoadedFromCloud={isLoadedFromCloud}
     />
   );
 
@@ -365,6 +369,7 @@ function ThreadExpandedPanel({
           saved={aiSummary}
           onSummaryChange={onAiSummaryChange}
           embedded
+          isLoadedFromCloud={isLoadedFromCloud}
         />
       </section>
     </div>
@@ -379,6 +384,7 @@ export function DmsTab({
   onShowFirstMessagePreviewChange,
   dmAiSummaries = {},
   onDmAiSummariesChange,
+  isLoadedFromCloud = false,
 }: DmsTabProps) {
   const [internalShow, setInternalShow] = useState(false);
   const [internalPreview, setInternalPreview] = useState(false);
@@ -717,6 +723,7 @@ export function DmsTab({
                       onToggleParticipants={() => toggleParticipants(thread.id)}
                       aiSummary={dmAiSummaries[thread.id]}
                       onAiSummaryChange={handleAiSummaryChange}
+                      isLoadedFromCloud={isLoadedFromCloud}
                     />
                   )}
                 </div>

@@ -1,4 +1,4 @@
-import type { DmMessageSample } from "@/types/instagram";
+import type { DmMessageSample, DmAiSummarySample } from "@/types/instagram";
 import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
 
 export interface SelectedMessageForApi {
@@ -144,4 +144,95 @@ export function anonymizeSenderStats(
   _isGroup: boolean
 ): Record<string, number> {
   return formatSenderStats(messagesBySender, false);
+}
+
+function messageKey(timestamp_ms: number, text: string): string {
+  return `${timestamp_ms}:${text.slice(0, 48)}`;
+}
+
+/** Build sanitized sample for cloud save */
+export function buildAiSummarySampleForCloud(
+  textMessages: DmMessageSample[],
+  opts: {
+    mostActiveMonth?: string;
+    isGroup: boolean;
+    showThreadNames: boolean;
+  }
+): DmAiSummarySample | undefined {
+  const anonymized = prepareSelectedMessages(textMessages, {
+    mostActiveMonth: opts.mostActiveMonth,
+    isGroup: opts.isGroup,
+    useRealNames: false,
+  });
+  if (!anonymized.length) return undefined;
+
+  const withRealNames = prepareSelectedMessages(textMessages, {
+    mostActiveMonth: opts.mostActiveMonth,
+    isGroup: opts.isGroup,
+    useRealNames: true,
+  });
+  const realByKey = new Map(
+    withRealNames.map((m) => [messageKey(m.timestamp_ms, m.text), m.sender])
+  );
+
+  const hasRealNames = textMessages.some((m) => m.sender_name?.trim());
+
+  return {
+    createdAt: new Date().toISOString(),
+    realNamesAvailable: hasRealNames,
+    messages: anonymized.map((m) => {
+      const key = messageKey(m.timestamp_ms, m.text);
+      const senderName = realByKey.get(key);
+      return {
+        senderLabel: m.sender,
+        senderName:
+          opts.showThreadNames && senderName ? senderName : undefined,
+        timestamp_ms: m.timestamp_ms,
+        text: m.text,
+      };
+    }),
+  };
+}
+
+/** Resolve AI-ready messages from live text or cloud-saved sample */
+export function resolveAiReadyMessages(
+  thread: {
+    textMessages?: DmMessageSample[];
+    aiSummarySample?: DmAiSummarySample;
+    mostActiveMonth?: string;
+    isGroup: boolean;
+  },
+  useRealNames: boolean
+): SelectedMessageForApi[] {
+  if (thread.textMessages?.length) {
+    return prepareSelectedMessages(thread.textMessages, {
+      mostActiveMonth: thread.mostActiveMonth,
+      isGroup: thread.isGroup,
+      useRealNames,
+    });
+  }
+
+  const sample = thread.aiSummarySample?.messages;
+  if (!sample?.length) return [];
+
+  return sample.map((m) => ({
+    sender:
+      useRealNames &&
+      thread.aiSummarySample?.realNamesAvailable &&
+      m.senderName
+        ? m.senderName
+        : m.senderLabel,
+    timestamp_ms: m.timestamp_ms ?? 0,
+    text: m.text,
+  }));
+}
+
+export function threadHasAiSample(thread: {
+  textMessages?: DmMessageSample[];
+  aiSummarySample?: DmAiSummarySample;
+}): boolean {
+  return (
+    (thread.textMessages?.length ?? 0) > 0 ||
+    (thread.aiSummarySample?.messages?.length ?? 0) > 0
+  );
 }

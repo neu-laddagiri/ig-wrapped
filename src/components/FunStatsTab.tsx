@@ -4,17 +4,20 @@ import { Sparkles } from "lucide-react";
 import type {
   AdsPrivacyData,
   DmAnalytics,
+  MostActiveEraData,
   NetworkStats,
   WrappedInsights,
 } from "@/types/instagram";
 import { computeFunStats, resolveFunStatValue } from "@/lib/funStats";
 import { normalizeDmThreads } from "@/lib/dmThreads";
+import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
 interface FunStatsTabProps {
   network: NetworkStats | null;
   wrapped: WrappedInsights | null;
   messages: DmAnalytics | null;
   ads: AdsPrivacyData | null;
+  mostActiveEra: MostActiveEraData | null;
   showThreadNames: boolean;
 }
 
@@ -23,9 +26,16 @@ export function FunStatsTab({
   wrapped,
   messages,
   ads,
+  mostActiveEra,
   showThreadNames,
 }: FunStatsTabProps) {
-  const cards = computeFunStats({ network, wrapped, messages, ads });
+  const cards = computeFunStats({
+    network,
+    wrapped,
+    messages,
+    ads,
+    mostActiveEra,
+  });
   const threads = normalizeDmThreads(messages);
   const available = cards.filter((c) => c.available);
 
@@ -55,6 +65,21 @@ export function FunStatsTab({
           Playful insights from your parsed export. DM thread names stay hidden
           unless you enable them in the DMs tab.
         </p>
+      </div>
+
+      <div className="rounded-2xl border border-[#DD2A7B]/20 bg-gradient-to-br from-[#F58529]/10 via-[#DD2A7B]/10 to-[#515BD4]/10 p-5">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-5 w-5 text-[#DD2A7B]" />
+          <h3 className="font-semibold text-white">Most Active Era</h3>
+        </div>
+        <div className="mt-4">
+          <MostActiveEraCard era={mostActiveEra} compact />
+        </div>
+        {mostActiveEra && mostActiveEra.topMonths.length > 1 && (
+          <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+            <MostActiveMonthsChart era={mostActiveEra} />
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
