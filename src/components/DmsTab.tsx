@@ -38,6 +38,8 @@ import {
   type DmPageSize,
 } from "@/lib/dmThreads";
 import { DmThreadPagination } from "@/components/DmThreadPagination";
+import { DmAiSummarySection } from "@/components/DmAiSummarySection";
+import type { DmAiSummariesMap, DmAiSummarySaved } from "@/types/dmAiSummary";
 
 interface DmsTabProps {
   messages: DmAnalytics | null;
@@ -45,6 +47,8 @@ interface DmsTabProps {
   onShowThreadNamesChange?: (value: boolean) => void;
   showFirstMessagePreview?: boolean;
   onShowFirstMessagePreviewChange?: (value: boolean) => void;
+  dmAiSummaries?: DmAiSummariesMap;
+  onDmAiSummariesChange?: (summaries: DmAiSummariesMap) => void;
 }
 
 function formatDate(ts?: number): string {
@@ -73,11 +77,15 @@ function ThreadExpandedPanel({
   showFirstMessagePreview,
   showParticipants,
   onToggleParticipants,
+  aiSummary,
+  onAiSummaryChange,
 }: {
   thread: NormalizedDmThread;
   showFirstMessagePreview: boolean;
   showParticipants: boolean;
   onToggleParticipants: () => void;
+  aiSummary?: DmAiSummarySaved;
+  onAiSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
 }) {
   if (!thread.hasDetailedInsights) {
     return (
@@ -90,6 +98,11 @@ function ThreadExpandedPanel({
           {formatNumber(thread.totalMessages)} messages recorded ·{" "}
           {thread.folder.replace("_", " ")}
         </p>
+        <DmAiSummarySection
+          thread={thread}
+          saved={aiSummary}
+          onSummaryChange={onAiSummaryChange}
+        />
       </div>
     );
   }
@@ -211,6 +224,12 @@ function ThreadExpandedPanel({
           )}
         </div>
       )}
+
+      <DmAiSummarySection
+        thread={thread}
+        saved={aiSummary}
+        onSummaryChange={onAiSummaryChange}
+      />
     </div>
   );
 }
@@ -221,6 +240,8 @@ export function DmsTab({
   onShowThreadNamesChange,
   showFirstMessagePreview: controlledPreview,
   onShowFirstMessagePreviewChange,
+  dmAiSummaries = {},
+  onDmAiSummariesChange,
 }: DmsTabProps) {
   const [internalShow, setInternalShow] = useState(false);
   const [internalPreview, setInternalPreview] = useState(false);
@@ -331,6 +352,17 @@ export function DmsTab({
     });
   };
 
+  const handleAiSummaryChange = (
+    threadId: string,
+    summary: DmAiSummarySaved | null
+  ) => {
+    if (!onDmAiSummariesChange) return;
+    const next = { ...dmAiSummaries };
+    if (summary) next[threadId] = summary;
+    else delete next[threadId];
+    onDmAiSummariesChange(next);
+  };
+
   return (
     <div className="space-y-6">
       <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4">
@@ -343,6 +375,11 @@ export function DmsTab({
             <p className="mt-1 text-xs text-emerald-200/70">
               Thread names and message previews may include private information.
               Reveal only if you are comfortable viewing it.
+            </p>
+            <p className="mt-2 text-xs text-white/40">
+              AI summaries are optional. Generating one sends selected text from
+              that thread to the configured AI provider. Local stats do not
+              require AI.
             </p>
           </div>
         </div>
@@ -540,6 +577,8 @@ export function DmsTab({
                       showFirstMessagePreview={showFirstMessagePreview}
                       showParticipants={participantsOpen.has(thread.id)}
                       onToggleParticipants={() => toggleParticipants(thread.id)}
+                      aiSummary={dmAiSummaries[thread.id]}
+                      onAiSummaryChange={handleAiSummaryChange}
                     />
                   )}
                 </div>

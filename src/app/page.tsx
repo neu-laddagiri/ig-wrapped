@@ -32,6 +32,7 @@ import {
   saveLinkedInProgress,
 } from "@/lib/linkedinStorage";
 import type { SavedAnalysisRow } from "@/types/analysis";
+import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import type { LinkedInHelperEntry, ParsedExportData } from "@/types/instagram";
 
 function restoreParsedFromSnapshot(
@@ -54,6 +55,7 @@ export default function Home() {
   const [expandedGroupThreads, setExpandedGroupThreads] = useState<string[]>(
     []
   );
+  const [dmAiSummaries, setDmAiSummaries] = useState<DmAiSummariesMap>({});
   const [currentSavedId, setCurrentSavedId] = useState<string | null>(null);
   const [isLoadedFromCloud, setIsLoadedFromCloud] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -81,6 +83,7 @@ export default function Home() {
       setDmShowThreadNames(false);
       setDmShowFirstMessagePreview(false);
       setExpandedGroupThreads([]);
+      setDmAiSummaries({});
       setActiveTab("overview");
     } catch (err) {
       setParsedData(null);
@@ -108,6 +111,7 @@ export default function Home() {
       snapshot.dmShowFirstMessagePreview ?? false
     );
     setExpandedGroupThreads(snapshot.expandedGroupThreads ?? []);
+    setDmAiSummaries(snapshot.dmAiSummaries ?? {});
     setActiveTab(snapshot.activeTab ?? "overview");
     setCurrentSavedId(row.id);
     setIsLoadedFromCloud(true);
@@ -134,6 +138,7 @@ export default function Home() {
     setDmShowThreadNames(false);
     setDmShowFirstMessagePreview(false);
     setExpandedGroupThreads([]);
+    setDmAiSummaries({});
     setCurrentSavedId(null);
     setIsLoadedFromCloud(false);
     setActiveTab("overview");
@@ -213,6 +218,7 @@ export default function Home() {
                   dmShowThreadNames={dmShowThreadNames}
                   dmShowFirstMessagePreview={dmShowFirstMessagePreview}
                   expandedGroupThreads={expandedGroupThreads}
+                  dmAiSummaries={dmAiSummaries}
                   currentSavedId={currentSavedId}
                   onSignIn={() => setAuthOpen(true)}
                   onSaved={(id) => {
@@ -272,6 +278,8 @@ export default function Home() {
                         onShowFirstMessagePreviewChange={
                           setDmShowFirstMessagePreview
                         }
+                        dmAiSummaries={dmAiSummaries}
+                        onDmAiSummariesChange={setDmAiSummaries}
                       />
                     )}
                     {activeTab === "ads" && (

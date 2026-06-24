@@ -36,6 +36,14 @@ export interface WrappedInsights {
   postsViewed: number;
 }
 
+export interface DmMessageSample {
+  sender_name: string;
+  timestamp_ms: number;
+  content?: string;
+  share_link?: string;
+  share_text?: string;
+}
+
 export interface DmThreadAnalytics {
   id: string;
   threadName: string;
@@ -74,6 +82,8 @@ export interface DmThreadAnalytics {
   reelsLinksBySender: Record<string, number>;
   postLinksBySender: Record<string, number>;
   funSummary: string;
+  /** Local-only text messages for optional AI summarization — stripped on cloud save */
+  textMessages?: DmMessageSample[];
 }
 
 export interface DmAnalytics {

@@ -5,9 +5,10 @@ import type {
   DmAnalytics,
   DmThreadAnalytics,
 } from "@/types/instagram";
+import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 
-export const ANALYSIS_SNAPSHOT_VERSION = 2;
+export const ANALYSIS_SNAPSHOT_VERSION = 3;
 
 export interface AnalysisSnapshot {
   version: typeof ANALYSIS_SNAPSHOT_VERSION;
@@ -19,6 +20,7 @@ export interface AnalysisSnapshot {
   dmShowThreadNames: boolean;
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
+  dmAiSummaries?: DmAiSummariesMap;
   parsedAt: string;
   parsed: ParsedExportDataForSave;
 }
@@ -70,6 +72,7 @@ export interface CreateSnapshotInput {
   dmShowThreadNames: boolean;
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
+  dmAiSummaries?: DmAiSummariesMap;
   analysisMode?: string;
 }
 
@@ -77,8 +80,9 @@ function sanitizeThread(
   thread: DmThreadAnalytics,
   includePreviews: boolean
 ): DmThreadAnalytics {
-  if (includePreviews) return thread;
-  const { firstMessagePreview: _removed, ...rest } = thread;
+  const { textMessages: _textMessages, ...withoutSamples } = thread;
+  if (includePreviews) return withoutSamples;
+  const { firstMessagePreview: _removed, ...rest } = withoutSamples;
   return rest;
 }
 

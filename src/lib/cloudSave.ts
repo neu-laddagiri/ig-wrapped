@@ -85,6 +85,7 @@ export function createAnalysisSnapshot(
     dmShowThreadNames: input.dmShowThreadNames,
     dmShowFirstMessagePreview: input.dmShowFirstMessagePreview,
     expandedGroupThreads: input.expandedGroupThreads,
+    dmAiSummaries: input.dmAiSummaries ?? {},
     parsedAt: new Date().toISOString(),
     parsed,
   };

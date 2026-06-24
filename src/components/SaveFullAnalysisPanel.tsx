@@ -19,6 +19,7 @@ import {
 } from "@/lib/cloudSave";
 import type { DashboardTabId } from "@/components/DashboardTabs";
 import type { ParsedExportData, LinkedInHelperEntry } from "@/types/instagram";
+import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 
 interface SaveFullAnalysisPanelProps {
   parsedData: ParsedExportData;
@@ -29,6 +30,7 @@ interface SaveFullAnalysisPanelProps {
   dmShowThreadNames: boolean;
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
+  dmAiSummaries: DmAiSummariesMap;
   currentSavedId: string | null;
   onSignIn: () => void;
   onSaved: (id: string) => void;
@@ -46,6 +48,7 @@ export function SaveFullAnalysisPanel({
   dmShowThreadNames,
   dmShowFirstMessagePreview,
   expandedGroupThreads,
+  dmAiSummaries,
   currentSavedId,
   onSignIn,
   onSaved,
@@ -105,6 +108,7 @@ export function SaveFullAnalysisPanel({
       dmShowThreadNames,
       dmShowFirstMessagePreview,
       expandedGroupThreads,
+      dmAiSummaries,
     });
 
     const result = await saveFullAnalysisToCloud({

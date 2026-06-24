@@ -1,4 +1,4 @@
-import type { DmAnalytics, DmThreadAnalytics } from "@/types/instagram";
+import type { DmAnalytics, DmMessageSample, DmThreadAnalytics } from "@/types/instagram";
 import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
 
 const URL_REGEX = /https?:\/\/[^\s<>"']+/gi;
@@ -154,6 +154,38 @@ function extractFirstMessageText(msg: JsonRecord): string | undefined {
   return undefined;
 }
 
+function extractMessageSample(
+  msg: JsonRecord,
+  sender: string
+): DmMessageSample | null {
+  const ts =
+    typeof msg.timestamp_ms === "number" && Number.isFinite(msg.timestamp_ms)
+      ? msg.timestamp_ms
+      : parseTimestamp(msg.timestamp_ms)
+        ? (parseTimestamp(msg.timestamp_ms)! * 1000)
+        : 0;
+
+  const sample: DmMessageSample = { sender_name: sender, timestamp_ms: ts };
+  let hasText = false;
+
+  if (typeof msg.content === "string" && msg.content.trim()) {
+    sample.content = msg.content.trim();
+    hasText = true;
+  }
+  if (isRecord(msg.share)) {
+    if (typeof msg.share.link === "string" && msg.share.link.trim()) {
+      sample.share_link = msg.share.link.trim();
+      hasText = true;
+    }
+    if (typeof msg.share.share_text === "string" && msg.share.share_text.trim()) {
+      sample.share_text = msg.share.share_text.trim();
+      hasText = true;
+    }
+  }
+
+  return hasText ? sample : null;
+}
+
 export function generateThreadFunSummary(thread: {
   messageCount: number;
   isGroupChat: boolean;
@@ -226,6 +258,7 @@ function parseThread(
     ts: number;
     sender: string;
   }[] = [];
+  const textMessages: DmMessageSample[] = [];
 
   for (const raw of messages) {
     if (!isRecord(raw)) continue;
@@ -259,6 +292,9 @@ function parseThread(
     if (Array.isArray(raw.audio_files)) audioCount += raw.audio_files.length;
     if (Array.isArray(raw.reactions)) reactionCount += raw.reactions.length;
     if (raw.call_duration !== undefined) callEventCount++;
+
+    const sample = extractMessageSample(raw, sender);
+    if (sample) textMessages.push(sample);
   }
 
   timedMessages.sort((a, b) => a.ts - b.ts);
@@ -334,6 +370,7 @@ function parseThread(
       mediaCount,
       firstMessageTimestamp,
     }),
+    textMessages,
   };
 }
 
