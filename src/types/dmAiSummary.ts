@@ -1,4 +1,9 @@
-export type DmAiSummaryTone = "real" | "funny" | "savage" | "wrapped";
+export type DmAiSummaryTone =
+  | "wrapped"
+  | "savage"
+  | "real"
+  | "wholesome"
+  | "funny";
 
 export interface DmAiSummaryResult {
   chatVibe: string;
@@ -31,8 +36,14 @@ export interface DmSummaryApiRequest {
     linkCount: number;
     reelOrPostCount: number;
     mediaCount: number;
+    photoCount: number;
+    videoCount: number;
+    audioCount: number;
     reactionCount: number;
     callCount: number;
+    averageMessageLength?: number;
+    firstMessageAt?: string;
+    lastMessageAt?: string;
     mostActiveMonth?: string;
     messagesBySender: Record<string, number>;
   };

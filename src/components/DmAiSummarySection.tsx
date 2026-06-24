@@ -15,18 +15,30 @@ import type {
   DmAiSummaryTone,
   DmAiSummaryResult,
 } from "@/types/dmAiSummary";
+import { formatTimestamp } from "@/lib/formatters";
 import type { NormalizedDmThread } from "@/lib/dmThreads";
 import {
   anonymizeSenderStats,
   prepareSelectedMessages,
 } from "@/lib/dmMessageSampling";
 
-const TONE_OPTIONS: { value: DmAiSummaryTone; label: string }[] = [
-  { value: "real", label: "Real" },
-  { value: "funny", label: "Funny" },
-  { value: "savage", label: "Savage" },
-  { value: "wrapped", label: "Wrapped" },
+const TONE_OPTIONS: { value: DmAiSummaryTone; label: string; hint: string }[] = [
+  { value: "wrapped", label: "Wrapped", hint: "Funniest default — awards show energy" },
+  { value: "savage", label: "Savage", hint: "Sharper roast, still safe" },
+  { value: "real", label: "Real", hint: "Honest read, fewer jokes" },
+  { value: "wholesome", label: "Wholesome", hint: "Warm, green-flag energy" },
 ];
+
+const LOADING_LINES = [
+  "Reading the receipts…",
+  "Judging the chat respectfully…",
+];
+
+function formatStatDate(ts?: number): string | undefined {
+  if (!ts) return undefined;
+  const f = formatTimestamp(ts);
+  return f === "—" ? undefined : f;
+}
 
 interface DmAiSummarySectionProps {
   thread: NormalizedDmThread;
@@ -37,86 +49,100 @@ interface DmAiSummarySectionProps {
 function SummaryCards({ summary }: { summary: DmAiSummaryResult }) {
   return (
     <div className="space-y-3">
-      <div className="rounded-xl border border-[#DD2A7B]/25 bg-gradient-to-br from-[#DD2A7B]/10 to-[#515BD4]/10 p-3">
-        <p className="text-[10px] uppercase tracking-wider text-[#DD2A7B]/80">
-          Chat vibe
+      <div className="rounded-2xl border border-[#DD2A7B]/30 bg-gradient-to-br from-[#F58529]/15 via-[#DD2A7B]/15 to-[#515BD4]/15 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-[#DD2A7B]/90">
+          The verdict
         </p>
-        <p className="mt-1 text-sm text-white/90">{summary.chatVibe}</p>
-      </div>
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-        <p className="text-[10px] uppercase tracking-wider text-white/40">
-          One-liner
-        </p>
-        <p className="mt-1 text-sm font-medium text-white">
+        <p className="mt-2 text-base font-semibold leading-snug text-white">
           {summary.oneSentenceSummary}
         </p>
+        <p className="mt-2 text-sm text-white/60">{summary.chatVibe}</p>
       </div>
+
+      <div className="rounded-xl border border-amber-500/25 bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4">
+        <p className="text-[10px] font-semibold uppercase tracking-widest text-amber-300/80">
+          The roast
+        </p>
+        <p className="mt-2 text-sm leading-relaxed text-amber-50/95">
+          {summary.roast}
+        </p>
+      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+        <div className="rounded-xl border border-white/10 bg-white/[0.04] p-3">
           <p className="text-[10px] uppercase tracking-wider text-white/40">
             Who carries
           </p>
-          <p className="mt-1 text-xs text-white/75">{summary.whoCarries}</p>
+          <p className="mt-1.5 text-sm text-white/80">{summary.whoCarries}</p>
         </div>
-        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
-          <p className="text-[10px] uppercase tracking-wider text-white/40">
+        <div className="rounded-xl border border-[#515BD4]/25 bg-[#515BD4]/10 p-3">
+          <p className="text-[10px] uppercase tracking-wider text-[#515BD4]/80">
             Wrapped award
           </p>
-          <p className="mt-1 text-xs text-white/75">{summary.wrappedAward}</p>
+          <p className="mt-1.5 text-sm font-medium text-white/85">
+            {summary.wrappedAward}
+          </p>
         </div>
       </div>
+
       {summary.signaturePatterns.length > 0 && (
-        <div>
-          <p className="mb-1.5 text-[10px] uppercase tracking-wider text-white/40">
+        <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-white/40">
             Signature patterns
           </p>
-          <ul className="list-inside list-disc space-y-0.5 text-xs text-white/65">
+          <ul className="space-y-1.5">
             {summary.signaturePatterns.map((p) => (
-              <li key={p}>{p}</li>
+              <li
+                key={p}
+                className="flex gap-2 text-xs text-white/70 before:shrink-0 before:content-['→']"
+              >
+                <span>{p}</span>
+              </li>
             ))}
           </ul>
         </div>
       )}
+
       <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3">
         <p className="text-[10px] uppercase tracking-wider text-white/40">
           Funniest dynamic
         </p>
-        <p className="mt-1 text-xs text-white/75">{summary.funniestDynamic}</p>
+        <p className="mt-1.5 text-sm text-white/75">{summary.funniestDynamic}</p>
       </div>
-      <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-3">
-        <p className="text-[10px] uppercase tracking-wider text-amber-300/70">
-          Roast
-        </p>
-        <p className="mt-1 text-xs text-amber-100/85">{summary.roast}</p>
-      </div>
+
       <div className="grid gap-2 sm:grid-cols-2">
         {summary.greenFlags.length > 0 && (
           <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-3">
-            <p className="text-[10px] uppercase tracking-wider text-emerald-300/70">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-300/80">
               Green flags
             </p>
-            <ul className="mt-1 list-inside list-disc text-xs text-emerald-100/80">
+            <ul className="mt-2 space-y-1">
               {summary.greenFlags.map((f) => (
-                <li key={f}>{f}</li>
+                <li key={f} className="text-xs text-emerald-100/85">
+                  + {f}
+                </li>
               ))}
             </ul>
           </div>
         )}
         {summary.redFlags.length > 0 && (
           <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3">
-            <p className="text-[10px] uppercase tracking-wider text-red-300/70">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-red-300/80">
               Red flags
             </p>
-            <ul className="mt-1 list-inside list-disc text-xs text-red-100/80">
+            <ul className="mt-2 space-y-1">
               {summary.redFlags.map((f) => (
-                <li key={f}>{f}</li>
+                <li key={f} className="text-xs text-red-100/85">
+                  − {f}
+                </li>
               ))}
             </ul>
           </div>
         )}
       </div>
+
       {summary.confidenceNote && (
-        <p className="text-[11px] italic text-white/35">
+        <p className="text-center text-[11px] text-white/30">
           {summary.confidenceNote}
         </p>
       )}
@@ -135,6 +161,9 @@ export function DmAiSummarySection({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [loadingLine] = useState(
+    () => LOADING_LINES[Math.floor(Math.random() * LOADING_LINES.length)]
+  );
 
   const hasSample =
     Array.isArray(thread.textMessages) && thread.textMessages.length > 0;
@@ -170,8 +199,14 @@ export function DmAiSummarySection({
         linkCount: thread.linkCount,
         reelOrPostCount: thread.reelOrPostCount,
         mediaCount: thread.mediaCount,
+        photoCount: thread.photoCount,
+        videoCount: thread.videoCount,
+        audioCount: thread.audioCount,
         reactionCount: thread.reactionCount,
         callCount: thread.callCount,
+        averageMessageLength: thread.averageMessageLength,
+        firstMessageAt: formatStatDate(thread.firstMessageAt),
+        lastMessageAt: formatStatDate(thread.lastMessageAt),
         mostActiveMonth: thread.mostActiveMonth,
         messagesBySender: anonymizeSenderStats(
           thread.messagesBySender,
@@ -212,7 +247,7 @@ export function DmAiSummarySection({
 
       onSummaryChange(thread.id, {
         threadId: thread.id,
-        tone,
+        tone: tone === "funny" ? "wrapped" : tone,
         generatedAt: new Date().toISOString(),
         summary: data.summary as DmAiSummaryResult,
       });
@@ -228,10 +263,13 @@ export function DmAiSummarySection({
     const s = saved.summary;
     const text = [
       s.oneSentenceSummary,
+      s.roast,
       `Vibe: ${s.chatVibe}`,
       `Who carries: ${s.whoCarries}`,
       `Award: ${s.wrappedAward}`,
-      s.roast ? `Roast: ${s.roast}` : "",
+      s.signaturePatterns.length
+        ? `Patterns:\n${s.signaturePatterns.map((p) => `• ${p}`).join("\n")}`
+        : "",
       s.confidenceNote,
     ]
       .filter(Boolean)
@@ -258,7 +296,7 @@ export function DmAiSummarySection({
       {loading ? (
         <div className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-6 text-sm text-white/50">
           <Loader2 className="h-4 w-4 animate-spin text-[#DD2A7B]" />
-          Reading the vibes…
+          {loadingLine}
         </div>
       ) : saved ? (
         <div className="space-y-3">
@@ -339,22 +377,31 @@ export function DmAiSummarySection({
             </div>
           ) : (
             <>
-              <div className="flex flex-wrap items-center gap-2">
-                <label className="text-xs text-white/45">Tone</label>
-                <select
-                  value={tone}
-                  onChange={(e) =>
-                    setTone(e.target.value as DmAiSummaryTone)
+              <div className="space-y-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-white/45">Tone</label>
+                  <select
+                    value={tone === "funny" ? "wrapped" : tone}
+                    onChange={(e) =>
+                      setTone(e.target.value as DmAiSummaryTone)
+                    }
+                    disabled={!hasSample || aiConfigured === false}
+                    className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none disabled:opacity-40"
+                  >
+                    {TONE_OPTIONS.map((o) => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <p className="text-[11px] text-white/30">
+                  {
+                    TONE_OPTIONS.find(
+                      (o) => o.value === (tone === "funny" ? "wrapped" : tone)
+                    )?.hint
                   }
-                  disabled={!hasSample || aiConfigured === false}
-                  className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none disabled:opacity-40"
-                >
-                  {TONE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>
-                      {o.label}
-                    </option>
-                  ))}
-                </select>
+                </p>
               </div>
               <button
                 type="button"
