@@ -11,6 +11,7 @@
   "dependencies": {
     "@supabase/ssr": "^0.12.0",
     "@supabase/supabase-js": "^2.108.2",
+    "@vercel/analytics": "^2.0.1",
     "date-fns": "^4.4.0",
     "framer-motion": "^12.41.0",
     "jszip": "^3.10.1",
