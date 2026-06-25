@@ -21,10 +21,14 @@ import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber, formatPercent } from "@/lib/formatters";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
+import type { AdsPrivacyInsights, ContentDietResult } from "@/types/insights";
+
 interface WrappedInsightsTabProps {
   wrapped: WrappedInsights | null;
   network: NetworkStats | null;
   mostActiveEra: MostActiveEraData | null;
+  contentDiet?: ContentDietResult | null;
+  adsInsights?: AdsPrivacyInsights | null;
 }
 
 function InsightPlaceholder({
@@ -62,6 +66,8 @@ export function WrappedInsightsTab({
   wrapped,
   network,
   mostActiveEra,
+  contentDiet,
+  adsInsights,
 }: WrappedInsightsTabProps) {
   if (!wrapped) {
     return (
@@ -131,8 +137,7 @@ export function WrappedInsightsTab({
           Wrapped personality cards
         </h3>
         <p className="mb-4 text-sm text-white/45">
-          Fun insights based on your available data. Deeper analysis coming in
-          future versions.
+          Fun insights based on your available export data.
         </p>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <InsightPlaceholder
@@ -176,6 +181,52 @@ export function WrappedInsightsTab({
           />
         </div>
       </div>
+
+      {contentDiet && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <h3 className="font-semibold text-white">Content Diet</h3>
+          <p className="mt-1 text-sm text-[#DD2A7B]">{contentDiet.personality}</p>
+          <p className="mt-2 text-xs text-white/45">{contentDiet.caption}</p>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {contentDiet.metrics.map((m) => (
+              <div
+                key={m.label}
+                className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2"
+              >
+                <p className="text-[10px] uppercase text-white/35">{m.label}</p>
+                <p className="text-sm font-medium text-white">{m.value}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {adsInsights && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <h3 className="font-semibold text-white">Ads deep dive</h3>
+          <p className="mt-1 text-xs text-white/40">{adsInsights.summary}</p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+              <p className="text-xs text-white/40">Ad resistance</p>
+              <p className="text-lg font-bold text-white">
+                {adsInsights.adResistanceScore}%
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+              <p className="text-xs text-white/40">Privacy creep score</p>
+              <p className="text-lg font-bold text-white">
+                {adsInsights.privacyCreepScore}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
+              <p className="text-xs text-white/40">Click rate</p>
+              <p className="text-lg font-bold text-white">
+                {Math.round(adsInsights.clickRate * 100)}%
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {mostActiveEra && mostActiveEra.topMonths.length > 1 && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">

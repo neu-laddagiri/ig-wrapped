@@ -16,14 +16,12 @@ export function Hero() {
         transition={{ delay: 0.1, duration: 0.5 }}
         className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/60 backdrop-blur-sm"
       >
-        <span className="h-2 w-2 rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#8134AF] animate-pulse" />
+        <span className="h-2 w-2 rounded-full animated-gradient-bg" />
         Privacy-first · Client-side only
       </motion.div>
 
       <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl">
-        <span className="bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] bg-clip-text text-transparent">
-          IG Wrapped
-        </span>
+        <span className="animated-gradient-text">IG Wrapped</span>
       </h1>
 
       <p className="mx-auto mt-4 max-w-2xl text-xl font-medium text-white/90 sm:text-2xl">

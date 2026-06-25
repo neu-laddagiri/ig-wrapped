@@ -13,17 +13,19 @@ import {
   Search,
 } from "lucide-react";
 import type { AdsPrivacyData } from "@/types/instagram";
+import type { AdsPrivacyInsights } from "@/types/insights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
 
 interface AdsPrivacyTabProps {
   ads: AdsPrivacyData | null;
+  adsInsights?: AdsPrivacyInsights | null;
 }
 
 const CATEGORY_PREVIEW = 20;
 const ADVERTISER_PREVIEW = 30;
 
-export function AdsPrivacyTab({ ads }: AdsPrivacyTabProps) {
+export function AdsPrivacyTab({ ads, adsInsights }: AdsPrivacyTabProps) {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllAdvertisers, setShowAllAdvertisers] = useState(false);
   const [advertiserQuery, setAdvertiserQuery] = useState("");
@@ -229,6 +231,56 @@ export function AdsPrivacyTab({ ads }: AdsPrivacyTabProps) {
           </p>
         )}
       </div>
+
+      {adsInsights && adsInsights.brandsStalkingYou.length > 0 && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <h3 className="font-semibold text-white">Brands stalking you</h3>
+          <p className="mt-1 text-xs text-white/40">
+            Instagram&apos;s export suggests these advertisers may have used your
+            activity.
+          </p>
+          <ul className="mt-4 flex flex-wrap gap-2">
+            {adsInsights.brandsStalkingYou.slice(0, 20).map((name) => (
+              <li
+                key={name}
+                className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/70"
+              >
+                {name}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {adsInsights &&
+        Object.entries(adsInsights.themedCategories).some(
+          ([, v]) => v.length > 0
+        ) && (
+          <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+            <h3 className="font-semibold text-white">Categories by theme</h3>
+            <div className="mt-4 grid gap-4 sm:grid-cols-2">
+              {Object.entries(adsInsights.themedCategories)
+                .filter(([, items]) => items.length > 0)
+                .map(([theme, items]) => (
+                  <div key={theme}>
+                    <p className="text-xs font-medium uppercase text-white/40">
+                      {theme}
+                    </p>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {items.slice(0, 8).map((item) => (
+                        <span
+                          key={item}
+                          className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[11px] text-white/60"
+                        >
+                          {item}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        )}
     </div>
   );
 }

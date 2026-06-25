@@ -6,10 +6,11 @@ import type {
   DmThreadAnalytics,
 } from "@/types/instagram";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
+import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 import { buildAiSummarySampleForCloud } from "@/lib/dmMessageSampling";
 
-export const ANALYSIS_SNAPSHOT_VERSION = 4;
+export const ANALYSIS_SNAPSHOT_VERSION = 6;
 
 export interface AnalysisSnapshot {
   version: typeof ANALYSIS_SNAPSHOT_VERSION;
@@ -22,6 +23,7 @@ export interface AnalysisSnapshot {
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
   dmAiSummaries?: DmAiSummariesMap;
+  overviewAiSummary?: OverviewAiSummaryResult | null;
   parsedAt: string;
   parsed: ParsedExportDataForSave;
 }
@@ -74,6 +76,7 @@ export interface CreateSnapshotInput {
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
   dmAiSummaries?: DmAiSummariesMap;
+  overviewAiSummary?: OverviewAiSummaryResult | null;
   analysisMode?: string;
 }
 

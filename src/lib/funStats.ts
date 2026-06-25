@@ -7,6 +7,7 @@ import type {
   WrappedInsights,
 } from "@/types/instagram";
 import { formatMonthLabel, formatPercent } from "@/lib/formatters";
+import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 
 export interface FunStatCard {
@@ -334,7 +335,7 @@ export function resolveFunStatValue(
   if (!thread) return card.value;
   const label = thread.isGroupChat
     ? `Group · ${thread.participantCount} people`
-    : thread.threadName;
+    : formatAccountDisplayName(thread.threadName);
   if (card.id === "biggest-yapper") {
     return `${label} (${thread.messageCount.toLocaleString()} msgs)`;
   }

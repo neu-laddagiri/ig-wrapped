@@ -8,6 +8,7 @@ import type {
   LinkedInHelperEntry,
   NetworkStats,
 } from "@/types/instagram";
+import type { UnifiedAccount } from "@/types/insights";
 import { buildAccountNetworkDetail } from "@/lib/networkAccountDetail";
 import {
   formatTimestamp,
@@ -21,6 +22,7 @@ interface AccountDetailDrawerProps {
   username: string | null;
   network: NetworkStats | null;
   linkedinEntry?: LinkedInHelperEntry;
+  unifiedAccount?: UnifiedAccount;
 }
 
 function DetailRow({
@@ -38,12 +40,21 @@ function DetailRow({
   );
 }
 
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h4 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-widest text-white/35">
+      {children}
+    </h4>
+  );
+}
+
 export function AccountDetailDrawer({
   open,
   onClose,
   username,
   network,
   linkedinEntry,
+  unifiedAccount,
 }: AccountDetailDrawerProps) {
   const [copied, setCopied] = useState(false);
 
@@ -66,6 +77,8 @@ export function AccountDetailDrawer({
       // ignore
     }
   };
+
+  const u = unifiedAccount;
 
   return (
     <AnimatePresence>
@@ -103,16 +116,31 @@ export function AccountDetailDrawer({
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
               <div className="mb-4 flex flex-wrap gap-2">
-                {detail.categories.map((c) => (
+                {(u ? [u.relationshipLabel] : detail.categories).map((c) => (
                   <span
                     key={c}
-                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs capitalize text-white/70"
+                    className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs text-white/70"
                   >
                     {c}
                   </span>
                 ))}
               </div>
 
+              <SectionTitle>Identity</SectionTitle>
+              <DetailRow label="Username" value={`@${detail.username}`} />
+              <DetailRow
+                label="Relationship type"
+                value={u?.relationshipLabel ?? "—"}
+              />
+              {u?.isUnknownAccount && (
+                <p className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/80">
+                  Instagram&apos;s export did not include a usable name for this
+                  account. This may be a deleted, deactivated, renamed, or
+                  unavailable account.
+                </p>
+              )}
+
+              <SectionTitle>Follow relationship</SectionTitle>
               <DetailRow
                 label="Follows you"
                 value={detail.followsMe ? "Yes" : "No"}
@@ -121,10 +149,21 @@ export function AccountDetailDrawer({
                 label="You follow"
                 value={detail.iFollowThem ? "Yes" : "No"}
               />
+              <DetailRow label="Mutual" value={detail.isMutual ? "Yes" : "No"} />
               <DetailRow
-                label="Mutual"
-                value={detail.isMutual ? "Yes" : "No"}
+                label="Who followed first"
+                value={u?.whoFollowedFirst ?? "Unknown"}
               />
+              <DetailRow
+                label="Follow-back time"
+                value={
+                  u?.followBackTimeMs
+                    ? `${Math.round(u.followBackTimeMs / 86400000)} days`
+                    : "—"
+                }
+              />
+
+              <SectionTitle>Relationship timeline</SectionTitle>
               <DetailRow
                 label="They followed you"
                 value={formatTimestamp(detail.followedMeAt)}
@@ -135,24 +174,50 @@ export function AccountDetailDrawer({
               />
               <DetailRow
                 label="First connected"
-                value={formatTimestamp(detail.firstConnectedAt)}
+                value={formatTimestamp(u?.firstConnectedAt ?? detail.firstConnectedAt)}
               />
               <DetailRow
-                label="Became mutual (est.)"
-                value={formatTimestamp(detail.becameMutualAt)}
+                label="Became mutual"
+                value={formatTimestamp(u?.becameMutualAt ?? detail.becameMutualAt)}
               />
-              {detail.isPending && (
-                <DetailRow label="Pending request" value="Yes" />
+
+              <SectionTitle>DM connection</SectionTitle>
+              <DetailRow
+                label="Has DM thread"
+                value={u?.hasDmThread ? "Yes" : "No"}
+              />
+              <DetailRow
+                label="DM messages (1-on-1)"
+                value={u?.dmMessageCount?.toLocaleString() ?? "0"}
+              />
+              {(u?.groupMessageCount ?? 0) > 0 && (
+                <DetailRow
+                  label="Group messages sent"
+                  value={u?.groupMessageCount?.toLocaleString() ?? "0"}
+                />
               )}
-              {detail.isBlocked && <DetailRow label="Blocked" value="Yes" />}
-              {detail.isRestricted && (
-                <DetailRow label="Restricted" value="Yes" />
-              )}
+              <DetailRow
+                label="Last DM"
+                value={formatTimestamp(u?.lastDmAt)}
+              />
+
+              {(u?.likedCount || u?.commentedCount || u?.storyInteractionCount) ? (
+                <>
+                  <SectionTitle>Interaction stats</SectionTitle>
+                  <DetailRow label="Likes" value={u?.likedCount ?? 0} />
+                  <DetailRow label="Comments" value={u?.commentedCount ?? 0} />
+                  <DetailRow
+                    label="Story interactions"
+                    value={u?.storyInteractionCount ?? 0}
+                  />
+                </>
+              ) : null}
 
               {linkedinEntry && (
                 <>
+                  <SectionTitle>LinkedIn helper</SectionTitle>
                   <DetailRow
-                    label="LinkedIn status"
+                    label="Status"
                     value={linkedinEntry.status.replace(/-/g, " ")}
                   />
                   {linkedinEntry.notes && (
@@ -160,6 +225,12 @@ export function AccountDetailDrawer({
                   )}
                 </>
               )}
+
+              <SectionTitle>Recommended action</SectionTitle>
+              <p className="text-sm text-white/55">
+                {u?.recommendedAction ??
+                  "Review this account in Network Manager."}
+              </p>
 
               <p className="mt-4 text-xs leading-relaxed text-white/35">
                 Dates come from Instagram export timestamps. Availability

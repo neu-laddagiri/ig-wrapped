@@ -1,4 +1,5 @@
 import type { DmAnalytics, DmMessageSample, DmThreadAnalytics, DmAiSummarySample } from "@/types/instagram";
+import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 
 /** Canonical DM thread shape for UI rendering */
 export interface NormalizedDmThread {
@@ -288,7 +289,7 @@ export function computeDisplayTitle(
   if (thread.isGroup) {
     return `Group chat · ${thread.participantCount} people`;
   }
-  return thread.title;
+  return formatAccountDisplayName(thread.title);
 }
 
 export function withDisplayTitles(

@@ -226,7 +226,9 @@ export type CoverageCategoryId =
   | "profile_activity"
   | "security_changes"
   | "personal_information"
-  | "media_files";
+  | "media_files"
+  | "search_history"
+  | "connected_apps";
 
 export interface DataCoverageItem {
   id: CoverageCategoryId;
@@ -236,6 +238,8 @@ export interface DataCoverageItem {
   fileCount: number;
 }
 
+import type { InsightsBundle } from "@/types/insights";
+
 export interface ParsedExportData {
   network: NetworkStats | null;
   wrapped: WrappedInsights | null;
@@ -243,6 +247,7 @@ export interface ParsedExportData {
   ads: AdsPrivacyData | null;
   security: SecurityData | null;
   mostActiveEra: MostActiveEraData | null;
+  insights: InsightsBundle | null;
   coverage: DataCoverageItem[];
   totalFiles: number;
   jsonFiles: number;

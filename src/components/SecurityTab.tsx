@@ -19,6 +19,7 @@ import type {
   SecurityEvent,
   SecurityEventType,
 } from "@/types/instagram";
+import type { SecurityAuditResult } from "@/types/insights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
 import {
@@ -28,6 +29,7 @@ import {
 
 interface SecurityTabProps {
   security: SecurityData | null;
+  securityAudit?: SecurityAuditResult | null;
 }
 
 type TimelineFilter =
@@ -37,7 +39,8 @@ type TimelineFilter =
   | "password_change"
   | "profile_activity";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 8;
+const FLAGGED_INITIAL = 3;
 
 const EVENT_ICONS: Record<SecurityEventType, typeof LogIn> = {
   login: LogIn,
@@ -105,9 +108,10 @@ function TimelineEventRow({ event }: { event: SecurityEvent }) {
   );
 }
 
-export function SecurityTab({ security }: SecurityTabProps) {
+export function SecurityTab({ security, securityAudit }: SecurityTabProps) {
   const [filter, setFilter] = useState<TimelineFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+  const [showAllFlagged, setShowAllFlagged] = useState(false);
 
   const analysis = useMemo(
     () => (security ? resolveSuspiciousLoginAnalysis(security) : null),
@@ -186,7 +190,7 @@ export function SecurityTab({ security }: SecurityTabProps) {
           <h3 className="font-semibold text-white">Account timeline</h3>
         </div>
         <p className="mt-1 text-xs text-white/40">
-          Security and account events from your export, newest first.
+          Latest events from your export. Worth reviewing if something looks unfamiliar.
         </p>
 
         <div className="mt-4 flex flex-wrap gap-2">
@@ -200,7 +204,7 @@ export function SecurityTab({ security }: SecurityTabProps) {
               }}
               className={`rounded-full px-3 py-1 text-xs font-medium transition ${
                 filter === f.id
-                  ? "bg-gradient-to-r from-[#F58529]/30 via-[#DD2A7B]/30 to-[#515BD4]/30 text-white"
+                  ? "animated-gradient-bg text-white"
                   : "border border-white/10 bg-white/5 text-white/55 hover:text-white/75"
               }`}
             >
@@ -223,7 +227,7 @@ export function SecurityTab({ security }: SecurityTabProps) {
                 className="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-[#DD2A7B] hover:underline"
               >
                 <ChevronDown className="h-3.5 w-3.5" />
-                Show more ({filteredEvents.length - visibleCount} remaining)
+                Show more timeline events ({filteredEvents.length - visibleCount} remaining)
               </button>
             )}
           </>
@@ -234,12 +238,12 @@ export function SecurityTab({ security }: SecurityTabProps) {
         )}
       </div>
 
-      <div className="rounded-2xl border border-amber-500/20 bg-gradient-to-br from-amber-500/10 to-orange-600/5 p-6">
+      <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-white/[0.02] p-5">
         <div className="flex flex-wrap items-center gap-2">
-          <AlertTriangle className="h-5 w-5 text-amber-400" />
-          <h3 className="font-semibold text-amber-50">Suspicious login checker</h3>
+          <AlertTriangle className="h-5 w-5 text-amber-400/90" />
+          <h3 className="font-semibold text-white">Login & activity review</h3>
         </div>
-        <p className="mt-1 text-xs text-amber-200/50">
+        <p className="mt-1 text-xs text-white/40">
           Heuristic review only — flagged items could be normal if this was you.
         </p>
 
@@ -273,16 +277,20 @@ export function SecurityTab({ security }: SecurityTabProps) {
             </div>
 
             {analysis.flaggedEvents.length > 0 ? (
+              <>
               <ul className="space-y-2">
-                {analysis.flaggedEvents.slice(0, 15).map((flag) => (
+                {(showAllFlagged
+                  ? analysis.flaggedEvents
+                  : analysis.flaggedEvents.slice(0, FLAGGED_INITIAL)
+                ).map((flag) => (
                   <li
                     key={`${flag.event.id}-${flag.reason}`}
                     className={`rounded-xl border p-3 text-sm ${
                       flag.severity === "high"
-                        ? "border-red-500/25 bg-red-500/8 text-red-100/90"
+                        ? "border-amber-500/25 bg-amber-500/8 text-amber-100/90"
                         : flag.severity === "medium"
-                          ? "border-amber-500/25 bg-amber-500/8 text-amber-100/90"
-                          : "border-white/10 bg-white/[0.03] text-white/70"
+                          ? "border-white/15 bg-white/[0.04] text-white/75"
+                          : "border-white/10 bg-white/[0.03] text-white/65"
                     }`}
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
@@ -297,10 +305,19 @@ export function SecurityTab({ security }: SecurityTabProps) {
                   </li>
                 ))}
               </ul>
+              {analysis.flaggedEvents.length > FLAGGED_INITIAL && !showAllFlagged && (
+                <button
+                  type="button"
+                  onClick={() => setShowAllFlagged(true)}
+                  className="mt-3 text-xs font-medium text-[#DD2A7B] hover:underline"
+                >
+                  Show all flagged items ({analysis.flaggedEvents.length})
+                </button>
+              )}
+              </>
             ) : (
-              <p className="text-sm text-amber-100/80">
-                No potentially unusual patterns detected in your export. Still
-                worth reviewing login history periodically.
+              <p className="text-sm text-white/60">
+                No unusual patterns detected. Still worth reviewing login history periodically.
               </p>
             )}
 
@@ -323,6 +340,33 @@ export function SecurityTab({ security }: SecurityTabProps) {
           </p>
         )}
       </div>
+
+      {securityAudit && securityAudit.connectedApps.length > 0 && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
+          <h3 className="font-semibold text-white">Connected apps</h3>
+          <p className="mt-1 text-xs text-white/40">
+            Apps and websites connected to your Instagram account.
+          </p>
+          <ul className="mt-4 space-y-2">
+            {securityAudit.connectedApps.slice(0, 20).map((app) => (
+              <li
+                key={app.name}
+                className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm"
+              >
+                <span className="text-white/75">{app.name}</span>
+                {app.isStale && (
+                  <span className="text-xs text-amber-400/80">Stale</span>
+                )}
+              </li>
+            ))}
+          </ul>
+          {securityAudit.staleApps.length > 0 && (
+            <p className="mt-3 text-xs text-white/40">
+              {securityAudit.staleApps.length} app(s) may be worth disconnecting.
+            </p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

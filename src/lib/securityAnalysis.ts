@@ -191,8 +191,8 @@ export function analyzeSuspiciousLogins(
     addFlag(
       buildFlag(
         change,
-        "Password change recorded — review if you did not initiate this.",
-        "high"
+        "Password change recorded — worth reviewing if you did not initiate this.",
+        "medium"
       )
     );
   }
@@ -201,8 +201,8 @@ export function analyzeSuspiciousLogins(
     addFlag(
       buildFlag(
         change,
-        "Profile privacy change recorded — worth reviewing if unexpected.",
-        "medium"
+        "Privacy setting change recorded — worth reviewing if unexpected.",
+        "low"
       )
     );
   }
@@ -210,13 +210,13 @@ export function analyzeSuspiciousLogins(
   const reviewedCount = events.length;
   const worthReviewingCount = flagged.length;
 
-  let score = 100;
+  let score = 92;
   for (const flag of flagged) {
-    if (flag.severity === "high") score -= 12;
-    else if (flag.severity === "medium") score -= 5;
-    else score -= 2;
+    if (flag.severity === "high") score -= 8;
+    else if (flag.severity === "medium") score -= 4;
+    else score -= 1;
   }
-  score = Math.max(0, Math.min(100, score));
+  score = Math.max(45, Math.min(100, score));
 
   flagged.sort((a, b) => {
     const severityOrder = { high: 0, medium: 1, low: 2 };

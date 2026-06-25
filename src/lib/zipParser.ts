@@ -7,6 +7,7 @@ import { parseAdsPrivacy } from "@/lib/parsers/adsParser";
 import { parseSecurity } from "@/lib/parsers/securityParser";
 import { parseDataCoverage } from "@/lib/parsers/dataCoverageParser";
 import { computeMostActiveEra } from "@/lib/mostActiveEra";
+import { computeInsightsBundle } from "@/lib/insightsEngine";
 
 export type ParseProgress = {
   stage: string;
@@ -112,7 +113,7 @@ export async function parseInstagramZip(
     ads,
   });
 
-  return {
+  const baseParsed = {
     network,
     wrapped,
     messages,
@@ -125,5 +126,13 @@ export async function parseInstagramZip(
     mediaFiles,
     filePaths: paths,
     errors,
+    insights: null as import("@/types/insights").InsightsBundle | null,
+  };
+
+  const insights = computeInsightsBundle(baseParsed, jsonMap, []);
+
+  return {
+    ...baseParsed,
+    insights,
   };
 }

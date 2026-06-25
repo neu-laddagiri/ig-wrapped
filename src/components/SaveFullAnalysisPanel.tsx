@@ -20,6 +20,7 @@ import {
 import type { DashboardTabId } from "@/components/DashboardTabs";
 import type { ParsedExportData, LinkedInHelperEntry } from "@/types/instagram";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
+import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
 
 interface SaveFullAnalysisPanelProps {
   parsedData: ParsedExportData;
@@ -31,6 +32,7 @@ interface SaveFullAnalysisPanelProps {
   dmShowFirstMessagePreview: boolean;
   expandedGroupThreads: string[];
   dmAiSummaries: DmAiSummariesMap;
+  overviewAiSummary: OverviewAiSummaryResult | null;
   currentSavedId: string | null;
   onSignIn: () => void;
   onSaved: (id: string) => void;
@@ -49,6 +51,7 @@ export function SaveFullAnalysisPanel({
   dmShowFirstMessagePreview,
   expandedGroupThreads,
   dmAiSummaries,
+  overviewAiSummary,
   currentSavedId,
   onSignIn,
   onSaved,
@@ -109,6 +112,7 @@ export function SaveFullAnalysisPanel({
       dmShowFirstMessagePreview,
       expandedGroupThreads,
       dmAiSummaries,
+      overviewAiSummary,
     });
 
     const result = await saveFullAnalysisToCloud({
@@ -179,7 +183,7 @@ export function SaveFullAnalysisPanel({
           <button
             type="button"
             onClick={onSignIn}
-            className="rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[#DD2A7B]/20 transition hover:opacity-90"
+            className="rounded-full animated-gradient-bg px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90"
           >
             Sign in to save
           </button>
@@ -189,7 +193,7 @@ export function SaveFullAnalysisPanel({
               type="button"
               onClick={handleSave}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-5 py-2 text-sm font-semibold text-white shadow-lg shadow-[#DD2A7B]/20 transition hover:opacity-90 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-full animated-gradient-bg px-5 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
             >
               {saving ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

@@ -145,7 +145,7 @@ export function UploadCard({
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="mt-6 rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-6 py-2.5 text-sm font-semibold text-white shadow-lg shadow-[#DD2A7B]/25 transition hover:opacity-90 hover:shadow-[#DD2A7B]/40"
+              className="mt-6 rounded-full animated-gradient-bg px-6 py-2.5 text-sm font-semibold text-white transition hover:opacity-90"
             >
               {fileName ? "Upload a different file" : "Choose ZIP file"}
             </button>

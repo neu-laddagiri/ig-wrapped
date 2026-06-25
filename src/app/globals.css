@@ -8,8 +8,27 @@
   --muted: rgba(255, 255, 255, 0.45);
   --accent-orange: #f58529;
   --accent-pink: #dd2a7b;
+  --accent-magenta: #c13584;
   --accent-purple: #8134af;
   --accent-blue: #515bd4;
+  --ig-gradient: linear-gradient(
+    135deg,
+    #f58529 0%,
+    #dd2a7b 25%,
+    #c13584 50%,
+    #8134af 75%,
+    #515bd4 100%
+  );
+  --ig-gradient-animated: linear-gradient(
+    -45deg,
+    #f58529,
+    #dd2a7b,
+    #c13584,
+    #8134af,
+    #515bd4,
+    #dd2a7b,
+    #f58529
+  );
 }
 
 @theme inline {
@@ -17,6 +36,102 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+@keyframes ig-gradient-shift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+/* Flowing gradient text — hero title */
+.animated-gradient-text {
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ig-gradient-shift 10s ease infinite;
+}
+
+/* Flowing gradient fill — buttons, active nav, badges */
+.animated-gradient-bg {
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 10s linear infinite;
+}
+
+/* Subtle animated border — highlight cards only */
+.animated-gradient-border {
+  position: relative;
+  border: 1px solid transparent;
+  background-clip: padding-box;
+}
+
+.animated-gradient-border::before {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 10s linear infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Progress / score bar fill */
+.animated-gradient-bar {
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 10s linear infinite;
+}
+
+/* Progress track wrapper (optional) */
+.animated-gradient-progress {
+  overflow: hidden;
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animated-gradient-text,
+  .animated-gradient-bg,
+  .animated-gradient-border::before,
+  .animated-gradient-bar {
+    animation: none !important;
+  }
+
+  .animated-gradient-text {
+    background: var(--ig-gradient);
+    background-size: 100% 100%;
+  }
+
+  .animated-gradient-bg,
+  .animated-gradient-bar {
+    background: var(--ig-gradient);
+    background-size: 100% 100%;
+  }
+
+  .animated-gradient-border::before {
+    background: var(--ig-gradient);
+    background-size: 100% 100%;
+  }
 }
 
 * {

@@ -17,6 +17,8 @@ import {
   Shield,
   IdCard,
   Image,
+  Search,
+  Plug,
   CheckCircle2,
   XCircle,
   ChevronDown,
@@ -41,6 +43,8 @@ const iconMap: Record<CoverageCategoryId, ElementType> = {
   security_changes: Shield,
   personal_information: IdCard,
   media_files: Image,
+  search_history: Search,
+  connected_apps: Plug,
 };
 
 interface DataCoverageProps {

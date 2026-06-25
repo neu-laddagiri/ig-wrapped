@@ -52,6 +52,7 @@ interface DmsTabProps {
   isLoadedFromCloud?: boolean;
 }
 
+import { formatAccountDisplayName, isInstagramPlaceholderName } from "@/lib/accountNameFilter";
 import {
   buildSenderLabelMap,
   displaySenderLabel,
@@ -61,6 +62,15 @@ function formatDate(ts?: number): string {
   if (!ts) return "Not available";
   const formatted = formatTimestamp(ts);
   return formatted === "—" ? "Not available" : formatted;
+}
+
+function senderLabel(
+  rawName: string,
+  labelMap: Map<string, string>,
+  showNames: boolean
+): string {
+  if (!showNames) return displaySenderLabel(rawName, labelMap);
+  return formatAccountDisplayName(rawName);
 }
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -147,6 +157,14 @@ function ThreadExpandedPanel({
 
   return (
     <div className="border-t border-white/10 bg-gradient-to-b from-white/[0.03] to-transparent px-4 py-5 sm:px-5">
+      {showThreadNames &&
+        !thread.isGroup &&
+        isInstagramPlaceholderName(thread.title) && (
+          <p className="mb-4 rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-xs leading-relaxed text-white/40">
+            Instagram&apos;s export did not include a usable name for this
+            account.
+          </p>
+        )}
       <p className="mb-4 rounded-xl border border-white/5 bg-white/[0.02] px-3 py-2 text-xs italic text-white/50">
         {thread.funSummary}
       </p>
@@ -193,12 +211,11 @@ function ThreadExpandedPanel({
                 <span className="text-white/55">
                   {" "}
                   ·{" "}
-                  {showThreadNames
-                    ? thread.firstMessageSender
-                    : displaySenderLabel(
-                        thread.firstMessageSender,
-                        senderLabelMap
-                      )}
+                  {senderLabel(
+                    thread.firstMessageSender,
+                    senderLabelMap,
+                    showThreadNames
+                  )}
                 </span>
               )}
             </span>
@@ -211,12 +228,11 @@ function ThreadExpandedPanel({
                 <span className="text-white/55">
                   {" "}
                   ·{" "}
-                  {showThreadNames
-                    ? thread.lastMessageSender
-                    : displaySenderLabel(
-                        thread.lastMessageSender,
-                        senderLabelMap
-                      )}
+                  {senderLabel(
+                    thread.lastMessageSender,
+                    senderLabelMap,
+                    showThreadNames
+                  )}
                 </span>
               )}
             </span>
@@ -252,9 +268,7 @@ function ThreadExpandedPanel({
                 thread.totalMessages > 0
                   ? Math.round((count / thread.totalMessages) * 100)
                   : 0;
-              const label = showThreadNames
-                ? name
-                : displaySenderLabel(name, senderLabelMap);
+              const label = senderLabel(name, senderLabelMap, showThreadNames);
               return (
                 <div key={`${thread.id}-bal-${name}`}>
                   <div className="mb-1 flex justify-between text-xs">
@@ -263,9 +277,9 @@ function ThreadExpandedPanel({
                       {formatNumber(count)} ({pct}%)
                     </span>
                   </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                  <div className="animated-gradient-progress h-1.5">
                     <div
-                      className="h-full rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4]"
+                      className="h-full animated-gradient-bar"
                       style={{
                         width: `${Math.max(pct, count === topCount && pct < 4 ? 4 : 0)}%`,
                       }}
@@ -292,12 +306,11 @@ function ThreadExpandedPanel({
                 {thread.firstMessageSender && (
                   <span>
                     {thread.firstMessageAt ? " · " : ""}
-                    {showThreadNames
-                      ? thread.firstMessageSender
-                      : displaySenderLabel(
-                          thread.firstMessageSender,
-                          senderLabelMap
-                        )}
+                    {senderLabel(
+                      thread.firstMessageSender,
+                      senderLabelMap,
+                      showThreadNames
+                    )}
                   </span>
                 )}
               </p>
@@ -321,12 +334,11 @@ function ThreadExpandedPanel({
                   <span>
                     {thread.firstMessageAt ? " · " : ""}
                     Sender:{" "}
-                    {showThreadNames
-                      ? thread.firstMessageSender
-                      : displaySenderLabel(
-                          thread.firstMessageSender,
-                          senderLabelMap
-                        )}
+                    {senderLabel(
+                      thread.firstMessageSender,
+                      senderLabelMap,
+                      showThreadNames
+                    )}
                   </span>
                 )}
               </>
@@ -386,7 +398,7 @@ export function DmsTab({
   onDmAiSummariesChange,
   isLoadedFromCloud = false,
 }: DmsTabProps) {
-  const [internalShow, setInternalShow] = useState(false);
+  const [internalShow, setInternalShow] = useState(true);
   const [internalPreview, setInternalPreview] = useState(false);
   const [expandedThreadId, setExpandedThreadId] = useState<string | null>(null);
   const [participantsOpen, setParticipantsOpen] = useState<Set<string>>(

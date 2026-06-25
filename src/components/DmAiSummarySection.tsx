@@ -70,7 +70,7 @@ interface DmAiSummarySectionProps {
 function SummaryCards({ summary }: { summary: DmAiSummaryResult }) {
   return (
     <div className="grid gap-2.5 sm:grid-cols-2">
-      <div className="sm:col-span-2 rounded-xl border border-[#DD2A7B]/25 bg-gradient-to-br from-[#F58529]/10 via-[#DD2A7B]/10 to-[#515BD4]/10 p-3">
+      <div className="sm:col-span-2 animated-gradient-border rounded-xl bg-gradient-to-br from-[#F58529]/10 via-[#DD2A7B]/10 to-[#515BD4]/10 p-3">
         <p className="text-[10px] font-semibold uppercase tracking-wider text-[#DD2A7B]/85">
           One-liner
         </p>
@@ -422,7 +422,7 @@ export function DmAiSummarySection({
                 <button
                   type="button"
                   onClick={generate}
-                  className="rounded-lg bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-4 py-1.5 text-xs font-semibold text-white"
+                  className="rounded-lg animated-gradient-bg px-4 py-1.5 text-xs font-semibold text-white"
                 >
                   Continue
                 </button>
@@ -484,7 +484,7 @@ export function DmAiSummarySection({
                 type="button"
                 onClick={() => setShowConfirm(true)}
                 disabled={!hasSample || missingCloudSample || loading || aiConfigured === false}
-                className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-[#DD2A7B]/20 transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex items-center gap-2 rounded-xl animated-gradient-bg px-4 py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 <Sparkles className="h-4 w-4" />
                 Generate AI Summary

@@ -95,7 +95,7 @@ export function SavedAnalysesTab({
           <button
             type="button"
             onClick={onSignIn}
-            className="mt-6 rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-6 py-2.5 text-sm font-semibold text-white"
+            className="mt-6 rounded-full animated-gradient-bg px-6 py-2.5 text-sm font-semibold text-white"
           >
             Sign in
           </button>

@@ -29,12 +29,24 @@ import { SavedAnalysesTab } from "@/components/SavedAnalysesTab";
 import { FunStatsTab } from "@/components/FunStatsTab";
 import { parseInstagramZip } from "@/lib/zipParser";
 import { resolveMostActiveEra } from "@/lib/mostActiveEra";
+import { resolveInsightsBundle } from "@/lib/insightsEngine";
+import {
+  AccountDetailDrawer,
+  useAccountDetail,
+} from "@/components/AccountDetailDrawer";
+import { SocialGraphTab } from "@/components/SocialGraphTab";
+import { ErasTab } from "@/components/ErasTab";
+import { PersonalityTab } from "@/components/PersonalityTab";
+import { DataExplorerTab } from "@/components/DataExplorerTab";
+import { SearchWrappedTab } from "@/components/SearchWrappedTab";
+import { GroupChatsTab } from "@/components/GroupChatsTab";
 import {
   computeFileFingerprint,
   saveLinkedInProgress,
 } from "@/lib/linkedinStorage";
 import type { SavedAnalysisRow } from "@/types/analysis";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
+import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
 import type { LinkedInHelperEntry, ParsedExportData } from "@/types/instagram";
 
 function restoreParsedFromSnapshot(
@@ -44,11 +56,9 @@ function restoreParsedFromSnapshot(
     ...parsed,
     filePaths: [],
     mostActiveEra: parsed.mostActiveEra ?? null,
+    insights: parsed.insights ?? null,
     security: parsed.security
-      ? {
-          ...parsed.security,
-          events: parsed.security.events ?? [],
-        }
+      ? { ...parsed.security, events: parsed.security.events ?? [] }
       : null,
   };
 }
@@ -61,19 +71,22 @@ export default function Home() {
   const [linkedinProgress, setLinkedinProgress] = useState<LinkedInHelperEntry[]>(
     []
   );
-  const [dmShowThreadNames, setDmShowThreadNames] = useState(false);
+  const [dmShowThreadNames, setDmShowThreadNames] = useState(true);
   const [dmShowFirstMessagePreview, setDmShowFirstMessagePreview] =
     useState(false);
   const [expandedGroupThreads, setExpandedGroupThreads] = useState<string[]>(
     []
   );
   const [dmAiSummaries, setDmAiSummaries] = useState<DmAiSummariesMap>({});
+  const [overviewAiSummary, setOverviewAiSummary] =
+    useState<OverviewAiSummaryResult | null>(null);
   const [currentSavedId, setCurrentSavedId] = useState<string | null>(null);
   const [isLoadedFromCloud, setIsLoadedFromCloud] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
+  const accountDetail = useAccountDetail();
   const [exportGuideExpanded, setExportGuideExpanded] = useState(true);
   const [dataCoverageExpanded, setDataCoverageExpanded] = useState(false);
   const [dashboardBanner, setDashboardBanner] = useState<{
@@ -82,13 +95,41 @@ export default function Home() {
   }>({ visible: false, mode: "upload" });
 
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const dashboardContentRef = useRef<HTMLDivElement>(null);
   const pendingScrollRef = useRef(false);
 
   const scrollToDashboard = useCallback(() => {
     requestAnimationFrame(() => {
-      dashboardRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      dashboardContentRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
     });
   }, []);
+
+  const handleTabChange = useCallback(
+    (tab: DashboardTabId) => {
+      setActiveTab(tab);
+      if (!parsedData) return;
+      requestAnimationFrame(() => {
+        const el = dashboardContentRef.current;
+        if (!el) return;
+        const rect = el.getBoundingClientRect();
+        if (rect.top < -80 || rect.top > 160) {
+          el.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
+      });
+    },
+    [parsedData]
+  );
+
+  useEffect(() => {
+    if (!dashboardBanner.visible) return;
+    const timer = window.setTimeout(() => {
+      setDashboardBanner((b) => ({ ...b, visible: false }));
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [dashboardBanner.visible, dashboardBanner.mode]);
 
   useEffect(() => {
     if (!parsedData || !pendingScrollRef.current) return;
@@ -116,10 +157,11 @@ export default function Home() {
       });
       setParsedData(data);
       setLinkedinProgress([]);
-      setDmShowThreadNames(false);
+      setDmShowThreadNames(true);
       setDmShowFirstMessagePreview(false);
       setExpandedGroupThreads([]);
       setDmAiSummaries({});
+      setOverviewAiSummary(null);
       setActiveTab("overview");
       setExportGuideExpanded(false);
       setDataCoverageExpanded(false);
@@ -146,12 +188,13 @@ export default function Home() {
       row.file_fingerprint ?? snapshot.fileFingerprint ?? ""
     );
     setLinkedinProgress(row.linkedin_progress_json ?? []);
-    setDmShowThreadNames(snapshot.dmShowThreadNames ?? false);
+    setDmShowThreadNames(snapshot.dmShowThreadNames ?? true);
     setDmShowFirstMessagePreview(
       snapshot.dmShowFirstMessagePreview ?? false
     );
     setExpandedGroupThreads(snapshot.expandedGroupThreads ?? []);
     setDmAiSummaries(snapshot.dmAiSummaries ?? {});
+    setOverviewAiSummary(snapshot.overviewAiSummary ?? null);
     setActiveTab(snapshot.activeTab ?? "overview");
     setCurrentSavedId(row.id);
     setIsLoadedFromCloud(true);
@@ -178,10 +221,11 @@ export default function Home() {
     setFileName(null);
     setFileFingerprint("");
     setLinkedinProgress([]);
-    setDmShowThreadNames(false);
+    setDmShowThreadNames(true);
     setDmShowFirstMessagePreview(false);
     setExpandedGroupThreads([]);
     setDmAiSummaries({});
+    setOverviewAiSummary(null);
     setCurrentSavedId(null);
     setIsLoadedFromCloud(false);
     setActiveTab("overview");
@@ -269,6 +313,7 @@ export default function Home() {
                   dmShowFirstMessagePreview={dmShowFirstMessagePreview}
                   expandedGroupThreads={expandedGroupThreads}
                   dmAiSummaries={dmAiSummaries}
+                  overviewAiSummary={overviewAiSummary}
                   currentSavedId={currentSavedId}
                   onSignIn={() => setAuthOpen(true)}
                   onSaved={(id) => {
@@ -289,13 +334,22 @@ export default function Home() {
                 <div
                   ref={dashboardRef}
                   id="dashboard"
-                  className="scroll-mt-24 space-y-6"
+                  className="scroll-mt-24 space-y-4"
                 >
+                  {!dashboardBanner.visible && (
+                    <p className="text-xs text-emerald-400/80">
+                      ✓ Export loaded — explore your dashboard below
+                    </p>
+                  )}
                   <DashboardTabs
                     activeTab={activeTab}
-                    onTabChange={setActiveTab}
+                    onTabChange={handleTabChange}
                   />
 
+                  <div
+                    ref={dashboardContentRef}
+                    className="scroll-mt-28"
+                  >
                   <motion.div
                     key={activeTab}
                     initial={{ opacity: 0, y: 8 }}
@@ -303,13 +357,57 @@ export default function Home() {
                     transition={{ duration: 0.25 }}
                     className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm sm:p-6"
                   >
+                    {(() => {
+                      const insights = resolveInsightsBundle(
+                        parsedData,
+                        linkedinProgress
+                      );
+                      const linkedinForAccount = linkedinProgress.find(
+                        (e) => e.username === accountDetail.selectedUsername
+                      );
+                      const unifiedAccount = insights.accounts.find(
+                        (a) => a.username === accountDetail.selectedUsername
+                      );
+
+                      return (
+                        <>
                     {activeTab === "overview" && (
-                      <OverviewTab data={parsedData} fileName={fileName} />
+                      <OverviewTab
+                        data={parsedData}
+                        fileName={fileName}
+                        linkedinProgress={linkedinProgress}
+                        overviewAiSummary={overviewAiSummary}
+                        onOverviewAiSummaryChange={setOverviewAiSummary}
+                      />
                     )}
                     {activeTab === "network" && (
                       <NetworkManagerTab
                         network={parsedData.network}
                         linkedinProgress={linkedinProgress}
+                        onOpenAccount={accountDetail.openAccount}
+                      />
+                    )}
+                    {activeTab === "social" && (
+                      <SocialGraphTab
+                        insights={insights}
+                        onOpenAccount={accountDetail.openAccount}
+                        defaultSubTab="leaderboards"
+                      />
+                    )}
+                    {activeTab === "cleanup" && (
+                      <SocialGraphTab
+                        insights={insights}
+                        onOpenAccount={accountDetail.openAccount}
+                        defaultSubTab="cleanup"
+                        showSubNav={false}
+                      />
+                    )}
+                    {activeTab === "realones" && (
+                      <SocialGraphTab
+                        insights={insights}
+                        onOpenAccount={accountDetail.openAccount}
+                        defaultSubTab="realones"
+                        showSubNav={false}
                       />
                     )}
                     {activeTab === "wrapped" && (
@@ -317,6 +415,8 @@ export default function Home() {
                         wrapped={parsedData.wrapped}
                         network={parsedData.network}
                         mostActiveEra={resolveMostActiveEra(parsedData)}
+                        contentDiet={insights.contentDiet}
+                        adsInsights={insights.adsInsights}
                       />
                     )}
                     {activeTab === "funstats" && (
@@ -327,7 +427,17 @@ export default function Home() {
                         ads={parsedData.ads}
                         mostActiveEra={resolveMostActiveEra(parsedData)}
                         showThreadNames={dmShowThreadNames}
+                        dmAwards={insights.dmAwards}
                       />
+                    )}
+                    {activeTab === "eras" && (
+                      <ErasTab
+                        insights={insights}
+                        mostActiveEra={resolveMostActiveEra(parsedData)}
+                      />
+                    )}
+                    {activeTab === "personality" && (
+                      <PersonalityTab insights={insights} />
                     )}
                     {activeTab === "dms" && (
                       <DmsTab
@@ -343,11 +453,26 @@ export default function Home() {
                         isLoadedFromCloud={isLoadedFromCloud}
                       />
                     )}
+                    {activeTab === "groups" && (
+                      <GroupChatsTab insights={insights} />
+                    )}
                     {activeTab === "ads" && (
-                      <AdsPrivacyTab ads={parsedData.ads} />
+                      <AdsPrivacyTab
+                        ads={parsedData.ads}
+                        adsInsights={insights.adsInsights}
+                      />
                     )}
                     {activeTab === "security" && (
-                      <SecurityTab security={parsedData.security} />
+                      <SecurityTab
+                        security={parsedData.security}
+                        securityAudit={insights.securityAudit}
+                      />
+                    )}
+                    {activeTab === "search" && (
+                      <SearchWrappedTab insights={insights} />
+                    )}
+                    {activeTab === "explorer" && (
+                      <DataExplorerTab insights={insights} />
                     )}
                     {activeTab === "linkedin" && (
                       <LinkedInHelperTab
@@ -370,7 +495,19 @@ export default function Home() {
                         onLoadAnalysis={handleLoadSavedAnalysis}
                       />
                     )}
+                    <AccountDetailDrawer
+                      open={accountDetail.isOpen}
+                      onClose={accountDetail.closeAccount}
+                      username={accountDetail.selectedUsername}
+                      network={parsedData.network}
+                      linkedinEntry={linkedinForAccount}
+                      unifiedAccount={unifiedAccount}
+                    />
+                        </>
+                      );
+                    })()}
                   </motion.div>
+                  </div>
                 </div>
               </motion.div>
             )}

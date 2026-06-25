@@ -26,9 +26,9 @@ function TopMonthsChart({ era }: { era: MostActiveEraData }) {
               {formatNumber(entry.count)}
             </span>
           </div>
-          <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+          <div className="h-1.5 animated-gradient-progress">
             <div
-              className="h-full rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4]"
+              className="h-full animated-gradient-bar"
               style={{ width: `${Math.max(8, (entry.count / max) * 100)}%` }}
             />
           </div>

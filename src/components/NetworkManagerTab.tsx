@@ -15,14 +15,11 @@ import type { LinkedInHelperEntry, NetworkStats, NetworkListKey } from "@/types/
 import { SummaryCard } from "@/components/SummaryCard";
 import { AccountTable } from "@/components/AccountTable";
 import { formatNumber, formatPercent } from "@/lib/formatters";
-import {
-  AccountDetailDrawer,
-  useAccountDetail,
-} from "@/components/AccountDetailDrawer";
 
 interface NetworkManagerTabProps {
   network: NetworkStats | null;
   linkedinProgress?: LinkedInHelperEntry[];
+  onOpenAccount?: (username: string) => void;
 }
 
 const listConfig: {
@@ -45,9 +42,9 @@ const listConfig: {
 export function NetworkManagerTab({
   network,
   linkedinProgress = [],
+  onOpenAccount,
 }: NetworkManagerTabProps) {
   const [activeList, setActiveList] = useState<NetworkListKey>("dontFollowMeBack");
-  const accountDetail = useAccountDetail();
 
   if (!network) {
     return (
@@ -67,19 +64,9 @@ export function NetworkManagerTab({
 
   const activeConfig = listConfig.find((c) => c.key === activeList)!;
   const activeAccounts = network[activeList];
-  const linkedinForSelected = linkedinProgress.find(
-    (e) => e.username === accountDetail.selectedUsername
-  );
 
   return (
     <div className="space-y-6">
-      <AccountDetailDrawer
-        open={accountDetail.isOpen}
-        onClose={accountDetail.closeAccount}
-        username={accountDetail.selectedUsername}
-        network={network}
-        linkedinEntry={linkedinForSelected}
-      />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="Followers"
@@ -156,7 +143,7 @@ export function NetworkManagerTab({
               onClick={() => setActiveList(item.key)}
               className={`rounded-xl px-3 py-2 text-xs font-medium transition ${
                 activeList === item.key
-                  ? "bg-gradient-to-r from-[#F58529]/25 via-[#DD2A7B]/25 to-[#515BD4]/25 text-white border border-white/15"
+                  ? "animated-gradient-bg text-white border border-white/15"
                   : "bg-white/5 text-white/50 hover:text-white/80 border border-transparent"
               }`}
             >
@@ -170,7 +157,7 @@ export function NetworkManagerTab({
         accounts={activeAccounts}
         title={activeConfig.label}
         exportFilename={activeConfig.exportName}
-        onAccountClick={(a) => accountDetail.openAccount(a.username)}
+        onAccountClick={(a) => onOpenAccount?.(a.username)}
       />
     </div>
   );

@@ -124,11 +124,15 @@ export function formatSenderStats(
 }
 
 /** Display label for UI message balance chips */
+import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+
 export function displaySenderLabel(
   rawName: string,
   labelMap: Map<string, string>
 ): string {
-  return labelMap.get(rawName) ?? rawName;
+  const label = labelMap.get(rawName) ?? rawName;
+  if (/^Person \d+$/.test(label)) return label;
+  return formatAccountDisplayName(label);
 }
 
 export function buildSenderLabelMap(

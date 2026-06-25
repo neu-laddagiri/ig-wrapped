@@ -92,6 +92,7 @@ export function createAnalysisSnapshot(
     dmShowFirstMessagePreview: input.dmShowFirstMessagePreview,
     expandedGroupThreads: input.expandedGroupThreads,
     dmAiSummaries: input.dmAiSummaries ?? {},
+    overviewAiSummary: input.overviewAiSummary ?? null,
     parsedAt: new Date().toISOString(),
     parsed,
   };

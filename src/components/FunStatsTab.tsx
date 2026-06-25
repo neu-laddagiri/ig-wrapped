@@ -12,6 +12,8 @@ import { computeFunStats, resolveFunStatValue } from "@/lib/funStats";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
+import type { DmAward } from "@/types/insights";
+
 interface FunStatsTabProps {
   network: NetworkStats | null;
   wrapped: WrappedInsights | null;
@@ -19,6 +21,7 @@ interface FunStatsTabProps {
   ads: AdsPrivacyData | null;
   mostActiveEra: MostActiveEraData | null;
   showThreadNames: boolean;
+  dmAwards?: DmAward[];
 }
 
 export function FunStatsTab({
@@ -28,6 +31,7 @@ export function FunStatsTab({
   ads,
   mostActiveEra,
   showThreadNames,
+  dmAwards = [],
 }: FunStatsTabProps) {
   const cards = computeFunStats({
     network,
@@ -62,8 +66,7 @@ export function FunStatsTab({
           <h3 className="font-semibold text-white">Fun Stats</h3>
         </div>
         <p className="mt-2 text-sm text-white/50">
-          Playful insights from your parsed export. DM thread names stay hidden
-          unless you enable them in the DMs tab.
+          Playful insights from your parsed export.
         </p>
       </div>
 
@@ -81,6 +84,23 @@ export function FunStatsTab({
           </div>
         )}
       </div>
+
+      {dmAwards.length > 0 && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="mb-3 font-semibold text-white">DM Awards</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {dmAwards.map((award) => (
+              <div
+                key={award.id}
+                className="rounded-xl border border-[#DD2A7B]/20 bg-[#DD2A7B]/5 px-3 py-2.5"
+              >
+                <p className="text-sm font-medium text-white">{award.title}</p>
+                <p className="text-xs text-white/45">{award.description}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards

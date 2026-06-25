@@ -30,7 +30,7 @@ export function ExportSuccessBanner({
           <button
             type="button"
             onClick={onJumpToDashboard}
-            className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg animated-gradient-bg px-3 py-1.5 text-xs font-semibold text-white transition hover:opacity-90"
           >
             <ArrowDown className="h-3.5 w-3.5" />
             Jump to dashboard

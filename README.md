@@ -1,42 +1,73 @@
 # IG Wrapped
 
-A privacy-first Instagram data export analyzer. Upload your official Instagram data export ZIP and explore followers, activity, ads, messages, and security history — all processed locally in your browser.
+A privacy-first Instagram data export intelligence dashboard. Upload your official Instagram data export ZIP and explore your social graph, DMs, activity eras, ads, security, and more — all processed locally in your browser.
 
 Optional accounts let you save your full parsed analysis and LinkedIn Helper progress across devices with one click.
 
 ## Features
 
-- **Network Manager** — Followers, following, mutuals, don't follow me back, blocked, restricted, and more
-- **Wrapped Insights** — Likes, comments, saves, stories, polls, quizzes, and viewing activity
-- **DM Analytics** — Thread and message counts without exposing message content
-- **Ads & Privacy** — Ad impressions, clicks, advertisers, and ad categories
-- **Security** — Login, logout, profile, and password change activity
+### Core dashboard
+
+- **Overview** — High-level stats, export quality score, and data coverage
+- **Network Manager** — Followers, following, mutuals, don't follow me back, blocked, restricted, and account detail drawer
+- **Wrapped Insights** — Likes, comments, saves, stories, polls, quizzes, viewing activity, and content diet
+- **Fun Stats** — DM awards, quirky metrics, and highlights
+- **DMs** — Thread analytics, relationship insights, and optional AI summaries
+- **Ads & Privacy** — Ad categories, advertisers, themed interests, click resistance, and privacy creep score
+- **Security** — Login timeline, connected apps, health score, and suggested actions
 - **LinkedIn Helper** — Manual Google search links for networking (no automation)
 - **Export Data** — CSV exports and summary JSON, generated locally
 - **Saved Analyses** — Optional cloud save of your full parsed snapshot (Supabase)
-- **Data Coverage** — See which categories were detected in your export
+
+### Intelligence features
+
+- **Social Graph** — Unified account model connecting follows, DMs, interactions, and LinkedIn status; cleanup priority scores; Real Ones leaderboards; account leaderboards
+- **Account Detail Drawer** — Identity, follow relationship, timeline, DM connection, interactions, LinkedIn notes, and recommended actions (click any username across tabs)
+- **Cleanup Score** — Smart unfollow priority beyond "don't follow me back" with protective keep signals
+- **Real Ones** — Relationship strength scores and leaderboards (top friends, silent mutuals, longest connections, and more)
+- **DM Wrapped** — Per-thread analytics: message share, reply times, active hours, late-night counts, and fun awards
+- **Group Chat Wrapped** — Participant roles, message share, and anonymized participant labels
+- **Instagram Eras** — Monthly activity timeline with era labels (DM peak, story watcher, doomscroll, follow spree, and more)
+- **Content Diet** — Passive vs active ratio, engagement personality, doomscroll score, and ad resistance
+- **Personality** — Instagram persona based on your full export with shareable summary cards
+- **Search Wrapped** — Privacy-gated search history insights (collapsed by default with warning)
+- **Data Explorer** — Detected JSON files, categories, export completeness, and optional raw preview
+- **Export Completeness** — Export quality score (0–100) with missing categories and re-export tips
+- **Shareable Cards** — Public-safe, network, DM, and ads/privacy summary cards (names hidden by default)
+- **Optional AI Summaries** — User-triggered DM thread summaries via `/api/dm-summary` (Gemini/OpenAI-compatible)
 
 ## Privacy-first, local-first
 
 IG Wrapped is designed with privacy as the core principle:
 
 - **No Instagram login** — Uses only your official data export ZIP
-- **ZIP parsed locally** — JSZip parses JSON in your browser; the raw ZIP is not uploaded
+- **ZIP parsed locally** — JSZip parses JSON in your browser; the raw ZIP is never uploaded automatically
 - **Optional cloud save** — Sign in only if you want to save your parsed analysis snapshot
 - **No media upload** — Photos and videos from your export are never sent to the cloud
 - **No scraping** — Does not access Instagram, LinkedIn, or any external API
 - **No LinkedIn automation** — LinkedIn Helper only opens manual Google search links
-- **DM privacy** — Message text is never shown; only analytics are computed
+- **DM privacy** — Message text is not shown in the UI by default; full raw DM history is not saved to Supabase
+- **AI summaries are opt-in** — DM text is only sent to the AI provider when you click Generate AI Summary for a thread
+- **Search history is sensitive** — Search Wrapped is collapsed by default with a privacy warning
 
 ### What cloud save stores
 
 When you click **Save full analysis**, IG Wrapped stores:
 
-- Parsed dashboard data (network lists, insights, DM analytics, ads, security)
+- Parsed dashboard data (network lists, wrapped insights, DM analytics, ads, security)
+- Computed insights bundle (unified accounts, cleanup/real ones scores, DM awards, eras, content diet, personality, export completeness)
 - LinkedIn Helper statuses and notes
+- Generated AI summaries (if you created them)
 - Export metadata and progress
 
-It does **not** store your original ZIP or media files.
+It does **not** store:
+
+- Your original ZIP or media files
+- Full raw message history
+- Raw search history (only sanitized summaries when applicable)
+- API keys
+
+Older saved analyses without the insights bundle will still load; re-upload and save again to unlock newer insights.
 
 ## Tech stack
 
@@ -49,6 +80,7 @@ It does **not** store your original ZIP or media files.
 - [Recharts](https://recharts.org/) — Charts
 - [Lucide React](https://lucide.dev/) — Icons
 - [date-fns](https://date-fns.org/) — Date formatting
+- [Vercel Analytics](https://vercel.com/analytics) — Deployment analytics
 
 ## Getting started
 
@@ -85,20 +117,23 @@ See **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** for the full step-by-step guide
 5. Choose **Export to device**
 6. Set **Date range** to **All time**
 7. Set **Format** to **JSON**
-8. Choose media quality (Low/Medium is faster; High includes larger media)
+8. Choose **All available information** for the best analytics coverage
 9. Start the export and wait for Instagram to prepare the download
 10. Download the ZIP and upload it to IG Wrapped
 
-**Recommended:** All time · JSON · Export to device · Any media quality
+**Recommended:** All time · JSON · All available information · Export to device
 
 ## Limitations
 
 - Only JSON files are parsed; media files are counted but not processed
 - Export formats vary by region and Instagram version — some files may not parse
+- Account leaderboards depend on Instagram including account names/URLs in activity JSON
+- DM reply-time and hour/day analytics require local message text (stripped from cloud saves)
 - Large exports may take a moment to process in the browser
 - Cloud save stores parsed snapshots, not the original ZIP
-- Personality and privacy scores are illustrative, not scientific
+- Personality and privacy scores are illustrative, based on Instagram's export — not scientific
 - LinkedIn Helper requires manual review — it does not find profiles automatically
+- Ads and privacy insights use phrasing like "Instagram's export suggests…" to avoid overclaiming
 
 ## Disclaimer
 
