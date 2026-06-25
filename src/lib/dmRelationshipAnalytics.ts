@@ -1,8 +1,9 @@
 import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
 import type { DmThreadAnalytics } from "@/types/instagram";
 import type { DmAward, DmRelationshipInsight } from "@/types/insights";
-import { normalizeDmThreads } from "@/lib/dmThreads";
+import { normalizeDmThreadList, isDirectDmThread, normalizedThreadToAnalytics } from "@/lib/dmThreads";
 import type { DmAnalytics } from "@/types/instagram";
+import { formatDmThreadLabel } from "@/lib/dmDisplayLabels";
 
 const MAX_REPLY_GAP_MS = 7 * 24 * 60 * 60 * 1000;
 const LATE_NIGHT_START = 0;
@@ -107,25 +108,34 @@ function oneSidedScore(thread: DmThreadAnalytics): number {
 export function computeDmRelationshipInsights(
   messages: DmAnalytics | null
 ): { insights: DmRelationshipInsight[]; awards: DmAward[] } {
-  const threads = normalizeDmThreads(messages);
-  if (!threads.length) return { insights: [], awards: [] };
+  const normalized = normalizeDmThreadList(messages);
+  if (!normalized.length) return { insights: [], awards: [] };
 
+  const threads = normalized.map(normalizedThreadToAnalytics);
+  const directThreads = normalized.filter(isDirectDmThread).map(normalizedThreadToAnalytics);
   const insights = threads.map(analyzeThread);
   const awards: DmAward[] = [];
-  const hidden = "••••••••";
 
-  const biggest = [...threads].sort((a, b) => b.messageCount - a.messageCount)[0];
+  const labelFor = (threadId: string) => {
+    const thread = threads.find((t) => t.id === threadId);
+    return thread ? formatDmThreadLabel(thread) : "Direct thread";
+  };
+
+  const biggest = [...directThreads].sort((a, b) => b.messageCount - a.messageCount)[0];
   if (biggest) {
     awards.push({
       id: "biggest-yapper",
       title: "Biggest Yapper",
       threadId: biggest.id,
-      threadLabel: hidden,
+      threadLabel: formatDmThreadLabel(biggest),
       description: `${biggest.messageCount.toLocaleString()} messages`,
     });
   }
 
-  const withReply = insights.filter((i) => i.medianReplyTimeMs);
+  const withReply = insights.filter((i) => {
+    const thread = threads.find((t) => t.id === i.threadId);
+    return i.medianReplyTimeMs && thread && !thread.isGroupChat;
+  });
   const fastest = [...withReply].sort(
     (a, b) => (a.medianReplyTimeMs ?? Infinity) - (b.medianReplyTimeMs ?? Infinity)
   )[0];
@@ -134,7 +144,7 @@ export function computeDmRelationshipInsights(
       id: "fastest-responder",
       title: "Fastest Responder",
       threadId: fastest.threadId,
-      threadLabel: hidden,
+      threadLabel: labelFor(fastest.threadId),
       description: `Median reply ~${Math.round((fastest.medianReplyTimeMs ?? 0) / 60000)} min`,
     });
   }
@@ -147,12 +157,12 @@ export function computeDmRelationshipInsights(
       id: "slowest-responder",
       title: "Slowest Responder",
       threadId: slowest.threadId,
-      threadLabel: hidden,
+      threadLabel: labelFor(slowest.threadId),
       description: `Median reply ~${Math.round((slowest.medianReplyTimeMs ?? 0) / 3600000)} hr`,
     });
   }
 
-  const oneSided = [...threads].sort(
+  const oneSided = [...directThreads].sort(
     (a, b) => oneSidedScore(b) - oneSidedScore(a)
   )[0];
   if (oneSided) {
@@ -160,12 +170,12 @@ export function computeDmRelationshipInsights(
       id: "one-sided",
       title: "Most One-Sided Chat",
       threadId: oneSided.id,
-      threadLabel: hidden,
+      threadLabel: labelFor(oneSided.id),
       description: "One person carries most messages",
     });
   }
 
-  const balanced = [...threads].sort(
+  const balanced = [...directThreads].sort(
     (a, b) => balanceScore(b) - balanceScore(a)
   )[0];
   if (balanced) {
@@ -173,12 +183,12 @@ export function computeDmRelationshipInsights(
       id: "balanced",
       title: "Most Balanced Chat",
       threadId: balanced.id,
-      threadLabel: hidden,
+      threadLabel: labelFor(balanced.id),
       description: "Even message split",
     });
   }
 
-  const reels = [...threads].sort(
+  const reels = [...directThreads].sort(
     (a, b) =>
       b.instagramReelLinks +
       b.instagramPostLinks -
@@ -189,25 +199,28 @@ export function computeDmRelationshipInsights(
       id: "reels-dealer",
       title: "Reels Dealer",
       threadId: reels.id,
-      threadLabel: hidden,
+      threadLabel: labelFor(reels.id),
       description: `${reels.instagramReelLinks + reels.instagramPostLinks} links shared`,
     });
   }
 
-  const lateNight = [...insights].sort(
-    (a, b) => b.lateNightCount - a.lateNightCount
-  )[0];
+  const lateNight = [...insights]
+    .filter((i) => {
+      const thread = threads.find((t) => t.id === i.threadId);
+      return thread && !thread.isGroupChat;
+    })
+    .sort((a, b) => b.lateNightCount - a.lateNightCount)[0];
   if (lateNight?.lateNightCount) {
     awards.push({
       id: "late-night",
       title: "Late Night Menace",
       threadId: lateNight.threadId,
-      threadLabel: hidden,
+      threadLabel: labelFor(lateNight.threadId),
       description: `${lateNight.lateNightCount} late-night messages`,
     });
   }
 
-  const oldest = threads
+  const oldest = directThreads
     .filter((t) => t.firstMessageTimestamp)
     .sort((a, b) => (a.firstMessageTimestamp ?? 0) - (b.firstMessageTimestamp ?? 0))[0];
   if (oldest) {
@@ -215,7 +228,7 @@ export function computeDmRelationshipInsights(
       id: "longest-running",
       title: "Longest Running Chat",
       threadId: oldest.id,
-      threadLabel: hidden,
+      threadLabel: labelFor(oldest.id),
       description: "Oldest thread in your export",
     });
   }
@@ -228,7 +241,7 @@ export function computeDmRelationshipInsights(
       id: "group-chat",
       title: "Most Active Group Chat",
       threadId: group.id,
-      threadLabel: hidden,
+      threadLabel: labelFor(group.id),
       description: `${group.participantCount} people, ${group.messageCount.toLocaleString()} msgs`,
     });
   }

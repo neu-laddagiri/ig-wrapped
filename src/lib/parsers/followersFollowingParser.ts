@@ -4,6 +4,11 @@ import {
   normalizeUsername,
   parseTimestamp,
 } from "@/lib/formatters";
+import {
+  formatAccountDisplayName,
+  formatAccountUsername,
+  isValidAccountName,
+} from "@/lib/accountNameFilter";
 
 type JsonRecord = Record<string, unknown>;
 
@@ -33,7 +38,12 @@ function accountFromStringListEntry(
 
   if (!value?.trim()) return null;
 
-  const username = normalizeUsername(value);
+  const raw = value.trim().replace(/^@/, "");
+  const displayName = formatAccountDisplayName(raw);
+  const username = isValidAccountName(raw)
+    ? normalizeUsername(formatAccountUsername(raw))
+    : normalizeUsername(raw);
+
   const href =
     typeof entry.href === "string"
       ? entry.href
@@ -42,7 +52,7 @@ function accountFromStringListEntry(
 
   return {
     username,
-    displayUsername: value.trim().replace(/^@/, ""),
+    displayUsername: displayName === "Unknown / deleted account" ? raw : displayName,
     href,
     timestamp,
     category,
@@ -69,20 +79,26 @@ function accountFromItem(
   }
 
   if (title) {
-    const username = normalizeUsername(title);
+    const raw = title.trim().replace(/^@/, "");
+    const username = isValidAccountName(raw)
+      ? normalizeUsername(formatAccountUsername(raw))
+      : normalizeUsername(raw);
     return {
       username,
-      displayUsername: title.trim().replace(/^@/, ""),
+      displayUsername: formatAccountDisplayName(raw),
       href: instagramProfileUrl(username),
       category,
     };
   }
 
   if (typeof item.value === "string") {
-    const username = normalizeUsername(item.value);
+    const raw = item.value.trim().replace(/^@/, "");
+    const username = isValidAccountName(raw)
+      ? normalizeUsername(formatAccountUsername(raw))
+      : normalizeUsername(raw);
     return {
       username,
-      displayUsername: item.value.trim().replace(/^@/, ""),
+      displayUsername: formatAccountDisplayName(raw),
       href:
         typeof item.href === "string"
           ? item.href
@@ -142,15 +158,28 @@ function parseAccountList(data: unknown, category?: string): InstagramAccount[] 
 function findFileContent(
   files: Map<string, string>,
   patterns: string[]
-): string | null {
+): { content: string; path: string } | null {
   for (const pattern of patterns) {
     const normalized = pattern.toLowerCase();
     for (const [path, content] of files) {
       const lower = path.toLowerCase().replace(/\\/g, "/");
       if (lower.endsWith(normalized) || lower.includes(normalized)) {
-        return content;
+        return { content, path };
       }
     }
+  }
+  return null;
+}
+
+function findNetworkListFile(
+  files: Map<string, string>,
+  fragments: string[]
+): { content: string; path: string } | null {
+  for (const [path, content] of files) {
+    const lower = path.toLowerCase().replace(/\\/g, "/");
+    if (!fragments.some((f) => lower.includes(f.toLowerCase()))) continue;
+    if (!lower.endsWith(".json")) continue;
+    return { content, path };
   }
   return null;
 }
@@ -222,9 +251,16 @@ export function parseFollowersFollowing(
     "recently_unfollowed_profiles.json",
   ]);
 
-  const blockedContent = findFileContent(files, ["blocked_profiles.json"]);
-  const restrictedContent = findFileContent(files, [
-    "restricted_profiles.json",
+  const blockedFile = findNetworkListFile(files, [
+    "blocked_profiles",
+    "blocked_users",
+    "relationships_blocked",
+    "blocked_accounts",
+  ]);
+  const restrictedFile = findNetworkListFile(files, [
+    "restricted_profiles",
+    "restricted_accounts",
+    "relationships_restricted",
   ]);
 
   if (!followersContent && !followingContent) {
@@ -232,10 +268,10 @@ export function parseFollowersFollowing(
   }
 
   const followers = followersContent
-    ? parseAccountList(safeParseJson(followersContent), "follower")
+    ? parseAccountList(safeParseJson(followersContent.content), "follower")
     : [];
   const following = followingContent
-    ? parseAccountList(safeParseJson(followingContent), "following")
+    ? parseAccountList(safeParseJson(followingContent.content), "following")
     : [];
 
   if (followersContent && followers.length === 0) {
@@ -246,19 +282,19 @@ export function parseFollowersFollowing(
   }
 
   const pendingRequests = pendingContent
-    ? parseAccountList(safeParseJson(pendingContent), "pending")
+    ? parseAccountList(safeParseJson(pendingContent.content), "pending")
     : [];
   const recentFollowRequests = recentRequestsContent
-    ? parseAccountList(safeParseJson(recentRequestsContent), "recent_request")
+    ? parseAccountList(safeParseJson(recentRequestsContent.content), "recent_request")
     : [];
   const recentlyUnfollowed = unfollowedContent
-    ? parseAccountList(safeParseJson(unfollowedContent), "unfollowed")
+    ? parseAccountList(safeParseJson(unfollowedContent.content), "unfollowed")
     : [];
-  const blocked = blockedContent
-    ? parseAccountList(safeParseJson(blockedContent), "blocked")
+  const blocked = blockedFile
+    ? parseAccountList(safeParseJson(blockedFile.content), "blocked")
     : [];
-  const restricted = restrictedContent
-    ? parseAccountList(safeParseJson(restrictedContent), "restricted")
+  const restricted = restrictedFile
+    ? parseAccountList(safeParseJson(restrictedFile.content), "restricted")
     : [];
 
   const sets = computeNetworkSets(followers, following);
@@ -278,6 +314,14 @@ export function parseFollowersFollowing(
       recentlyUnfollowed,
       blocked,
       restricted,
+      blockedMeta: {
+        includedInExport: Boolean(blockedFile),
+        sourcePath: blockedFile?.path,
+      },
+      restrictedMeta: {
+        includedInExport: Boolean(restrictedFile),
+        sourcePath: restrictedFile?.path,
+      },
     },
     errors,
   };

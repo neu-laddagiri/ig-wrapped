@@ -1,8 +1,12 @@
-import { instagramProfileUrl, normalizeUsername } from "@/lib/formatters";
+import { instagramProfileUrl } from "@/lib/formatters";
+import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import {
-  buildDmStatsAndDebug,
-  toSourceBreakdown,
-} from "@/lib/dmParticipantResolution";
+  buildIdentityGraph,
+  normalizeIdentityKey,
+  toSourceBreakdownFromPerson,
+  type IdentityGraph,
+} from "@/lib/identityResolver";
+import { usernamesMatch, normalizeUsername as identityNormalizeUsername } from "@/lib/accountIdentity";
 import type {
   DmAnalytics,
   LinkedInHelperEntry,
@@ -10,6 +14,7 @@ import type {
 } from "@/types/instagram";
 import type {
   RelationshipLabel,
+  SearchWrappedResult,
   UnifiedAccount,
   WhoFollowedFirst,
 } from "@/types/insights";
@@ -91,207 +96,252 @@ function recommendedAction(label: RelationshipLabel): string {
   }
 }
 
+export function buildSearchMap(
+  searchWrapped: SearchWrappedResult | null | undefined
+): Map<string, number> | undefined {
+  if (!searchWrapped?.topAccounts?.length) return undefined;
+  const map = new Map<string, number>();
+  for (const entry of searchWrapped.topAccounts) {
+    if (entry.type !== "account") continue;
+    const q = entry.query.trim();
+    if (!q) continue;
+    map.set(q.toLowerCase(), entry.count);
+    map.set(q.toLowerCase().replace(/^@/, ""), entry.count);
+  }
+  return map;
+}
+
+function buildDataSourceNotes(
+  person: import("@/lib/identityResolver").CanonicalPerson
+): string[] {
+  const notes: string[] = [];
+  notes.push("Network: followers/following export");
+
+  if (person.dm.status === "matched") {
+    notes.push(
+      `DM match: ${person.dm.directDmCount.toLocaleString()} messages via ${person.dm.matchMethod?.replace(/-/g, " ") ?? "thread"} (${person.dm.matchConfidence} confidence)`
+    );
+  } else if (person.dm.status === "possible") {
+    notes.push(
+      `DM possible match: thread "${person.dm.matchedThreadTitle ?? "unknown"}" — review alias`
+    );
+  } else {
+    notes.push("DM: no direct 1:1 thread matched");
+  }
+
+  if (person.likesAttribution === "not_in_export") {
+    notes.push("Likes: not included in this Instagram export");
+  } else if (person.likesAttribution === "not_account_level") {
+    notes.push(
+      "Likes: export present but Instagram does not provide account-level data for this category"
+    );
+  } else if (person.likesAttribution === "not_matched") {
+    notes.push("Likes: export present but not matched to this account");
+  } else if (person.likedCount > 0) {
+    notes.push(`Likes: ${person.likedCount} attributed`);
+  }
+
+  if (person.commentsAttribution === "not_in_export") {
+    notes.push("Comments: not included in this Instagram export");
+  } else if (person.commentsAttribution === "not_account_level") {
+    notes.push(
+      "Comments: export present but Instagram does not provide account-level data for this category"
+    );
+  } else if (person.commentsAttribution === "not_matched") {
+    notes.push("Comments: export present but not matched");
+  } else if (person.commentedCount > 0) {
+    notes.push(`Comments: ${person.commentedCount} attributed`);
+  }
+
+  if (person.storiesAttribution === "not_in_export") {
+    notes.push("Story interactions: not included in this Instagram export");
+  } else if (person.storiesAttribution === "not_account_level") {
+    notes.push(
+      "Story interactions: export present but no account-level data in this export"
+    );
+  } else if (person.storiesAttribution === "not_matched") {
+    notes.push("Story interactions: not matched");
+  }
+
+  if (person.groupMessagesSent > 0) {
+    notes.push(
+      `Group chat: ${person.groupMessagesSent} sender messages (weak signal)`
+    );
+  }
+
+  return notes;
+}
+
+export function buildUnifiedAccountsFromGraph(params: {
+  graph: IdentityGraph;
+  network: NetworkStats;
+  linkedinProgress: LinkedInHelperEntry[];
+}): UnifiedAccount[] {
+  const { graph, network, linkedinProgress } = params;
+  const linkedinMap = new Map(linkedinProgress.map((e) => [e.username, e]));
+
+  const isBlocked = (username: string) =>
+    network.blocked.some((a) => a.username === username);
+  const isRestricted = (username: string) =>
+    network.restricted.some((a) => a.username === username);
+  const isPending = (username: string) =>
+    network.pendingRequests.some((a) => a.username === username);
+  const isRecentlyUnfollowed = (username: string) =>
+    network.recentlyUnfollowed.some((a) => a.username === username);
+
+  const accounts: UnifiedAccount[] = [];
+
+  for (const person of graph.persons.values()) {
+    if (person.canonicalId.startsWith("__group__")) continue;
+
+    const linkedin = linkedinMap.get(person.username);
+    const interactionScore =
+      person.likedCount + person.commentedCount + person.storyInteractionCount;
+
+    const relationshipLabel = deriveRelationshipLabel({
+      isMutual: person.isMutual,
+      iFollowThem: person.iFollowThem,
+      followsMe: person.followsMe,
+      hasDmThread:
+        person.dm.status === "matched" || person.dm.status === "possible",
+      dmMessageCount: person.dm.directDmCount,
+      groupMessageCount: person.groupMessagesSent,
+      interactionScore,
+      isBlocked: isBlocked(person.username),
+      isRestricted: isRestricted(person.username),
+      isPending: isPending(person.username),
+      isRecentlyUnfollowed: isRecentlyUnfollowed(person.username),
+      isUnknown: person.isUnknownOrDeleted,
+    });
+
+    const timestamps = [
+      person.followedMeAt,
+      person.iFollowedAt,
+      person.dm.lastDmAt,
+    ].filter((t): t is number => t !== undefined);
+
+    accounts.push({
+      username: person.username,
+      displayName: formatAccountDisplayName(person.displayName),
+      href: person.isUnknownOrDeleted
+        ? "#"
+        : instagramProfileUrl(person.username),
+      followsMe: person.followsMe,
+      iFollowThem: person.iFollowThem,
+      isMutual: person.isMutual,
+      followedMeAt: person.followedMeAt,
+      iFollowedAt: person.iFollowedAt,
+      whoFollowedFirst: whoFollowedFirst(
+        person.followedMeAt,
+        person.iFollowedAt
+      ),
+      followBackTimeMs: followBackTimeMs(
+        person.followedMeAt,
+        person.iFollowedAt
+      ),
+      firstConnectedAt:
+        timestamps.length > 0 ? Math.min(...timestamps) : undefined,
+      becameMutualAt:
+        person.isMutual && person.followedMeAt && person.iFollowedAt
+          ? Math.max(person.followedMeAt, person.iFollowedAt)
+          : undefined,
+      hasDmThread:
+        person.dm.status === "matched" || person.dm.status === "possible",
+      dmThreadId: person.dm.threadIds[0],
+      dmMessageCount: person.dm.directDmCount,
+      groupMessageCount: person.groupMessagesSent,
+      lastDmAt: person.dm.lastDmAt,
+      firstDmAt: person.dm.firstDmAt,
+      dmSentByMe: person.dm.directDmSentByMe,
+      dmSentByThem: person.dm.directDmSentByThem,
+      dmSenderSplitAvailable: person.dm.senderSplitAvailable,
+      dmSenderSplitConfidence: person.dm.senderSplitConfidence,
+      dmMatchStatus: person.dm.status,
+      dmMatchMethod: person.dm.matchMethod,
+      likedCount: person.likedCount,
+      likesAttribution: person.likesAttribution,
+      commentedCount: person.commentedCount,
+      commentsAttribution: person.commentsAttribution,
+      storyInteractionCount: person.storyInteractionCount,
+      storiesAttribution: person.storiesAttribution,
+      searchCount: person.searchCount,
+      searchAttribution: person.searchAttribution,
+      linkedInStatus: linkedin?.status,
+      linkedInNotes: linkedin?.notes,
+      relationshipLabel,
+      recommendedAction: person.isUnknownOrDeleted
+        ? "Instagram's export did not include a usable name — may be deleted or deactivated."
+        : recommendedAction(relationshipLabel),
+      isUnknownAccount: person.isUnknownOrDeleted,
+      nameConfidence: person.dm.matchConfidence || person.confidence,
+      sourceBreakdown: toSourceBreakdownFromPerson(person),
+      aliases: person.aliases,
+      dataSourceNotes: buildDataSourceNotes(person),
+    });
+  }
+
+  return accounts.sort((a, b) => {
+    if (b.dmMessageCount !== a.dmMessageCount) {
+      return b.dmMessageCount - a.dmMessageCount;
+    }
+    return a.displayName.localeCompare(b.displayName);
+  });
+}
+
 export function buildUnifiedAccounts(params: {
   network: NetworkStats | null;
   messages: DmAnalytics | null;
   linkedinProgress: LinkedInHelperEntry[];
   interactionCounts?: Map<
     string,
-    { likes: number; comments: number; stories: number }
+    { likes: number; comments: number; stories: number; saves: number }
   >;
+  interactionMeta?: import("@/lib/interactionExportParser").InteractionExportMeta;
+  searchWrapped?: SearchWrappedResult | null;
+  graph?: IdentityGraph;
+  coreAnalytics?: import("@/lib/insights/coreAnalytics").CoreAnalytics;
+  files?: Map<string, string>;
 }): UnifiedAccount[] {
-  const { network, messages, linkedinProgress, interactionCounts } = params;
+  const {
+    network,
+    messages,
+    linkedinProgress,
+    interactionCounts,
+    interactionMeta,
+    searchWrapped,
+    graph: graphInput,
+    coreAnalytics,
+    files,
+  } = params;
   if (!network) return [];
 
-  const linkedinMap = new Map(linkedinProgress.map((e) => [e.username, e]));
-  const { statsByKey } = buildDmStatsAndDebug({ messages, network });
+  const searchByUsername = buildSearchMap(searchWrapped);
 
-  const seen = new Map<string, UnifiedAccount>();
-
-  const allLists = [
-    ...network.followers,
-    ...network.following,
-    ...network.mutuals,
-    ...network.dontFollowMeBack,
-    ...network.iDontFollowBack,
-    ...network.pendingRequests,
-    ...network.recentFollowRequests,
-    ...network.recentlyUnfollowed,
-    ...network.blocked,
-    ...network.restricted,
-  ];
-
-  for (const acc of allLists) {
-    const username = normalizeUsername(acc.username);
-    if (seen.has(username)) continue;
-
-    const follower = network.followers.find((a) => a.username === username);
-    const following = network.following.find((a) => a.username === username);
-    const followsMe = Boolean(follower);
-    const iFollowThem = Boolean(following);
-    const isMutual = followsMe && iFollowThem;
-    const followedMeAt = follower?.timestamp;
-    const iFollowedAt = following?.timestamp;
-    const dm = statsByKey.get(username);
-    const interactions = interactionCounts?.get(username);
-    const linkedin = linkedinMap.get(username);
-    const interactionScore =
-      (interactions?.likes ?? 0) +
-      (interactions?.comments ?? 0) +
-      (interactions?.stories ?? 0);
-
-    const directDmCount = dm?.directDmCount ?? 0;
-    const groupMessageCount = dm?.groupMessagesSent ?? 0;
-
-    const isBlocked = network.blocked.some((a) => a.username === username);
-    const isRestricted = network.restricted.some((a) => a.username === username);
-    const isPending = network.pendingRequests.some((a) => a.username === username);
-    const isRecentlyUnfollowed = network.recentlyUnfollowed.some(
-      (a) => a.username === username
-    );
-
-    const relationshipLabel = deriveRelationshipLabel({
-      isMutual,
-      iFollowThem,
-      followsMe,
-      hasDmThread: Boolean(dm?.hasDirectThread),
-      dmMessageCount: directDmCount,
-      groupMessageCount,
-      interactionScore,
-      isBlocked,
-      isRestricted,
-      isPending,
-      isRecentlyUnfollowed,
-      isUnknown: false,
+  const graph =
+    graphInput ??
+    buildIdentityGraph({
+      network,
+      messages,
+      interactionCounts,
+      interactionMeta,
+      searchByUsername,
+      hasSearchExport: Boolean(searchWrapped?.topAccounts?.length),
+      coreAnalytics,
+      files,
     });
 
-    const likedCount = interactions?.likes ?? 0;
-    const commentedCount = interactions?.comments ?? 0;
-    const storyInteractionCount = interactions?.stories ?? 0;
-
-    const sourceBreakdown = dm
-      ? toSourceBreakdown(dm, {
-          isMutual,
-          followsMe,
-          iFollowThem,
-          likedCount,
-          commentedCount,
-          storyInteractionCount,
-        })
-      : undefined;
-
-    const timestamps = [followedMeAt, iFollowedAt, dm?.lastDirectDmAt].filter(
-      (t): t is number => t !== undefined
-    );
-
-    seen.set(username, {
-      username,
-      displayName:
-        acc.displayUsername ??
-        follower?.displayUsername ??
-        following?.displayUsername ??
-        username,
-      href:
-        acc.href ??
-        follower?.href ??
-        following?.href ??
-        instagramProfileUrl(username),
-      followsMe,
-      iFollowThem,
-      isMutual,
-      followedMeAt,
-      iFollowedAt,
-      whoFollowedFirst: whoFollowedFirst(followedMeAt, iFollowedAt),
-      followBackTimeMs: followBackTimeMs(followedMeAt, iFollowedAt),
-      firstConnectedAt:
-        timestamps.length > 0 ? Math.min(...timestamps) : undefined,
-      becameMutualAt:
-        isMutual && followedMeAt && iFollowedAt
-          ? Math.max(followedMeAt, iFollowedAt)
-          : undefined,
-      hasDmThread: Boolean(dm?.hasDirectThread),
-      dmThreadId: dm?.directThreadIds[0],
-      dmMessageCount: directDmCount,
-      groupMessageCount,
-      lastDmAt: dm?.lastDirectDmAt,
-      likedCount,
-      commentedCount,
-      storyInteractionCount,
-      linkedInStatus: linkedin?.status,
-      linkedInNotes: linkedin?.notes,
-      relationshipLabel,
-      recommendedAction: recommendedAction(relationshipLabel),
-      isUnknownAccount: false,
-      nameConfidence: dm?.confidence ?? "medium",
-      sourceBreakdown,
-    });
-  }
-
-  // DM-only unknown / non-network contacts
-  for (const [key, dm] of statsByKey) {
-    if (key.startsWith("__group__")) continue;
-    if (seen.has(key)) continue;
-    if (!dm.isUnknown && !dm.hasDirectThread && dm.groupMessagesSent === 0)
-      continue;
-
-    const relationshipLabel = dm.isUnknown
-      ? "Unknown"
-      : deriveRelationshipLabel({
-          isMutual: false,
-          iFollowThem: false,
-          followsMe: false,
-          hasDmThread: dm.hasDirectThread,
-          dmMessageCount: dm.directDmCount,
-          groupMessageCount: dm.groupMessagesSent,
-          interactionScore: 0,
-          isBlocked: false,
-          isRestricted: false,
-          isPending: false,
-          isRecentlyUnfollowed: false,
-          isUnknown: dm.isUnknown,
-        });
-
-    seen.set(key, {
-      username: key,
-      displayName: dm.displayName,
-      href: "#",
-      followsMe: false,
-      iFollowThem: false,
-      isMutual: false,
-      whoFollowedFirst: "Unknown",
-      hasDmThread: dm.hasDirectThread,
-      dmThreadId: dm.directThreadIds[0],
-      dmMessageCount: dm.directDmCount,
-      groupMessageCount: dm.groupMessagesSent,
-      lastDmAt: dm.lastDirectDmAt,
-      likedCount: 0,
-      commentedCount: 0,
-      storyInteractionCount: 0,
-      relationshipLabel,
-      recommendedAction: dm.isUnknown
-        ? "Instagram's export did not include a usable name — may be deleted or deactivated."
-        : recommendedAction(relationshipLabel),
-      isUnknownAccount: dm.isUnknown,
-      nameConfidence: dm.confidence,
-      sourceBreakdown: toSourceBreakdown(dm, {
-        isMutual: false,
-        followsMe: false,
-        iFollowThem: false,
-        likedCount: 0,
-        commentedCount: 0,
-        storyInteractionCount: 0,
-      }),
-    });
-  }
-
-  return Array.from(seen.values()).sort((a, b) =>
-    a.displayName.localeCompare(b.displayName)
-  );
+  return buildUnifiedAccountsFromGraph({ graph, network, linkedinProgress });
 }
 
 export function findUnifiedAccount(
   accounts: UnifiedAccount[],
   username: string
 ): UnifiedAccount | undefined {
-  return accounts.find((a) => a.username === normalizeUsername(username));
+  const norm = identityNormalizeUsername(username);
+  return accounts.find(
+    (a) =>
+      a.username === username ||
+      usernamesMatch(a.username, norm) ||
+      identityNormalizeUsername(a.username) === norm
+  );
 }

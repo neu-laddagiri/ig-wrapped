@@ -33,6 +33,7 @@ import {
   paginateDmThreads,
   withDisplayTitles,
   hasModernDmParser,
+  isDirectDmThread,
   type NormalizedDmThread,
   type DmSortKey,
   type DmPageSize,
@@ -40,8 +41,11 @@ import {
 import { DmThreadPagination } from "@/components/DmThreadPagination";
 import { DmAiSummarySection } from "@/components/DmAiSummarySection";
 import type { DmAiSummariesMap, DmAiSummarySaved } from "@/types/dmAiSummary";
-import type { DmHeatmapResult, ReplyPatternResult } from "@/types/insights";
+import type { DmHeatmapResult, ReplyPatternResult, DmRelationshipInsight } from "@/types/insights";
 import { DmHeatmapSection } from "@/components/DmHeatmapSection";
+import { DmRelationshipTimeline } from "@/components/DmRelationshipTimeline";
+import { ConversationChemistryPanel } from "@/components/ConversationChemistryPanel";
+import { computeConversationChemistry } from "@/lib/conversationChemistry";
 
 interface DmsTabProps {
   messages: DmAnalytics | null;
@@ -54,6 +58,9 @@ interface DmsTabProps {
   isLoadedFromCloud?: boolean;
   dmHeatmap?: DmHeatmapResult | null;
   replyPatterns?: ReplyPatternResult | null;
+  dmRelationshipInsights?: DmRelationshipInsight[];
+  onOpenAccount?: (accountKey: string) => void;
+  dmAccountKeyByThreadId?: Map<string, string>;
 }
 
 import { formatAccountDisplayName, isInstagramPlaceholderName } from "@/lib/accountNameFilter";
@@ -111,6 +118,7 @@ function ThreadExpandedPanel({
   aiSummary,
   onAiSummaryChange,
   isLoadedFromCloud,
+  relationship,
 }: {
   thread: NormalizedDmThread;
   showThreadNames: boolean;
@@ -120,6 +128,7 @@ function ThreadExpandedPanel({
   aiSummary?: DmAiSummarySaved;
   onAiSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
   isLoadedFromCloud?: boolean;
+  relationship?: DmRelationshipInsight;
 }) {
   const senderLabelMap = buildSenderLabelMap(
     thread.messagesBySender,
@@ -129,6 +138,9 @@ function ThreadExpandedPanel({
     (a, b) => b[1] - a[1]
   );
   const topCount = senders[0]?.[1] ?? 0;
+  const chemistry = !thread.isGroup
+    ? computeConversationChemistry(thread, relationship)
+    : null;
 
   const legacyPanel = (
     <DmAiSummarySection
@@ -206,43 +218,20 @@ function ThreadExpandedPanel({
 
       <section className="mb-5">
         <SectionTitle>Activity timeline</SectionTitle>
-        <div className="grid gap-2 sm:grid-cols-2">
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
-            <span className="text-white/40">First message · </span>
-            <span className="text-white/85">
-              {formatDate(thread.firstMessageAt)}
-              {thread.firstMessageSender && (
-                <span className="text-white/55">
-                  {" "}
-                  ·{" "}
-                  {senderLabel(
-                    thread.firstMessageSender,
-                    senderLabelMap,
-                    showThreadNames
-                  )}
-                </span>
-              )}
-            </span>
-          </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5 text-sm">
-            <span className="text-white/40">Last active · </span>
-            <span className="text-white/85">
-              {formatDate(thread.lastMessageAt)}
-              {thread.lastMessageSender && (
-                <span className="text-white/55">
-                  {" "}
-                  ·{" "}
-                  {senderLabel(
-                    thread.lastMessageSender,
-                    senderLabelMap,
-                    showThreadNames
-                  )}
-                </span>
-              )}
-            </span>
-          </div>
-        </div>
+        <DmRelationshipTimeline
+          thread={thread}
+          relationship={relationship}
+          showNames={showThreadNames}
+          showFirstMessagePreview={showFirstMessagePreview}
+          formatSender={(name) =>
+            senderLabel(name, senderLabelMap, showThreadNames)
+          }
+        />
       </section>
+
+      {chemistry && (
+        <ConversationChemistryPanel chemistry={chemistry} />
+      )}
 
       <section className="mb-5">
         <SectionTitle>Shared content</SectionTitle>
@@ -403,6 +392,9 @@ export function DmsTab({
   isLoadedFromCloud = false,
   dmHeatmap,
   replyPatterns,
+  dmRelationshipInsights = [],
+  onOpenAccount,
+  dmAccountKeyByThreadId,
 }: DmsTabProps) {
   const [internalShow, setInternalShow] = useState(true);
   const [internalPreview, setInternalPreview] = useState(false);
@@ -702,16 +694,42 @@ export function DmsTab({
           ) : (
             paged.map((thread) => {
               const isOpen = expandedThreadId === thread.id;
+              const accountKey = dmAccountKeyByThreadId?.get(thread.id);
+              const canOpenAccount =
+                Boolean(onOpenAccount) &&
+                Boolean(accountKey) &&
+                isDirectDmThread(thread);
               return (
                 <div key={thread.id}>
-                  <button
-                    type="button"
-                    onClick={() => toggleExpand(thread.id)}
-                    className="flex w-full items-center gap-3 px-4 py-3 text-left transition hover:bg-white/[0.03]"
-                  >
-                    <div className="min-w-0 flex-1">
+                  <div className="flex w-full items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(thread.id)}
+                      className="min-w-0 flex-1 text-left"
+                    >
                       <p className="truncate font-medium text-white">
-                        {thread.displayTitle}
+                        {canOpenAccount ? (
+                          <span
+                            role="link"
+                            tabIndex={0}
+                            className="hover:text-[#DD2A7B]"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenAccount?.(accountKey!);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                onOpenAccount?.(accountKey!);
+                              }
+                            }}
+                          >
+                            {thread.displayTitle}
+                          </span>
+                        ) : (
+                          thread.displayTitle
+                        )}
                       </p>
                       <p className="mt-0.5 truncate text-xs text-white/40">
                         {formatNumber(thread.totalMessages)} messages ·{" "}
@@ -723,15 +741,20 @@ export function DmsTab({
                       <p className="mt-1 truncate text-xs italic text-white/35">
                         {thread.funSummary}
                       </p>
-                    </div>
-                    <span className="shrink-0 text-white/40">
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => toggleExpand(thread.id)}
+                      className="shrink-0 text-white/40"
+                      aria-label={isOpen ? "Collapse thread" : "Expand thread"}
+                    >
                       {isOpen ? (
                         <ChevronUp className="h-4 w-4" />
                       ) : (
                         <ChevronDown className="h-4 w-4" />
                       )}
-                    </span>
-                  </button>
+                    </button>
+                  </div>
                   {isOpen && (
                     <ThreadExpandedPanel
                       thread={thread}
@@ -742,6 +765,9 @@ export function DmsTab({
                       aiSummary={dmAiSummaries[thread.id]}
                       onAiSummaryChange={handleAiSummaryChange}
                       isLoadedFromCloud={isLoadedFromCloud}
+                      relationship={dmRelationshipInsights.find(
+                        (r) => r.threadId === thread.id
+                      )}
                     />
                   )}
                 </div>

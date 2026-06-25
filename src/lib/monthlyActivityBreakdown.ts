@@ -348,9 +348,9 @@ export function inferEraFromGroups(
 
   const eraNames: Record<EraGroupKey, string> = {
     dms: "DM Peak Era",
-    story: "Story Watcher Era",
+    story: "Story Watch Era",
     doomscroll: "Doomscroll Era",
-    likes: "Generous Liker Era",
+    likes: "Liked Everything Era",
     comments: "Comment Era",
     saves: "Save It For Later Era",
     follows: "Follow Spree Era",

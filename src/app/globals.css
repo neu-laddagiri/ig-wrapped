@@ -64,7 +64,30 @@
 .animated-gradient-bg {
   background: var(--ig-gradient-animated);
   background-size: 300% 300%;
-  animation: ig-gradient-shift 10s linear infinite;
+  animation: ig-gradient-shift 14s ease infinite;
+}
+
+/* Selected tabs — bright, stable Instagram sheen (no dim overlay) */
+.tab-selected-gradient {
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 14s ease infinite;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.12) inset,
+    0 4px 14px rgba(221, 42, 123, 0.22);
+}
+
+.tab-inactive-glass {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.03);
+  color: rgba(255, 255, 255, 0.45);
+}
+
+.tab-inactive-glass:hover {
+  color: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 /* Subtle animated border — highlight cards only */
@@ -109,6 +132,113 @@
   background: rgba(255, 255, 255, 0.1);
 }
 
+@keyframes beta-pulse-dot {
+  0%,
+  100% {
+    opacity: 0.45;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.2);
+  }
+}
+
+/* Beta build banner — animated border glow + badge shimmer */
+.beta-build-banner {
+  min-height: 4.5rem;
+}
+
+.beta-build-banner-shell {
+  position: relative;
+  border-radius: 1rem;
+  isolation: isolate;
+}
+
+.beta-build-banner-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 7s ease infinite;
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.beta-build-banner-shell::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 8s ease infinite;
+  filter: blur(10px);
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.beta-build-banner-inner {
+  position: relative;
+  z-index: 1;
+  border-radius: calc(1rem - 1px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(8, 8, 14, 0.72);
+  padding: 0.875rem 1rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+@media (min-width: 640px) {
+  .beta-build-banner-inner {
+    padding: 1rem 1.25rem;
+  }
+}
+
+.beta-build-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.2rem 0.55rem;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  background: var(--ig-gradient-animated);
+  background-size: 300% 300%;
+  animation: ig-gradient-shift 6s ease infinite;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.15) inset,
+    0 2px 8px rgba(221, 42, 123, 0.2);
+}
+
+.beta-build-pulse-dot {
+  top: 50%;
+  left: 50%;
+  width: 0.4rem;
+  height: 0.4rem;
+  margin-top: -0.2rem;
+  margin-left: -0.2rem;
+  border-radius: 9999px;
+  background: #f58529;
+  box-shadow: 0 0 6px rgba(245, 133, 41, 0.65);
+  animation: beta-pulse-dot 6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animated-gradient-text,
   .animated-gradient-bg,
@@ -123,7 +253,8 @@
   }
 
   .animated-gradient-bg,
-  .animated-gradient-bar {
+  .animated-gradient-bar,
+  .tab-selected-gradient {
     background: var(--ig-gradient);
     background-size: 100% 100%;
   }
@@ -131,6 +262,33 @@
   .animated-gradient-border::before {
     background: var(--ig-gradient);
     background-size: 100% 100%;
+  }
+
+  .beta-build-banner-shell::before,
+  .beta-build-banner-shell::after,
+  .beta-build-badge,
+  .beta-build-pulse-dot {
+    animation: none !important;
+  }
+
+  .beta-build-banner-shell::before {
+    background: var(--ig-gradient);
+    background-size: 100% 100%;
+    opacity: 1;
+  }
+
+  .beta-build-banner-shell::after {
+    opacity: 0;
+  }
+
+  .beta-build-badge {
+    background: var(--ig-gradient);
+    background-size: 100% 100%;
+  }
+
+  .beta-build-pulse-dot {
+    opacity: 0.85;
+    transform: none;
   }
 }
 

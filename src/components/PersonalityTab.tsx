@@ -4,13 +4,16 @@ import { useState } from "react";
 import { Sparkles } from "lucide-react";
 import type { InsightsBundle } from "@/types/insights";
 import { ShareWrappedCard } from "@/components/ShareWrappedCard";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface PersonalityTabProps {
   insights: InsightsBundle | null;
 }
 
 export function PersonalityTab({ insights }: PersonalityTabProps) {
-  const [hideNames, setHideNames] = useState(false);
+  const { presentationMode } = usePresentationMode();
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const hideNames = presentationMode || hideShareNamesLocal;
 
   const personality = insights?.personality;
   const cards =
@@ -61,8 +64,9 @@ export function PersonalityTab({ insights }: PersonalityTabProps) {
           <label className="flex items-center gap-2 text-xs text-white/60">
             <input
               type="checkbox"
-              checked={hideNames}
-              onChange={(e) => setHideNames(e.target.checked)}
+              checked={hideShareNamesLocal}
+              onChange={(e) => setHideShareNamesLocal(e.target.checked)}
+              disabled={presentationMode}
               className="accent-[#DD2A7B]"
             />
             Hide names for public sharing

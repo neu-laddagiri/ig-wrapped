@@ -13,19 +13,21 @@ import {
   Search,
 } from "lucide-react";
 import type { AdsPrivacyData } from "@/types/instagram";
-import type { AdsPrivacyInsights } from "@/types/insights";
+import { AdRoastSection } from "@/components/AdRoastSection";
+import type { AdRoastResult, AdsPrivacyInsights } from "@/types/insights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
 
 interface AdsPrivacyTabProps {
   ads: AdsPrivacyData | null;
   adsInsights?: AdsPrivacyInsights | null;
+  adRoast?: AdRoastResult | null;
 }
 
 const CATEGORY_PREVIEW = 20;
 const ADVERTISER_PREVIEW = 30;
 
-export function AdsPrivacyTab({ ads, adsInsights }: AdsPrivacyTabProps) {
+export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps) {
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllAdvertisers, setShowAllAdvertisers] = useState(false);
   const [advertiserQuery, setAdvertiserQuery] = useState("");
@@ -117,17 +119,45 @@ export function AdsPrivacyTab({ ads, adsInsights }: AdsPrivacyTabProps) {
         export. Availability depends on what Instagram included in your download.
       </p>
 
+      {adRoast && <AdRoastSection roast={adRoast} />}
+
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6">
           <div className="flex items-center gap-2">
             <Shield className="h-5 w-5 text-[#515BD4]" />
-            <h3 className="font-semibold text-white">Privacy score</h3>
+            <h3 className="font-semibold text-white">Ad Exposure Score</h3>
           </div>
           <p className="mt-4 text-4xl font-bold text-white">{privacyScore}/100</p>
           <p className="mt-2 text-sm text-white/45">
-            A rough estimate based on advertiser count, ad categories, and click
-            activity. Lower advertiser exposure = higher score.
+            100 = lower ad exposure in your export. Score drops as advertisers,
+            categories, and clicks increase.
           </p>
+          <ul className="mt-4 space-y-1.5 text-xs text-white/45">
+            <li className="flex justify-between">
+              <span>Advertisers</span>
+              <span className="tabular-nums text-white/65">
+                {formatNumber(ads.advertisersCount)}
+              </span>
+            </li>
+            <li className="flex justify-between">
+              <span>Ad categories</span>
+              <span className="tabular-nums text-white/65">
+                {formatNumber(ads.adCategoriesCount)}
+              </span>
+            </li>
+            <li className="flex justify-between">
+              <span>Ad clicks</span>
+              <span className="tabular-nums text-white/65">
+                {formatNumber(ads.adsClicked)}
+              </span>
+            </li>
+            <li className="flex justify-between">
+              <span>Ads viewed</span>
+              <span className="tabular-nums text-white/65">
+                {formatNumber(ads.adsViewed)}
+              </span>
+            </li>
+          </ul>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-6">

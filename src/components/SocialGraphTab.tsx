@@ -1,14 +1,17 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users, Trash2, Heart, Trophy, Search } from "lucide-react";
+import { Users, Trash2, Heart, Trophy, Search, ChevronDown } from "lucide-react";
 import type { InsightsBundle } from "@/types/insights";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
-import { formatNumber } from "@/lib/formatters";
 import type { NetworkStats } from "@/types/instagram";
+import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 import { UnfollowImpactPanel } from "@/components/UnfollowImpactPanel";
 import { ConfidencePill } from "@/components/ConfidencePill";
+import { LeaderboardSection } from "@/components/LeaderboardSection";
+import { SocialGraphMap } from "@/components/SocialGraphMap";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface SocialGraphTabProps {
   insights: InsightsBundle | null;
@@ -32,6 +35,9 @@ export function SocialGraphTab({
   const [subTab, setSubTab] = useState<SubTab>(defaultSubTab);
   const [query, setQuery] = useState("");
   const [clusterFilter, setClusterFilter] = useState<string | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const { presentationMode } = usePresentationMode();
+  const showNames = !presentationMode;
 
   const filteredCleanup = useMemo(() => {
     if (!insights) return [];
@@ -48,7 +54,7 @@ export function SocialGraphTab({
     if (!insights) return [];
     const q = query.trim().toLowerCase();
     return insights.realOnes
-      .filter((c) => !c.isSilentMutual && c.realOnesScore > 35)
+      .filter((c) => !c.isSilentMutual && c.dmMessageCount > 0)
       .filter(
         (c) =>
           !q ||
@@ -93,10 +99,8 @@ export function SocialGraphTab({
             key={s.id}
             type="button"
             onClick={() => setSubTab(s.id)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition ${
-              subTab === s.id
-                ? "animated-gradient-bg text-white"
-                : "border border-white/10 bg-white/5 text-white/60 hover:text-white"
+            className={`inline-flex items-center gap-1.5 ${
+              subTab === s.id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL
             }`}
           >
             <s.icon className="h-3.5 w-3.5" />
@@ -154,6 +158,13 @@ export function SocialGraphTab({
         </div>
       )}
 
+      {subTab === "realones" && (
+        <p className="text-xs text-white/40 -mt-2">
+          Relationship score from direct 1-on-1 DMs, mutual status, and
+          likes/comments. Group membership alone does not count.
+        </p>
+      )}
+
       {subTab === "cleanup" && (
         <AccountTable
           rows={filteredCleanup.slice(0, 50).map((c) => ({
@@ -176,8 +187,8 @@ export function SocialGraphTab({
             name: formatAccountDisplayName(c.displayName),
             score: c.realOnesScore,
             label: c.isSilentMutual ? "Silent mutual" : c.relationshipLabel,
-            action: `${c.dmMessageCount} direct DMs`,
-            meta: `Score ${c.realOnesScore}`,
+            action: c.rankReason ?? `${c.dmMessageCount} direct DMs`,
+            meta: `Score ${c.realOnesScore} · direct DMs only`,
             sourceBreakdown: c.sourceBreakdown,
           }))}
           scoreLabel="Real Ones"
@@ -186,56 +197,38 @@ export function SocialGraphTab({
       )}
 
       {subTab === "leaderboards" && (
-        <div className="space-y-6">
-          {insights.leaderboards.map((board) => (
-            <div
-              key={board.id}
-              className="rounded-2xl border border-white/10 bg-white/[0.04] p-5"
-            >
-              <h4 className="font-semibold text-white">{board.title}</h4>
-              {board.sourceNote && (
-                <p className="mt-1 text-xs text-white/35">{board.sourceNote}</p>
-              )}
-              {board.entries.length === 0 ? (
-                <p className="mt-3 text-sm text-white/45">
-                  {board.emptyReason ??
-                    "Instagram did not include enough account-level data."}
-                </p>
-              ) : (
-                <ul className="mt-3 space-y-2">
-                  {board.entries.slice(0, 15).map((e, i) => (
-                    <li
-                      key={e.username}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2"
-                    >
-                      <button
-                        type="button"
-                        onClick={() => onOpenAccount?.(e.username)}
-                        className="min-w-0 flex-1 text-left text-sm text-white/80 hover:text-[#DD2A7B]"
-                      >
-                        <span className="text-white/40">#{i + 1} </span>
-                        {formatAccountDisplayName(e.displayName)}
-                        {e.dmCount > 0 && board.id === "top-dm" && (
-                          <span className="ml-1 text-white/35">
-                            ({e.dmCount} msgs)
-                          </span>
-                        )}
-                      </button>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <span className="text-xs text-white/40">
-                          {formatNumber(e.score)}
-                        </span>
-                        <AccountSourcesPopover
-                          breakdown={e.sourceBreakdown}
-                          compact
-                        />
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          ))}
+        <div className="space-y-4">
+          <p className="text-xs text-white/40">
+            Highlight rankings from your export — expand any card for the full list.
+          </p>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {insights.leaderboards
+              .filter((board) => board.id !== "silent-mutuals")
+              .map((board) => (
+              <LeaderboardSection
+                key={board.id}
+                board={board}
+                onOpenAccount={onOpenAccount}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={() => setMapOpen((o) => !o)}
+            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/60"
+          >
+            Show relationship map
+            <ChevronDown
+              className={`h-4 w-4 transition ${mapOpen ? "rotate-180" : ""}`}
+            />
+          </button>
+          {mapOpen && (
+          <SocialGraphMap
+            accounts={insights.accounts}
+            showNames={showNames}
+            onOpenAccount={onOpenAccount}
+          />
+          )}
         </div>
       )}
     </div>

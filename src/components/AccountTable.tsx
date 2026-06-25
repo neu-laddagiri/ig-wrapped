@@ -115,8 +115,9 @@ export function AccountTable({
         <div>
           <h3 className="font-semibold text-white">{title}</h3>
           <p className="text-xs text-white/40">
-            {filtered.length.toLocaleString()} of {accounts.length.toLocaleString()}{" "}
-            accounts
+            {search.trim()
+              ? `${filtered.length.toLocaleString()} of ${accounts.length.toLocaleString()} matching search`
+              : `${accounts.length.toLocaleString()} accounts`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -238,7 +239,10 @@ export function AccountTable({
                         <ExternalLink className="h-4 w-4" />
                       </a>
                       <a
-                        href={linkedInSearchUrl(account.displayUsername)}
+                        href={linkedInSearchUrl(
+                          account.username,
+                          account.displayUsername
+                        )}
                         target="_blank"
                         rel="noopener noreferrer"
                         title="Search LinkedIn on Google"

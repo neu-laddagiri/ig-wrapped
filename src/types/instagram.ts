@@ -6,6 +6,11 @@ export interface InstagramAccount {
   category?: string;
 }
 
+export interface NetworkListMeta {
+  includedInExport: boolean;
+  sourcePath?: string;
+}
+
 export interface NetworkStats {
   totalFollowers: number;
   totalFollowing: number;
@@ -18,6 +23,8 @@ export interface NetworkStats {
   recentlyUnfollowed: InstagramAccount[];
   blocked: InstagramAccount[];
   restricted: InstagramAccount[];
+  blockedMeta?: NetworkListMeta;
+  restrictedMeta?: NetworkListMeta;
   followers: InstagramAccount[];
   following: InstagramAccount[];
 }

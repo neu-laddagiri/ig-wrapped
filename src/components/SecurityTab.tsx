@@ -20,6 +20,7 @@ import type {
   SecurityEventType,
 } from "@/types/instagram";
 import type { SecurityAuditResult } from "@/types/insights";
+import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
 import {
@@ -202,11 +203,7 @@ export function SecurityTab({ security, securityAudit }: SecurityTabProps) {
                 setFilter(f.id);
                 setVisibleCount(PAGE_SIZE);
               }}
-              className={`rounded-full px-3 py-1 text-xs font-medium transition ${
-                filter === f.id
-                  ? "animated-gradient-bg text-white"
-                  : "border border-white/10 bg-white/5 text-white/55 hover:text-white/75"
-              }`}
+              className={filter === f.id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL}
             >
               {f.label}
             </button>

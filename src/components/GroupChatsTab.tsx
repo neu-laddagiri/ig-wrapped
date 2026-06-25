@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Users, ChevronDown, ChevronUp } from "lucide-react";
 import type { InsightsBundle, GroupChatInsight } from "@/types/insights";
 import { formatTimestamp } from "@/lib/formatters";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 const PAGE_SIZE = 8;
 
@@ -12,9 +13,11 @@ interface GroupChatsTabProps {
 }
 
 export function GroupChatsTab({ insights }: GroupChatsTabProps) {
+  const { presentationMode } = usePresentationMode();
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
-  const [hideNames, setHideNames] = useState(false);
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const hideNames = presentationMode || hideShareNamesLocal;
 
   const groups = insights?.groupChats ?? [];
 
@@ -53,8 +56,9 @@ export function GroupChatsTab({ insights }: GroupChatsTabProps) {
         <label className="flex items-center gap-2 text-xs text-white/50">
           <input
             type="checkbox"
-            checked={hideNames}
-            onChange={(e) => setHideNames(e.target.checked)}
+            checked={hideShareNamesLocal}
+            onChange={(e) => setHideShareNamesLocal(e.target.checked)}
+            disabled={presentationMode}
             className="accent-[#DD2A7B]"
           />
           Hide names for sharing

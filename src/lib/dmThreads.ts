@@ -35,6 +35,8 @@ export interface NormalizedDmThread {
   textMessages?: DmMessageSample[];
   /** Sanitized sample restored from cloud save */
   aiSummarySample?: DmAiSummarySample;
+  /** Original export path for identity matching */
+  sourcePath?: string;
 }
 
 export type DmSortKey =
@@ -236,6 +238,7 @@ function rawToNormalized(raw: RawThread, index: number): NormalizedDmThread {
     hasDetailedInsights: threadHasDetailedInsights(raw),
     textMessages: raw.textMessages,
     aiSummarySample: raw.aiSummarySample,
+    sourcePath,
   };
 
   base.displayTitle = computeDisplayTitle(base, false);
@@ -384,4 +387,62 @@ export function paginateDmThreads<T>(
 ): T[] {
   const start = (page - 1) * pageSize;
   return items.slice(start, start + pageSize);
+}
+
+/** Same direct-thread rule as the DMs tab (`!isGroup`). */
+export function isDirectDmThread(thread: {
+  isGroup?: boolean;
+  isGroupChat?: boolean;
+  participantCount?: number;
+}): boolean {
+  if (thread.isGroup === true || thread.isGroupChat === true) return false;
+  const count = thread.participantCount ?? 0;
+  if (count > 2) return false;
+  return true;
+}
+
+/** Map normalized UI thread → parser analytics shape for award/insight helpers. */
+export function normalizedThreadToAnalytics(
+  thread: NormalizedDmThread
+): DmThreadAnalytics {
+  return {
+    id: thread.id,
+    threadName: thread.title,
+    participants: thread.participants,
+    participantCount: thread.participantCount,
+    isGroupChat: thread.isGroup,
+    messageCount: thread.totalMessages,
+    messagesBySender: thread.messagesBySender,
+    firstMessageTimestamp: thread.firstMessageAt,
+    lastMessageTimestamp: thread.lastMessageAt,
+    firstMessageSender: thread.firstMessageSender,
+    lastMessageSender: thread.lastMessageSender,
+    firstMessagePreview: thread.firstMessageText,
+    mostActiveMonth: thread.mostActiveMonth,
+    messagesByMonth: thread.messagesByMonth.map((m) => ({
+      month: m.month,
+      count: m.messages,
+    })),
+    linkCount: thread.linkCount,
+    emojiCount: 0,
+    instagramReelLinks: thread.reelOrPostCount,
+    instagramPostLinks: 0,
+    instagramStoryLinks: 0,
+    estimatedInstagramLinks: thread.linkCount,
+    reelsLinksBySender: {},
+    postLinksBySender: {},
+    photoCount: thread.photoCount,
+    videoCount: thread.videoCount,
+    audioCount: thread.audioCount,
+    sharedMediaCount: thread.mediaCount,
+    reactionCount: thread.reactionCount,
+    callEventCount: thread.callCount,
+    avgMessageLength: thread.averageMessageLength,
+    funSummary: thread.funSummary,
+    folder:
+      thread.folder === "unknown" ? "other" : thread.folder,
+    sourcePath: thread.sourcePath,
+    textMessages: thread.textMessages,
+    aiSummarySample: thread.aiSummarySample,
+  };
 }

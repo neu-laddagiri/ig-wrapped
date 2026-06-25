@@ -22,7 +22,8 @@ import { ShareWrappedCard } from "@/components/ShareWrappedCard";
 import { OverviewAiSection } from "@/components/OverviewAiSection";
 import { WrappedScoreboardCard } from "@/components/WrappedScoreboardCard";
 import { SinceLastSaveCard } from "@/components/SinceLastSaveCard";
-import { Play, Bot } from "lucide-react";
+import { Play, Bot, Trash2, MessageCircle, Sparkles, Cloud } from "lucide-react";
+import type { DashboardTabId } from "@/components/DashboardTabs";
 
 interface OverviewTabProps {
   data: ParsedExportData;
@@ -34,6 +35,8 @@ interface OverviewTabProps {
   onOpenStory?: () => void;
   onOpenChat?: () => void;
   hideShareNames?: boolean;
+  onNavigateTab?: (tab: DashboardTabId) => void;
+  onScrollToSave?: () => void;
 }
 
 export function OverviewTab({
@@ -46,6 +49,8 @@ export function OverviewTab({
   onOpenStory,
   onOpenChat,
   hideShareNames: hideShareNamesProp = false,
+  onNavigateTab,
+  onScrollToSave,
 }: OverviewTabProps) {
   const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
   const hideShareNames = hideShareNamesProp || hideShareNamesLocal;
@@ -136,7 +141,34 @@ export function OverviewTab({
 
       <WrappedScoreboardCard scoreboard={insights.wrappedScoreboard} />
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      {onNavigateTab && (
+        <div className="flex flex-wrap gap-2">
+          <QuickAction
+            icon={Trash2}
+            label="View cleanup"
+            onClick={() => onNavigateTab("cleanup")}
+          />
+          <QuickAction
+            icon={MessageCircle}
+            label="View DMs"
+            onClick={() => onNavigateTab("dms")}
+          />
+          <QuickAction
+            icon={Sparkles}
+            label="View wrapped card"
+            onClick={() => onNavigateTab("personality")}
+          />
+          {onScrollToSave && (
+            <QuickAction
+              icon={Cloud}
+              label="Save analysis"
+              onClick={onScrollToSave}
+            />
+          )}
+        </div>
+      )}
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SummaryCard
           label="Export status"
           value={fileName ? "Loaded" : "—"}
@@ -172,7 +204,7 @@ export function OverviewTab({
       </div>
 
       {data.wrapped && (
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-3 sm:grid-cols-3">
           <SummaryCard
             label="Liked posts"
             value={formatNumber(data.wrapped.likedPosts)}
@@ -274,5 +306,26 @@ export function OverviewTab({
         </div>
       )}
     </div>
+  );
+}
+
+function QuickAction({
+  icon: Icon,
+  label,
+  onClick,
+}: {
+  icon: typeof Trash2;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1.5 rounded-xl tab-inactive-glass px-3 py-2 text-xs font-medium transition-colors hover:text-white/80"
+    >
+      <Icon className="h-3.5 w-3.5" />
+      {label}
+    </button>
   );
 }

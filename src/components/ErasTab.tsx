@@ -1,6 +1,7 @@
 "use client";
 
-import { Calendar, TrendingUp, AlertCircle } from "lucide-react";
+import { useMemo } from "react";
+import { Calendar, TrendingUp, AlertCircle, Sparkles } from "lucide-react";
 import type { InsightsBundle } from "@/types/insights";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 import type { MostActiveEraData } from "@/types/instagram";
@@ -13,9 +14,23 @@ interface ErasTabProps {
   mostActiveEra: MostActiveEraData | null;
 }
 
+const ERA_GRADIENTS = [
+  "from-[#F58529]/25 via-[#DD2A7B]/20 to-[#515BD4]/25",
+  "from-[#515BD4]/20 via-[#DD2A7B]/15 to-[#F58529]/20",
+  "from-[#DD2A7B]/20 via-[#515BD4]/15 to-[#F58529]/15",
+];
+
 export function ErasTab({ insights, mostActiveEra }: ErasTabProps) {
   const eras = insights?.eras;
   const needsRefresh = erasNeedRefresh(eras);
+
+  const heroEra = eras?.eraLabels[0];
+  const topEras = eras?.eraLabels.slice(0, 3) ?? [];
+
+  const maxEraCount = useMemo(
+    () => Math.max(...(eras?.eraLabels.map((e) => e.count) ?? [1]), 1),
+    [eras]
+  );
 
   if (!eras && !mostActiveEra) {
     return (
@@ -52,14 +67,68 @@ export function ErasTab({ insights, mostActiveEra }: ErasTabProps) {
         </div>
       )}
 
+      <div className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#F58529]/15 via-[#DD2A7B]/12 to-[#515BD4]/15 p-6 sm:p-8">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-48 w-48 rounded-full bg-[#DD2A7B]/20 blur-3xl" />
+        <div className="relative flex items-start gap-3">
+          <Sparkles className="mt-1 h-6 w-6 text-[#DD2A7B]" />
+          <div>
+            <h2 className="text-2xl font-bold text-white sm:text-3xl">
+              Your IG Eras
+            </h2>
+            <p className="mt-2 max-w-xl text-sm text-white/55">
+              Peak months from your export — labeled by what actually dominated
+              (DMs, likes, stories, follows), not generic security noise.
+            </p>
+          </div>
+        </div>
+
+        {heroEra && (
+          <div className="relative mt-6 rounded-2xl border border-white/15 bg-black/20 p-5 backdrop-blur-sm">
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#F58529]/90">
+              Top era
+            </p>
+            <p className="mt-2 text-xl font-bold text-white sm:text-2xl">
+              {heroEra.label}
+            </p>
+            <p className="mt-1 text-sm text-white/60">
+              {heroEra.monthLabel ?? heroEra.month} ·{" "}
+              {formatNumber(heroEra.count)} tracked actions
+            </p>
+            {heroEra.dominanceLine && (
+              <p className="mt-2 text-sm text-white/50">{heroEra.dominanceLine}</p>
+            )}
+            <div className="mt-4 h-2 overflow-hidden rounded-full bg-white/10">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4] transition-all duration-700"
+                style={{
+                  width: `${Math.min(100, (heroEra.count / maxEraCount) * 100)}%`,
+                }}
+              />
+            </div>
+            {heroEra.breakdown && heroEra.breakdown.length > 0 && (
+              <ul className="mt-4 flex flex-wrap gap-2">
+                {heroEra.breakdown.map((line) => (
+                  <li
+                    key={line.label}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs text-white/55"
+                  >
+                    {line.label}: {formatNumber(line.count)}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </div>
+
       {chartEra && <MostActiveEraCard era={chartEra} compact />}
 
-      {eras && eras.eraLabels.length > 0 && (
+      {topEras.length > 0 && (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {eras.eraLabels.map((era) => (
+          {topEras.map((era, index) => (
             <div
               key={era.month}
-              className="rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.02] p-5"
+              className={`rounded-2xl border border-white/10 bg-gradient-to-br ${ERA_GRADIENTS[index % ERA_GRADIENTS.length]} p-5`}
             >
               <div className="flex items-start justify-between gap-2">
                 <p className="text-xs font-semibold uppercase tracking-wider text-[#DD2A7B]/80">
@@ -77,17 +146,20 @@ export function ErasTab({ insights, mostActiveEra }: ErasTabProps) {
               </p>
               {era.topActivityType && (
                 <p className="mt-2 text-xs text-white/55">
-                  Top activity: {era.topActivityType}
+                  Top signal: {era.topActivityType}
                   {era.topActivityCount != null &&
                     ` · ${formatNumber(era.topActivityCount)}`}
                 </p>
               )}
-              {era.dominanceLine && (
-                <p className="mt-1 text-xs italic text-white/40">
-                  {era.dominanceLine}
-                </p>
-              )}
-              <p className="mt-2 text-xs leading-relaxed text-white/45">
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-[#F58529] via-[#DD2A7B] to-[#515BD4]"
+                  style={{
+                    width: `${Math.min(100, (era.count / maxEraCount) * 100)}%`,
+                  }}
+                />
+              </div>
+              <p className="mt-3 text-xs leading-relaxed text-white/45">
                 {era.caption}
               </p>
               {era.breakdown && era.breakdown.length > 0 && (

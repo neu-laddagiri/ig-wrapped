@@ -1,112 +1,167 @@
 import type { UnifiedAccount } from "@/types/insights";
 import type { RealOnesAccount } from "@/types/insights";
+import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 
-const SILENT_MUTUAL_CAP = 35;
+function attributableEngagement(account: UnifiedAccount): number {
+  let total = 0;
+  if (account.likesAttribution === "attributed") total += account.likedCount;
+  if (account.commentsAttribution === "attributed") {
+    total += account.commentedCount;
+  }
+  if (account.storiesAttribution === "attributed") {
+    total += account.storyInteractionCount;
+  }
+  return total;
+}
 
-function hasMeaningfulInteraction(account: UnifiedAccount): boolean {
-  return (
-    account.dmMessageCount > 0 ||
-    account.groupMessageCount >= 3 ||
-    account.likedCount + account.commentedCount + account.storyInteractionCount >
-      0
+function buildRankReason(
+  account: UnifiedAccount,
+  score: number
+): string {
+  const parts: string[] = [];
+  if (account.dmMessageCount > 0) {
+    parts.push(`${account.dmMessageCount.toLocaleString()} direct DMs`);
+  }
+  if (account.isMutual) parts.push("mutual");
+  if (account.lastDmAt) parts.push("recent direct DM");
+  if (parts.length === 0) return `Relationship score ${score}`;
+  return parts.join(" · ");
+}
+
+function computeScoreComponents(
+  account: UnifiedAccount,
+  maxDm: number,
+  now: number
+): {
+  directDmScore: number;
+  balanceScore: number;
+  recencyScore: number;
+  mutualBonus: number;
+  engagementScore: number;
+  realOnesScore: number;
+} {
+  const dmCount = account.dmMessageCount;
+  const directDmScore =
+    dmCount > 0
+      ? Math.min(
+          100,
+          (Math.log10(dmCount + 1) / Math.log10(maxDm + 1)) * 100
+        )
+      : 0;
+
+  const sentMe = account.dmSentByMe ?? 0;
+  const sentThem = account.dmSentByThem ?? 0;
+  const totalSent = sentMe + sentThem;
+  const balanceScore =
+    account.dmSenderSplitAvailable && totalSent > 0
+      ? (1 - Math.abs(sentMe - sentThem) / totalSent) * 100
+      : 50;
+
+  let recencyScore = 0;
+  if (account.lastDmAt) {
+    const days = (now - account.lastDmAt) / 86400;
+    if (days <= 7) recencyScore = 100;
+    else if (days <= 30) recencyScore = 85;
+    else if (days <= 90) recencyScore = 60;
+    else if (days <= 365) recencyScore = 35;
+    else recencyScore = 15;
+  }
+
+  const mutualBonus = account.isMutual
+    ? 100
+    : account.iFollowThem || account.followsMe
+      ? 40
+      : 0;
+
+  const realOnesScore = Math.round(
+    Math.min(
+      100,
+      directDmScore * 0.6 +
+        balanceScore * 0.15 +
+        recencyScore * 0.2 +
+        mutualBonus * 0.05
+    )
   );
+
+  return {
+    directDmScore,
+    balanceScore,
+    recencyScore,
+    mutualBonus,
+    engagementScore: 0,
+    realOnesScore,
+  };
 }
 
 export function computeRealOnesScores(
   accounts: UnifiedAccount[]
 ): RealOnesAccount[] {
   const now = Math.floor(Date.now() / 1000);
-  const monthAgo = now - 30 * 24 * 60 * 60;
+  const maxDm = Math.max(...accounts.map((a) => a.dmMessageCount), 1);
 
   return accounts
-    .filter((a) => !a.isUnknownAccount || a.dmMessageCount > 0)
+    .filter((a) => a.dmMessageCount > 0)
     .map((account) => {
-      const interactionScore =
-        account.likedCount + account.commentedCount + account.storyInteractionCount;
-
-      let score = 0;
-
-      // Direct DMs — strongest signal
-      if (account.dmMessageCount > 0) {
-        score += Math.min(42, Math.log10(account.dmMessageCount + 1) * 16);
-      }
-
-      // Recent direct DM activity
-      if (account.lastDmAt && account.lastDmAt > monthAgo) {
-        score += 18;
-      }
-
-      // Group messages actually sent — weaker
-      if (account.groupMessageCount > 0) {
-        score += Math.min(12, account.groupMessageCount / 15);
-      }
-
-      // Mutual — medium, not dominant
-      if (account.isMutual) score += 12;
-
-      // Story/like/comment tied to username
-      score += Math.min(18, interactionScore * 2);
-
-      // Long connection
-      if (
-        account.firstConnectedAt &&
-        now - account.firstConnectedAt > 365 * 24 * 60 * 60
-      ) {
-        score += 8;
-      }
-
-      // Fast follow-back
-      if (
-        account.followBackTimeMs &&
-        account.followBackTimeMs < 7 * 24 * 60 * 60 * 1000
-      ) {
-        score += 5;
-      }
+      const engagement = attributableEngagement(account);
+      const components = computeScoreComponents(account, maxDm, now);
 
       const isSilentMutual =
         account.isMutual &&
         account.dmMessageCount === 0 &&
-        account.groupMessageCount < 3 &&
-        interactionScore === 0;
-
-      if (isSilentMutual) {
-        score = Math.min(score, SILENT_MUTUAL_CAP);
-      }
-
-      if (!hasMeaningfulInteraction(account) && !account.isMutual) {
-        score = Math.min(score, 15);
-      }
-
-      score = Math.round(Math.max(0, Math.min(100, score)));
-
-      const relationshipLabel = isSilentMutual
-        ? ("Silent mutual" as const)
-        : account.relationshipLabel;
+        engagement === 0 &&
+        (account.groupMessageCount ?? 0) < 2;
 
       return {
         username: account.username,
-        displayName: account.displayName,
-        realOnesScore: score,
+        displayName: formatAccountDisplayName(account.displayName),
+        realOnesScore: components.realOnesScore,
         dmMessageCount: account.dmMessageCount,
         groupMessageCount: account.groupMessageCount,
         isMutual: account.isMutual,
-        relationshipLabel,
+        relationshipLabel: account.relationshipLabel,
         lastDmAt: account.lastDmAt,
         followBackTimeMs: account.followBackTimeMs,
-        interactionScore,
+        interactionScore: engagement,
         isSilentMutual,
         sourceBreakdown: account.sourceBreakdown,
+        rankReason: buildRankReason(account, components.realOnesScore),
+        scoreBreakdown: `DM ${Math.round(components.directDmScore)} · balance ${Math.round(components.balanceScore)} · recency ${Math.round(components.recencyScore)} · mutual ${Math.round(components.mutualBonus)}`,
       };
     })
-    .filter((a) => a.realOnesScore > 0)
-    .sort((a, b) => b.realOnesScore - a.realOnesScore);
+    .filter((a) => !a.isSilentMutual)
+    .sort((a, b) => {
+      if (b.dmMessageCount !== a.dmMessageCount) {
+        return b.dmMessageCount - a.dmMessageCount;
+      }
+      return b.realOnesScore - a.realOnesScore;
+    });
 }
 
 export function computeSilentMutuals(
-  realOnes: RealOnesAccount[]
+  accounts: UnifiedAccount[]
 ): RealOnesAccount[] {
-  return realOnes
-    .filter((a) => a.isSilentMutual)
+  return accounts
+    .filter(
+      (a) =>
+        a.isMutual &&
+        a.dmMessageCount === 0 &&
+        (a.groupMessageCount ?? 0) < 3 &&
+        attributableEngagement(a) === 0 &&
+        !a.isUnknownAccount
+    )
+    .map((a) => ({
+      username: a.username,
+      displayName: formatAccountDisplayName(a.displayName),
+      realOnesScore: 0,
+      dmMessageCount: 0,
+      groupMessageCount: a.groupMessageCount ?? 0,
+      isMutual: true,
+      relationshipLabel: "Silent mutual" as const,
+      lastDmAt: undefined,
+      interactionScore: 0,
+      isSilentMutual: true,
+      rankReason: "Mutual follow only — no direct DMs or interactions in export",
+    }))
     .sort((a, b) => a.displayName.localeCompare(b.displayName))
     .slice(0, 25);
 }
@@ -114,7 +169,7 @@ export function computeSilentMutuals(
 export const REAL_ONES_LEADERBOARDS = {
   topRealOnes: (accounts: RealOnesAccount[]) =>
     [...accounts]
-      .filter((a) => !a.isSilentMutual && a.realOnesScore > SILENT_MUTUAL_CAP)
+      .filter((a) => !a.isSilentMutual && a.dmMessageCount > 0)
       .sort((a, b) => b.realOnesScore - a.realOnesScore)
       .slice(0, 20),
   mostActiveDm: (accounts: RealOnesAccount[]) =>
@@ -134,7 +189,7 @@ export const REAL_ONES_LEADERBOARDS = {
       .slice(0, 20)
       .map((a) => ({
         username: a.username,
-        displayName: a.displayName,
+        displayName: formatAccountDisplayName(a.displayName),
         realOnesScore: 0,
         dmMessageCount: a.dmMessageCount,
         groupMessageCount: a.groupMessageCount,
@@ -143,5 +198,6 @@ export const REAL_ONES_LEADERBOARDS = {
         lastDmAt: a.lastDmAt,
         interactionScore: 0,
         isSilentMutual: false,
+        rankReason: "Longest network connection in export",
       })),
 };

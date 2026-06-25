@@ -8,7 +8,11 @@ import type {
 } from "@/types/instagram";
 import { formatMonthLabel, formatPercent } from "@/lib/formatters";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
-import { normalizeDmThreads } from "@/lib/dmThreads";
+import {
+  isDirectDmThread,
+  normalizeDmThreadList,
+  normalizedThreadToAnalytics,
+} from "@/lib/dmThreads";
 
 export interface FunStatCard {
   id: string;
@@ -41,22 +45,24 @@ export function computeFunStats(params: {
   mostActiveEra?: MostActiveEraData | null;
 }): FunStatCard[] {
   const { network, wrapped, messages, ads, mostActiveEra } = params;
-  const threads = normalizeDmThreads(messages);
+  const normalized = normalizeDmThreadList(messages);
+  const threads = normalized.map(normalizedThreadToAnalytics);
+  const directThreads = normalized.filter(isDirectDmThread).map(normalizedThreadToAnalytics);
 
-  const biggestYapper = threads.length
-    ? [...threads].sort((a, b) => b.messageCount - a.messageCount)[0]
+  const biggestYapper = directThreads.length
+    ? [...directThreads].sort((a, b) => b.messageCount - a.messageCount)[0]
     : null;
 
-  const mostBalanced = threads.length
-    ? [...threads].sort((a, b) => balanceScore(b) - balanceScore(a))[0]
+  const mostBalanced = directThreads.length
+    ? [...directThreads].sort((a, b) => balanceScore(b) - balanceScore(a))[0]
     : null;
 
-  const mostOneSided = threads.length
-    ? [...threads].sort((a, b) => oneSidedScore(b) - oneSidedScore(a))[0]
+  const mostOneSided = directThreads.length
+    ? [...directThreads].sort((a, b) => oneSidedScore(b) - oneSidedScore(a))[0]
     : null;
 
-  const reelsDealer = threads.length
-    ? [...threads].sort(
+  const reelsDealer = directThreads.length
+    ? [...directThreads].sort(
         (a, b) =>
           b.instagramReelLinks +
           b.instagramPostLinks +
@@ -67,14 +73,14 @@ export function computeFunStats(params: {
       )[0]
     : null;
 
-  const oldestActive = threads
+  const oldestActive = directThreads
     .filter((t) => t.firstMessageTimestamp)
     .sort(
       (a, b) =>
         (a.firstMessageTimestamp ?? 0) - (b.firstMessageTimestamp ?? 0)
     )[0];
 
-  const mostRecent = threads
+  const mostRecent = directThreads
     .filter((t) => t.lastMessageTimestamp)
     .sort(
       (a, b) =>
@@ -146,14 +152,21 @@ export function computeFunStats(params: {
       personality = "DM Power User";
   }
 
-  const hiddenName = "••••••••";
+  const hiddenName = "Hidden for sharing";
+
+  const threadLabel = (thread: DmThreadAnalytics | null | undefined) =>
+    thread
+      ? thread.isGroupChat
+        ? `Group · ${thread.participantCount} people`
+        : formatAccountDisplayName(thread.threadName)
+      : "—";
 
   return [
     {
       id: "biggest-yapper",
       title: "Biggest yapper",
       value: biggestYapper
-        ? `${hiddenName} (${biggestYapper.messageCount.toLocaleString()} msgs)`
+        ? `${threadLabel(biggestYapper)} (${biggestYapper.messageCount.toLocaleString()} msgs)`
         : "—",
       description: "Thread with the most messages overall.",
       available: Boolean(biggestYapper),
@@ -161,35 +174,35 @@ export function computeFunStats(params: {
     {
       id: "most-balanced",
       title: "Most balanced chat",
-      value: mostBalanced ? hiddenName : "—",
+      value: threadLabel(mostBalanced),
       description: "Conversation with the most even message split.",
       available: Boolean(mostBalanced),
     },
     {
       id: "most-one-sided",
       title: "Most one-sided chat",
-      value: mostOneSided ? hiddenName : "—",
+      value: threadLabel(mostOneSided),
       description: "Thread where one person sends most messages.",
       available: Boolean(mostOneSided),
     },
     {
       id: "reels-dealer",
       title: "Reels dealer",
-      value: reelsDealer ? hiddenName : "—",
+      value: threadLabel(reelsDealer),
       description: "Thread with the most shared Instagram links.",
       available: Boolean(reelsDealer),
     },
     {
       id: "oldest-dm",
       title: "Oldest active DM",
-      value: oldestActive ? hiddenName : "—",
+      value: threadLabel(oldestActive),
       description: "Longest-running thread by first message date.",
       available: Boolean(oldestActive),
     },
     {
       id: "recent-dm",
       title: "Most recent active DM",
-      value: mostRecent ? hiddenName : "—",
+      value: threadLabel(mostRecent),
       description: "Thread with the latest message activity.",
       available: Boolean(mostRecent),
     },
@@ -287,10 +300,9 @@ export function computeFunStats(params: {
 
 export function resolveFunStatValue(
   card: FunStatCard,
-  showThreadNames: boolean,
-  threads: DmThreadAnalytics[]
+  showNames: boolean,
+  _threads: DmThreadAnalytics[] = []
 ): string {
-  if (!showThreadNames) return card.value;
   const nameCards = [
     "biggest-yapper",
     "most-balanced",
@@ -299,45 +311,12 @@ export function resolveFunStatValue(
     "oldest-dm",
     "recent-dm",
   ];
-  if (!nameCards.includes(card.id)) return card.value;
-
-  const map: Record<string, DmThreadAnalytics | null | undefined> = {
-    "biggest-yapper": [...threads].sort(
-      (a, b) => b.messageCount - a.messageCount
-    )[0],
-    "most-balanced": [...threads].sort(
-      (a, b) => balanceScore(b) - balanceScore(a)
-    )[0],
-    "most-one-sided": [...threads].sort(
-      (a, b) => oneSidedScore(b) - oneSidedScore(a)
-    )[0],
-    "reels-dealer": [...threads].sort(
-      (a, b) =>
-        b.instagramReelLinks +
-        b.instagramPostLinks -
-        (a.instagramReelLinks + a.instagramPostLinks)
-    )[0],
-    "oldest-dm": threads
-      .filter((t) => t.firstMessageTimestamp)
-      .sort(
-        (a, b) =>
-          (a.firstMessageTimestamp ?? 0) - (b.firstMessageTimestamp ?? 0)
-      )[0],
-    "recent-dm": threads
-      .filter((t) => t.lastMessageTimestamp)
-      .sort(
-        (a, b) =>
-          (b.lastMessageTimestamp ?? 0) - (a.lastMessageTimestamp ?? 0)
-      )[0],
-  };
-
-  const thread = map[card.id];
-  if (!thread) return card.value;
-  const label = thread.isGroupChat
-    ? `Group · ${thread.participantCount} people`
-    : formatAccountDisplayName(thread.threadName);
-  if (card.id === "biggest-yapper") {
-    return `${label} (${thread.messageCount.toLocaleString()} msgs)`;
+  if (!showNames && nameCards.includes(card.id)) {
+    if (card.id === "biggest-yapper") {
+      const match = card.value.match(/\([\d,]+ msgs\)$/);
+      return match ? `Hidden for sharing ${match[0]}` : "Hidden for sharing";
+    }
+    return "Hidden for sharing";
   }
-  return label;
+  return card.value;
 }

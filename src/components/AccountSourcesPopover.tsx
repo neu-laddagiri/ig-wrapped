@@ -67,8 +67,7 @@ export function AccountSourcesPopover({
           )}
           {breakdown.isUnknownAccount && (
             <p className="mt-2 text-[10px] leading-relaxed text-amber-200/70">
-              Instagram&apos;s export did not include a usable name. This may be
-              deleted, deactivated, or renamed.
+              Instagram export did not include a stable name for this account.
             </p>
           )}
         </div>

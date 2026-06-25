@@ -23,6 +23,7 @@ import {
   resolveAiReadyMessages,
   threadHasAiSample,
 } from "@/lib/dmMessageSampling";
+import { friendlyAiError } from "@/lib/aiErrorMessages";
 
 const TONE_OPTIONS: { value: DmAiSummaryTone; label: string; hint: string }[] =
   [
@@ -294,16 +295,15 @@ export function DmAiSummarySection({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(
-          typeof data.error === "string"
-            ? data.error
-            : "Could not generate summary."
-        );
+        setError(friendlyAiError(
+          typeof data.error === "string" ? data.error : undefined,
+          "summary"
+        ));
         return;
       }
 
       if (!data.summary) {
-        setError("The AI response could not be formatted. Try regenerating.");
+        setError(friendlyAiError("json parse failed", "summary"));
         return;
       }
 
@@ -314,7 +314,7 @@ export function DmAiSummarySection({
         summary: data.summary as DmAiSummaryResult,
       });
     } catch {
-      setError("Network error. Check your connection and try again.");
+      setError(friendlyAiError("network fetch failed", "summary"));
     } finally {
       setLoading(false);
     }

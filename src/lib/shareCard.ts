@@ -33,9 +33,17 @@ export function buildShareCards(
 
   const cards: ShareCardData[] = [];
 
-  const topDirect = [...(insights?.accounts ?? [])]
+  const directRanked = [...(insights?.accounts ?? [])]
     .filter((a) => a.dmMessageCount > 0)
-    .sort((a, b) => b.dmMessageCount - a.dmMessageCount)[0];
+    .sort((a, b) => b.dmMessageCount - a.dmMessageCount);
+
+  let topDirect = directRanked[0];
+  if (topDirect?.isUnknownAccount && directRanked.length > 1) {
+    const named = directRanked.find((a) => !a.isUnknownAccount);
+    if (named && named.dmMessageCount >= topDirect.dmMessageCount * 0.85) {
+      topDirect = named;
+    }
+  }
 
   const topThread = [...(messages?.threads ?? [])]
     .filter((t) => !t.isGroupChat)

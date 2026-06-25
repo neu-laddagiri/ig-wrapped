@@ -65,9 +65,11 @@ export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabP
     <div className="space-y-6">
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <p className="text-sm text-white/50">
-          {search.totalSearches.toLocaleString()} searches parsed from your
-          export.
+          {search.totalSearches.toLocaleString()} searches · parsed{" "}
+          {search.filesParsed?.length ?? 0} search file
+          {(search.filesParsed?.length ?? 0) === 1 ? "" : "s"}
         </p>
+        <p className="mt-2 text-xs text-white/40">{search.privacyNote}</p>
         {search.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {search.labels.map((l) => (

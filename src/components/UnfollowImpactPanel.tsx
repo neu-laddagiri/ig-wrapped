@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Copy, Download, AlertTriangle } from "lucide-react";
 import type { CleanupAccount } from "@/types/insights";
 import type { NetworkStats } from "@/types/instagram";
+import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 
 type Preset =
   | "high"
@@ -109,11 +110,7 @@ export function UnfollowImpactPanel({
               setPreset(id);
               setSelected(new Set());
             }}
-            className={`rounded-full px-3 py-1 text-xs font-medium ${
-              preset === id
-                ? "animated-gradient-bg text-white"
-                : "border border-white/10 text-white/50"
-            }`}
+            className={preset === id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL}
           >
             {label}
           </button>

@@ -12,6 +12,7 @@ import {
   Handshake,
 } from "lucide-react";
 import type { LinkedInHelperEntry, NetworkStats, NetworkListKey } from "@/types/instagram";
+import { TAB_SELECTED, TAB_INACTIVE } from "@/lib/tabStyles";
 import { SummaryCard } from "@/components/SummaryCard";
 import { AccountTable } from "@/components/AccountTable";
 import { formatNumber, formatPercent } from "@/lib/formatters";
@@ -20,6 +21,19 @@ interface NetworkManagerTabProps {
   network: NetworkStats | null;
   linkedinProgress?: LinkedInHelperEntry[];
   onOpenAccount?: (username: string) => void;
+}
+
+function listCountLabel(
+  network: NetworkStats,
+  key: NetworkListKey
+): string {
+  if (key === "blocked" && network.blockedMeta && !network.blockedMeta.includedInExport) {
+    return "Not in export";
+  }
+  if (key === "restricted" && network.restrictedMeta && !network.restrictedMeta.includedInExport) {
+    return "Not in export";
+  }
+  return formatNumber(network[key].length);
 }
 
 const listConfig: {
@@ -122,13 +136,23 @@ export function NetworkManagerTab({
         />
         <SummaryCard
           label="Blocked"
-          value={formatNumber(network.blocked.length)}
+          value={listCountLabel(network, "blocked")}
+          sublabel={
+            network.blockedMeta?.includedInExport
+              ? network.blockedMeta.sourcePath?.split("/").pop()
+              : "Not included in this export"
+          }
           icon={Ban}
           accent="orange"
         />
         <SummaryCard
           label="Restricted"
-          value={formatNumber(network.restricted.length)}
+          value={listCountLabel(network, "restricted")}
+          sublabel={
+            network.restrictedMeta?.includedInExport
+              ? network.restrictedMeta.sourcePath?.split("/").pop()
+              : "Not included in this export"
+          }
           icon={EyeOff}
           accent="green"
         />
@@ -141,13 +165,13 @@ export function NetworkManagerTab({
               key={item.key}
               type="button"
               onClick={() => setActiveList(item.key)}
-              className={`rounded-xl px-3 py-2 text-xs font-medium transition ${
+              className={
                 activeList === item.key
-                  ? "animated-gradient-bg text-white border border-white/15"
-                  : "bg-white/5 text-white/50 hover:text-white/80 border border-transparent"
-              }`}
+                  ? `${TAB_SELECTED} text-xs`
+                  : `${TAB_INACTIVE} text-xs hover:text-white/80`
+              }
             >
-              {item.label} ({formatNumber(network[item.key].length)})
+              {item.label} ({listCountLabel(network, item.key)})
             </button>
           ))}
         </div>

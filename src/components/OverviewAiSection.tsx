@@ -5,7 +5,9 @@ import { Sparkles, Loader2 } from "lucide-react";
 import type { OverviewAiSummaryResult, OverviewAiTone } from "@/types/overviewAiSummary";
 import type { ParsedExportData } from "@/types/instagram";
 import type { LinkedInHelperEntry } from "@/types/instagram";
+import { friendlyAiError } from "@/lib/aiErrorMessages";
 import { buildOverviewMetrics } from "@/lib/overviewMetrics";
+import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 
 const TONES: { id: OverviewAiTone; label: string }[] = [
   { id: "wrapped", label: "Wrapped" },
@@ -45,12 +47,12 @@ export function OverviewAiSection({
       });
       const data = await res.json();
       if (!res.ok) {
-        setError(data.error ?? "Could not generate recap.");
+        setError(friendlyAiError(data.error, "recap"));
         return;
       }
       onSummaryChange(data.summary);
     } catch {
-      setError("Network error. Try again.");
+      setError(friendlyAiError("network fetch failed", "recap"));
     } finally {
       setLoading(false);
     }
@@ -74,11 +76,7 @@ export function OverviewAiSection({
               key={t.id}
               type="button"
               onClick={() => setTone(t.id)}
-              className={`rounded-full px-3 py-1 text-xs font-medium ${
-                tone === t.id
-                  ? "animated-gradient-bg text-white"
-                  : "border border-white/10 text-white/50"
-              }`}
+              className={tone === t.id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL}
             >
               {t.label}
             </button>
@@ -96,7 +94,11 @@ export function OverviewAiSection({
         Generate Overall Recap
       </button>
 
-      {error && <p className="mt-3 text-sm text-red-300/90">{error}</p>}
+      {error && (
+        <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+          {error}
+        </p>
+      )}
 
       {summary && (
         <div className="mt-5 grid gap-3 sm:grid-cols-2">

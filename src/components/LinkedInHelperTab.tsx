@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Briefcase,
   Download,
@@ -16,29 +16,56 @@ import type {
   NetworkStats,
   PageSize,
 } from "@/types/instagram";
-import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
-import { linkedInSearchUrl, instagramProfileUrl } from "@/lib/formatters";
+import type { CanonicalAccount } from "@/lib/canonicalAccounts";
 import {
-  getAccountsForLinkedInSource,
-  mergeAccountsToLinkedInEntries,
-} from "@/lib/networkAccountDetail";
+  compareCanonicalForLinkedIn,
+  indexFromCanonicalList,
+} from "@/lib/canonicalAccounts";
+import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
+import { instagramProfileUrl } from "@/lib/formatters";
+import { getAccountsForLinkedInSource } from "@/lib/networkAccountDetail";
 import {
   loadLinkedInProgress,
   saveLinkedInProgress,
   clearLinkedInProgress,
 } from "@/lib/linkedinStorage";
-import { TablePagination, paginate } from "@/components/TablePagination";
 import {
-  AccountDetailDrawer,
-  useAccountDetail,
-} from "@/components/AccountDetailDrawer";
+  computeLinkedInInteractionScore,
+  computeNetworkOnlyInteractionScore,
+  isSilentMutualCanonical,
+  type LinkedInInteractionScore,
+} from "@/lib/linkedinInteractionScore";
+import { TablePagination, paginate } from "@/components/TablePagination";
 
 interface LinkedInHelperTabProps {
   network: NetworkStats | null;
   fingerprint: string;
+  canonicalAccounts: CanonicalAccount[];
   entries: LinkedInHelperEntry[];
   onEntriesChange: (entries: LinkedInHelperEntry[]) => void;
+  onOpenAccount: (accountKey: string) => void;
 }
+
+type SortMode =
+  | "most-interacted"
+  | "direct-dms"
+  | "recent-dm"
+  | "mutuals-first"
+  | "followers"
+  | "following"
+  | "alphabetical"
+  | "not-reviewed";
+
+type InteractionFilter =
+  | "all"
+  | "direct-dm"
+  | "mutuals"
+  | "hide-unknown"
+  | "hide-silent"
+  | "dont-follow-back"
+  | "i-dont-follow-back"
+  | "not-reviewed"
+  | "has-notes";
 
 const STATUS_OPTIONS: { value: LinkedInStatus; label: string }[] = [
   { value: "not-reviewed", label: "Not reviewed" },
@@ -58,21 +85,152 @@ const SOURCE_OPTIONS: { value: LinkedInSource; label: string }[] = [
   { value: "iDontFollowBack", label: "I don't follow back" },
 ];
 
+const SORT_OPTIONS: { value: SortMode; label: string }[] = [
+  { value: "most-interacted", label: "Most interacted" },
+  { value: "direct-dms", label: "Direct DMs" },
+  { value: "recent-dm", label: "Recent DM activity" },
+  { value: "mutuals-first", label: "Mutuals first" },
+  { value: "followers", label: "Followers" },
+  { value: "following", label: "Following" },
+  { value: "alphabetical", label: "Alphabetical" },
+  { value: "not-reviewed", label: "Not reviewed" },
+];
+
+const INTERACTION_FILTERS: { value: InteractionFilter; label: string }[] = [
+  { value: "all", label: "All accounts" },
+  { value: "direct-dm", label: "Direct DM contacts only" },
+  { value: "mutuals", label: "Mutuals only" },
+  { value: "hide-unknown", label: "Hide unknown/deleted" },
+  { value: "hide-silent", label: "Hide silent mutuals" },
+  { value: "dont-follow-back", label: "Don't follow me back" },
+  { value: "i-dont-follow-back", label: "I don't follow back" },
+  { value: "not-reviewed", label: "Not reviewed" },
+  { value: "has-notes", label: "Has notes" },
+];
+
+interface LinkedInRow {
+  entry: LinkedInHelperEntry;
+  accountKey: string;
+  displayLabel: string;
+  secondaryLabel: string;
+  interaction: LinkedInInteractionScore;
+  canonical?: CanonicalAccount;
+}
+
+function compareRows(a: LinkedInRow, b: LinkedInRow, sortMode: SortMode): number {
+  switch (sortMode) {
+    case "alphabetical":
+      return a.displayLabel.localeCompare(b.displayLabel);
+    case "direct-dms":
+      return b.interaction.directDmCount - a.interaction.directDmCount;
+    case "recent-dm": {
+      const aTs = a.interaction.lastDmAt ?? 0;
+      const bTs = b.interaction.lastDmAt ?? 0;
+      return bTs - aTs;
+    }
+    case "mutuals-first": {
+      const aM = a.canonical?.isMutual ? 1 : 0;
+      const bM = b.canonical?.isMutual ? 1 : 0;
+      if (bM !== aM) return bM - aM;
+      if (a.canonical && b.canonical) {
+        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
+      }
+      return b.interaction.score - a.interaction.score;
+    }
+    case "followers": {
+      const aF = a.canonical?.followsMe ? 1 : 0;
+      const bF = b.canonical?.followsMe ? 1 : 0;
+      if (bF !== aF) return bF - aF;
+      if (a.canonical && b.canonical) {
+        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
+      }
+      return b.interaction.score - a.interaction.score;
+    }
+    case "following": {
+      const aF = a.canonical?.iFollowThem ? 1 : 0;
+      const bF = b.canonical?.iFollowThem ? 1 : 0;
+      if (bF !== aF) return bF - aF;
+      if (a.canonical && b.canonical) {
+        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
+      }
+      return b.interaction.score - a.interaction.score;
+    }
+    case "not-reviewed": {
+      const aN = a.entry.status === "not-reviewed" ? 1 : 0;
+      const bN = b.entry.status === "not-reviewed" ? 1 : 0;
+      if (bN !== aN) return bN - aN;
+      if (a.canonical && b.canonical) {
+        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
+      }
+      return b.interaction.score - a.interaction.score;
+    }
+    case "most-interacted":
+    default: {
+      if (a.canonical && b.canonical) {
+        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
+      }
+      const dmDiff =
+        b.interaction.directDmCount - a.interaction.directDmCount;
+      if (dmDiff !== 0) return dmDiff;
+      const aTs = a.interaction.lastDmAt ?? 0;
+      const bTs = b.interaction.lastDmAt ?? 0;
+      if (bTs !== aTs) return bTs - aTs;
+      return b.interaction.score - a.interaction.score;
+    }
+  }
+}
+
+function openLinkedInSearch(username: string, displayName: string) {
+  const query =
+    displayName && displayName !== username
+      ? `"${displayName}" LinkedIn`
+      : `"${username}" Instagram LinkedIn`;
+  window.open(
+    `https://www.google.com/search?q=${encodeURIComponent(query)}`,
+    "_blank",
+    "noopener,noreferrer"
+  );
+}
+
 export function LinkedInHelperTab({
   network,
   fingerprint,
+  canonicalAccounts,
   entries,
   onEntriesChange,
+  onOpenAccount,
 }: LinkedInHelperTabProps) {
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [source, setSource] = useState<LinkedInSource>("all");
   const [statusFilter, setStatusFilter] = useState<LinkedInStatus | "all">(
     "all"
   );
+  const [sortMode, setSortMode] = useState<SortMode>("most-interacted");
+  const [interactionFilter, setInteractionFilter] =
+    useState<InteractionFilter>("hide-unknown");
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState<PageSize>(50);
-  const [initialized, setInitialized] = useState(false);
-  const accountDetail = useAccountDetail();
+  const [pageSize, setPageSize] = useState<PageSize>(25);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 250);
+    return () => window.clearTimeout(timer);
+  }, [searchInput]);
+
+  const canonicalIndex = useMemo(
+    () => indexFromCanonicalList(canonicalAccounts),
+    [canonicalAccounts]
+  );
+
+  const entryByUsername = useMemo(() => {
+    const map = new Map<string, LinkedInHelperEntry>();
+    for (const entry of entries) {
+      map.set(entry.username, entry);
+    }
+    return map;
+  }, [entries]);
 
   const sourceAccounts = useMemo(() => {
     if (!network) return [];
@@ -80,286 +238,374 @@ export function LinkedInHelperTab({
   }, [network, source]);
 
   useEffect(() => {
-    if (!network || !fingerprint || initialized) return;
+    if (!fingerprint || progressLoaded) return;
     const stored = loadLinkedInProgress(fingerprint);
-    const allAccounts = getAccountsForLinkedInSource(network, "all");
-    const merged = mergeAccountsToLinkedInEntries(allAccounts, stored);
-    onEntriesChange(merged);
-    setInitialized(true);
-  }, [network, fingerprint, initialized, onEntriesChange]);
+    if (stored?.length) onEntriesChange(stored);
+    setProgressLoaded(true);
+  }, [fingerprint, progressLoaded, onEntriesChange]);
 
   useEffect(() => {
-    if (!fingerprint || entries.length === 0) return;
-    saveLinkedInProgress(fingerprint, entries);
-  }, [entries, fingerprint]);
+    if (!fingerprint || !progressLoaded || entries.length === 0) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveLinkedInProgress(fingerprint, entries);
+    }, 400);
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, [entries, fingerprint, progressLoaded]);
 
   useEffect(() => {
     setPage(1);
-  }, [search, source, statusFilter]);
+  }, [debouncedSearch, source, statusFilter, sortMode, interactionFilter]);
 
-  const displayEntries = useMemo(() => {
-    const entryMap = new Map(entries.map((e) => [e.username, e]));
-    const q = search.trim().toLowerCase();
+  const baseRows = useMemo((): LinkedInRow[] => {
+    if (!network) return [];
 
-    return sourceAccounts
-      .map(
-        (a) =>
-          entryMap.get(a.username) ?? {
-            username: a.username,
-            displayUsername: a.displayUsername,
-            instagramHref: a.href ?? instagramProfileUrl(a.username),
-            status: "not-reviewed" as LinkedInStatus,
-            notes: "",
-            category: a.category,
-          }
-      )
-      .filter((e) => {
-        if (statusFilter !== "all" && e.status !== statusFilter) return false;
-        if (!q) return true;
-        return (
-          e.username.includes(q) ||
-          e.displayUsername.toLowerCase().includes(q) ||
-          (e.category?.toLowerCase().includes(q) ?? false)
-        );
-      })
-      .sort((a, b) => a.displayUsername.localeCompare(b.displayUsername));
-  }, [entries, sourceAccounts, search, statusFilter]);
+    return sourceAccounts.map((a) => {
+      const canonical =
+        canonicalIndex.byUsername.get(a.username) ??
+        canonicalIndex.byUsername.get(a.username.toLowerCase());
+      const entry =
+        entryByUsername.get(a.username) ?? {
+          username: a.username,
+          displayUsername: a.displayUsername,
+          instagramHref: a.href ?? instagramProfileUrl(a.username),
+          status: "not-reviewed" as LinkedInStatus,
+          notes: "",
+          category: a.category,
+        };
 
-  const pagedEntries = paginate(displayEntries, page, pageSize);
+      const interaction = canonical
+        ? computeLinkedInInteractionScore(canonical)
+        : computeNetworkOnlyInteractionScore(a.category);
 
-  const updateEntry = (
-    username: string,
-    patch: Partial<LinkedInHelperEntry>
-  ) => {
-    const map = new Map(entries.map((e) => [e.username, e]));
-    const existing = map.get(username) ?? {
-      username,
-      displayUsername: username,
-      status: "not-reviewed" as LinkedInStatus,
-      notes: "",
-    };
-    map.set(username, { ...existing, ...patch });
-    onEntriesChange(Array.from(map.values()));
-  };
+      const accountKey = canonical?.key ?? a.username;
+      const displayLabel = canonical?.displayLabel ?? a.displayUsername;
+      const secondaryLabel = canonical?.secondaryLabel ?? `@${a.username}`;
 
-  const handleClearLocal = () => {
-    if (!fingerprint || !network) return;
-    if (!confirm("Clear all local LinkedIn Helper progress for this export?")) {
-      return;
-    }
-    clearLinkedInProgress(fingerprint);
-    const allAccounts = getAccountsForLinkedInSource(network, "all");
-    onEntriesChange(mergeAccountsToLinkedInEntries(allAccounts, null));
-  };
+      return {
+        entry,
+        accountKey,
+        displayLabel,
+        secondaryLabel,
+        interaction,
+        canonical,
+      };
+    });
+  }, [network, sourceAccounts, canonicalIndex, entryByUsername]);
 
-  const linkedinForSelected = entries.find(
-    (e) => e.username === accountDetail.selectedUsername
+  const displayRows = useMemo(() => {
+    const q = debouncedSearch.trim().toLowerCase();
+
+    const filtered = baseRows.filter(({ entry, interaction, canonical, displayLabel, secondaryLabel }) => {
+      if (statusFilter !== "all" && entry.status !== statusFilter) {
+        return false;
+      }
+      if (
+        q &&
+        !entry.username.includes(q) &&
+        !entry.displayUsername.toLowerCase().includes(q) &&
+        !displayLabel.toLowerCase().includes(q) &&
+        !secondaryLabel.toLowerCase().includes(q) &&
+        !(entry.category?.toLowerCase().includes(q) ?? false)
+      ) {
+        return false;
+      }
+
+      const isUnknown =
+        interaction.isUnknown ||
+        canonical?.isUnknownAccount ||
+        entry.username.startsWith("unknown:");
+
+      const silent =
+        interaction.isSilentMutual ||
+        (canonical ? isSilentMutualCanonical(canonical) : false);
+
+      if (interactionFilter === "hide-unknown" && isUnknown) return false;
+      if (interactionFilter === "hide-silent" && silent) return false;
+      if (
+        interactionFilter === "direct-dm" &&
+        interaction.directDmCount === 0
+      ) {
+        return false;
+      }
+      if (interactionFilter === "mutuals" && !canonical?.isMutual) return false;
+      if (
+        interactionFilter === "dont-follow-back" &&
+        entry.category !== "dontFollowMeBack"
+      ) {
+        return false;
+      }
+      if (
+        interactionFilter === "i-dont-follow-back" &&
+        entry.category !== "iDontFollowBack"
+      ) {
+        return false;
+      }
+      if (
+        interactionFilter === "not-reviewed" &&
+        entry.status !== "not-reviewed"
+      ) {
+        return false;
+      }
+      if (interactionFilter === "has-notes" && !entry.notes.trim()) {
+        return false;
+      }
+
+      return true;
+    });
+
+    return [...filtered].sort((a, b) => compareRows(a, b, sortMode));
+  }, [
+    baseRows,
+    debouncedSearch,
+    statusFilter,
+    interactionFilter,
+    sortMode,
+  ]);
+
+  const pagedRows = useMemo(
+    () => paginate(displayRows, page, pageSize),
+    [displayRows, page, pageSize]
   );
+
+  const updateEntry = useCallback(
+    (username: string, patch: Partial<LinkedInHelperEntry>) => {
+      onEntriesChange(
+        entries.map((e) =>
+          e.username === username ? { ...e, ...patch } : e
+        )
+      );
+    },
+    [entries, onEntriesChange]
+  );
+
+  const handleExport = useCallback(() => {
+    if (!network) return;
+    exportLinkedInHelperCsv(
+      displayRows.map(({ entry }) => entry),
+      "linkedin-helper.csv"
+    );
+  }, [network, displayRows]);
+
+  const handleClearProgress = useCallback(() => {
+    if (!fingerprint) return;
+    if (!confirm("Clear all LinkedIn helper progress for this export?")) return;
+    clearLinkedInProgress(fingerprint);
+    onEntriesChange([]);
+  }, [fingerprint, onEntriesChange]);
 
   if (!network) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
-        <Briefcase className="mx-auto h-10 w-10 text-white/20" />
-        <h3 className="mt-4 text-lg font-semibold text-white">
-          Network data required
-        </h3>
-        <p className="mx-auto mt-2 max-w-md text-sm text-white/45">
-          Upload an export with followers/following data to use the LinkedIn
-          Helper.
-        </p>
-      </div>
+      <p className="py-12 text-center text-sm text-white/40">
+        Upload an export with followers/following data to use LinkedIn helper.
+      </p>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <AccountDetailDrawer
-        open={accountDetail.isOpen}
-        onClose={accountDetail.closeAccount}
-        username={accountDetail.selectedUsername}
-        network={network}
-        linkedinEntry={linkedinForSelected}
-      />
-
-      <div className="rounded-2xl border border-[#515BD4]/20 bg-[#515BD4]/10 p-4">
-        <div className="flex items-start gap-3">
-          <Info className="mt-0.5 h-5 w-5 text-[#818cf8]" />
-          <div>
-            <p className="text-sm font-medium text-white/90">
-              Manual networking helper
-            </p>
-            <p className="mt-1 text-xs text-white/50">
-              Google search links only — no scraping or automation. All{" "}
-              {getAccountsForLinkedInSource(network, "all").length.toLocaleString()}{" "}
-              network accounts available with pagination.
-            </p>
-          </div>
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-white">LinkedIn helper</h2>
+          <p className="text-xs text-white/40">
+            Review network accounts and find them on LinkedIn. DM rankings use
+            the same data as the DMs tab.
+          </p>
         </div>
-      </div>
-
-      <div className="flex flex-col gap-3">
         <div className="flex flex-wrap gap-2">
-          {SOURCE_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setSource(opt.value)}
-              className={`rounded-xl px-3 py-1.5 text-xs font-medium transition ${
-                source === opt.value
-                  ? "bg-white/10 text-white border border-white/15"
-                  : "text-white/45 hover:text-white/70 border border-transparent"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <select
-            value={statusFilter}
-            onChange={(e) =>
-              setStatusFilter(e.target.value as LinkedInStatus | "all")
-            }
-            className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none"
-          >
-            <option value="all">All statuses</option>
-            {STATUS_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-          <div className="relative flex-1 min-w-[200px]">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
-            <input
-              type="text"
-              placeholder="Search username, display name, category…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#515BD4]/40"
-            />
-          </div>
           <button
             type="button"
-            onClick={() => exportLinkedInHelperCsv(entries, "linkedin-helper.csv")}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/80 hover:bg-white/10"
+            onClick={handleExport}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
           >
             <Download className="h-3.5 w-3.5" />
-            Export all CSV
+            Export CSV
           </button>
           <button
             type="button"
-            onClick={handleClearLocal}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-white/50 hover:bg-white/10"
+            onClick={handleClearProgress}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300/80 hover:bg-red-500/20"
           >
             <Trash2 className="h-3.5 w-3.5" />
-            Clear local progress
+            Clear progress
           </button>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] text-left text-sm">
-            <thead>
-              <tr className="border-b border-white/10 text-xs uppercase tracking-wider text-white/40">
-                <th className="px-4 py-3">Username</th>
-                <th className="px-4 py-3">Category</th>
-                <th className="px-4 py-3">Instagram</th>
-                <th className="px-4 py-3">LinkedIn</th>
-                <th className="px-4 py-3">Status</th>
-                <th className="px-4 py-3">Notes</th>
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Search username or name…"
+            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40"
+          />
+        </div>
+        <select
+          value={source}
+          onChange={(e) => setSource(e.target.value as LinkedInSource)}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+        >
+          {SOURCE_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={sortMode}
+          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+        >
+          {SORT_OPTIONS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              Sort: {opt.label}
+            </option>
+          ))}
+        </select>
+        <select
+          value={interactionFilter}
+          onChange={(e) =>
+            setInteractionFilter(e.target.value as InteractionFilter)
+          }
+          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+        >
+          {INTERACTION_FILTERS.map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      <div className="flex items-start gap-2 rounded-xl border border-[#515BD4]/20 bg-[#515BD4]/8 px-3 py-2 text-xs text-white/50">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#818cf8]" />
+        <p>
+          Most interacted ranks by direct 1-on-1 DM count (same as DMs tab), then
+          recency, then mutual status. Network-only accounts stay at the bottom.
+        </p>
+      </div>
+
+      <div className="overflow-x-auto rounded-2xl border border-white/10">
+        <table className="w-full min-w-[800px] text-left text-sm">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/[0.02] text-xs uppercase tracking-wider text-white/40">
+              <th className="px-4 py-3">Account</th>
+              <th className="px-4 py-3">Rank score</th>
+              <th className="px-4 py-3">Why ranked</th>
+              <th className="px-4 py-3">Category</th>
+              <th className="px-4 py-3">Instagram</th>
+              <th className="px-4 py-3">LinkedIn</th>
+              <th className="px-4 py-3">Status</th>
+              <th className="px-4 py-3">Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            {pagedRows.length === 0 ? (
+              <tr>
+                <td
+                  colSpan={8}
+                  className="px-4 py-12 text-center text-white/40"
+                >
+                  No accounts match your filters.
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {pagedEntries.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-4 py-12 text-center text-white/40">
-                    No accounts match your filters.
+            ) : (
+              pagedRows.map(({ entry, accountKey, displayLabel, secondaryLabel, interaction }) => (
+                <tr
+                  key={entry.username}
+                  className="border-b border-white/5 hover:bg-white/[0.03]"
+                >
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => onOpenAccount(accountKey)}
+                      className="text-left font-medium text-white hover:text-[#DD2A7B]"
+                    >
+                      {displayLabel}
+                    </button>
+                    <p className="text-[10px] text-white/35">{secondaryLabel}</p>
+                  </td>
+                  <td className="px-4 py-3 font-semibold tabular-nums text-white">
+                    {interaction.directDmCount > 0
+                      ? interaction.directDmCount.toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="max-w-[220px] px-4 py-3 text-xs leading-snug text-white/45">
+                    {interaction.reason}
+                  </td>
+                  <td className="max-w-[100px] truncate px-4 py-3 text-xs capitalize text-white/45">
+                    {entry.category ?? "—"}
+                  </td>
+                  <td className="px-4 py-3">
+                    <a
+                      href={entry.instagramHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
+                    >
+                      IG profile
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </td>
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() =>
+                        openLinkedInSearch(entry.username, displayLabel)
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
+                    >
+                      <Briefcase className="h-3 w-3" />
+                      Search LinkedIn
+                    </button>
+                  </td>
+                  <td className="px-4 py-3">
+                    <select
+                      value={entry.status}
+                      onChange={(e) =>
+                        updateEntry(entry.username, {
+                          status: e.target.value as LinkedInStatus,
+                        })
+                      }
+                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
+                    >
+                      {STATUS_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <input
+                      type="text"
+                      value={entry.notes}
+                      onChange={(e) =>
+                        updateEntry(entry.username, { notes: e.target.value })
+                      }
+                      placeholder="Add note…"
+                      className="w-full min-w-[100px] rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/25 outline-none"
+                    />
                   </td>
                 </tr>
-              ) : (
-                pagedEntries.map((entry) => (
-                  <tr
-                    key={entry.username}
-                    className="border-b border-white/5 hover:bg-white/[0.03]"
-                  >
-                    <td className="px-4 py-3">
-                      <button
-                        type="button"
-                        onClick={() => accountDetail.openAccount(entry.username)}
-                        className="font-medium text-white hover:text-[#DD2A7B]"
-                      >
-                        @{entry.displayUsername}
-                      </button>
-                    </td>
-                    <td className="max-w-[140px] truncate px-4 py-3 text-xs capitalize text-white/45">
-                      {entry.category ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={entry.instagramHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
-                      >
-                        IG <ExternalLink className="h-3 w-3" />
-                      </a>
-                    </td>
-                    <td className="px-4 py-3">
-                      <a
-                        href={linkedInSearchUrl(entry.displayUsername)}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
-                      >
-                        <Briefcase className="h-3 w-3" />
-                        Search
-                      </a>
-                    </td>
-                    <td className="px-4 py-3">
-                      <select
-                        value={entry.status}
-                        onChange={(e) =>
-                          updateEntry(entry.username, {
-                            status: e.target.value as LinkedInStatus,
-                          })
-                        }
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
-                      >
-                        {STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                    <td className="px-4 py-3">
-                      <input
-                        type="text"
-                        value={entry.notes}
-                        onChange={(e) =>
-                          updateEntry(entry.username, { notes: e.target.value })
-                        }
-                        placeholder="Add note…"
-                        className="w-full min-w-[100px] rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/25 outline-none"
-                      />
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        <TablePagination
-          total={displayEntries.length}
-          page={page}
-          pageSize={pageSize}
-          onPageChange={setPage}
-          onPageSizeChange={setPageSize}
-        />
+              ))
+            )}
+          </tbody>
+        </table>
       </div>
+
+      <TablePagination
+        page={page}
+        pageSize={pageSize}
+        total={displayRows.length}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
+      />
     </div>
   );
 }

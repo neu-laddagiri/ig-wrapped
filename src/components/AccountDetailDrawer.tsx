@@ -1,21 +1,24 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ExternalLink, Briefcase, Copy, Check } from "lucide-react";
+import { X, ExternalLink, Briefcase, Copy, Check, ChevronDown } from "lucide-react";
 import { useState } from "react";
 import type {
   AccountNetworkDetail,
   LinkedInHelperEntry,
   NetworkStats,
 } from "@/types/instagram";
-import type { UnifiedAccount } from "@/types/insights";
-import type { InsightsBundle } from "@/types/insights";
+import type { UnifiedAccount, InsightsBundle } from "@/types/insights";
+import type { AccountReceipt } from "@/lib/accountReceipt";
+import { buildAccountReceipt } from "@/lib/accountReceipt";
+import { getDisplayLabel, getSecondaryLabel } from "@/lib/accountIdentity";
 import { computeAccountFlags } from "@/lib/accountInsights";
 import { buildAccountNetworkDetail } from "@/lib/networkAccountDetail";
+import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
+import { AccountCrmPanel } from "@/components/AccountCrmPanel";
 import {
   formatTimestamp,
   linkedInSearchUrl,
-  normalizeUsername,
 } from "@/lib/formatters";
 
 interface AccountDetailDrawerProps {
@@ -25,7 +28,9 @@ interface AccountDetailDrawerProps {
   network: NetworkStats | null;
   linkedinEntry?: LinkedInHelperEntry;
   unifiedAccount?: UnifiedAccount;
+  receipt?: AccountReceipt | null;
   insights?: InsightsBundle | null;
+  fileFingerprint?: string;
 }
 
 function DetailRow({
@@ -51,6 +56,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
+function dmThreadLabel(dm?: AccountReceipt["dm"], u?: UnifiedAccount): string {
+  const count = dm?.directDmCount ?? u?.dmMessageCount ?? 0;
+  if (count > 0 || dm?.hasDirectThread || u?.hasDmThread) return "Yes";
+  if (u?.dmMatchStatus === "possible") return "Possible";
+  return "No";
+}
+
 export function AccountDetailDrawer({
   open,
   onClose,
@@ -58,23 +70,45 @@ export function AccountDetailDrawer({
   network,
   linkedinEntry,
   unifiedAccount,
+  receipt: receiptProp,
   insights,
+  fileFingerprint = "",
 }: AccountDetailDrawerProps) {
   const [copied, setCopied] = useState(false);
+  const [sourcesOpen, setSourcesOpen] = useState(false);
 
-  if (!username || !network) return null;
+  if (!username) return null;
 
-  const detail: AccountNetworkDetail | null = buildAccountNetworkDetail(
-    network,
-    username,
-    linkedinEntry
-  );
+  const detail: AccountNetworkDetail | null = network
+    ? buildAccountNetworkDetail(network, username, linkedinEntry)
+    : null;
 
-  if (!detail) return null;
+  const receipt =
+    receiptProp ??
+    (network
+      ? buildAccountReceipt({
+          username,
+          network,
+          unified: unifiedAccount,
+          dmSlice: insights?.dmReceiptByUsername?.[username],
+          linkedinEntry,
+        })
+      : null);
 
+  if (!detail && !receipt && !unifiedAccount) return null;
+
+  const displayUsername =
+    detail?.displayUsername ?? receipt?.displayName ?? username;
+  const profileUsername = detail?.username ?? receipt?.username ?? username;
+  const profileHref =
+    detail?.href ??
+    (profileUsername.startsWith("thread:") ||
+    profileUsername.startsWith("unknown:")
+      ? "#"
+      : `https://instagram.com/${profileUsername.replace(/^@/, "")}`);
   const copyUsername = async () => {
     try {
-      await navigator.clipboard.writeText(detail.displayUsername);
+      await navigator.clipboard.writeText(profileUsername);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
@@ -83,7 +117,13 @@ export function AccountDetailDrawer({
   };
 
   const u = unifiedAccount;
+  const dm = receipt?.dm;
   const flags = u ? computeAccountFlags(u, insights) : { green: [], red: [] };
+  const realOne = insights?.realOnes.find(
+    (r) =>
+      r.username === profileUsername ||
+      r.username === u?.username
+  );
 
   return (
     <AnimatePresence>
@@ -106,9 +146,9 @@ export function AccountDetailDrawer({
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
                 <h2 className="text-lg font-semibold text-white">
-                  @{detail.displayUsername}
+                  {getSecondaryLabel({ username: profileUsername })}
                 </h2>
-                <p className="text-xs text-white/40">Account details</p>
+                <p className="text-xs text-white/40">Friendship receipt</p>
               </div>
               <button
                 type="button"
@@ -120,8 +160,23 @@ export function AccountDetailDrawer({
             </div>
 
             <div className="flex-1 overflow-y-auto px-5 py-4">
+              <div className="mb-4">
+                <p className="text-xl font-semibold text-white">
+                  {getDisplayLabel({
+                    displayName: receipt?.displayName ?? u?.displayName ?? displayUsername,
+                    username: profileUsername,
+                  })}
+                </p>
+                <p className="text-sm text-white/45">
+                  {getSecondaryLabel({ username: profileUsername })}
+                </p>
+              </div>
+
               <div className="mb-4 flex flex-wrap gap-2">
-                {(u ? [u.relationshipLabel] : detail.categories).map((c) => (
+                {(u
+                  ? [u.relationshipLabel]
+                  : detail?.categories ?? []
+                ).map((c) => (
                   <span
                     key={c}
                     className="rounded-full border border-white/10 bg-white/5 px-2.5 py-0.5 text-xs text-white/70"
@@ -132,12 +187,12 @@ export function AccountDetailDrawer({
               </div>
 
               <SectionTitle>Identity</SectionTitle>
-              <DetailRow label="Username" value={`@${detail.username}`} />
+              <DetailRow label="Username" value={getSecondaryLabel({ username: profileUsername })} />
               <DetailRow
                 label="Relationship type"
-                value={u?.relationshipLabel ?? "—"}
+                value={u?.relationshipLabel ?? receipt?.relationshipLabel ?? "—"}
               />
-              {u?.isUnknownAccount && (
+              {(u?.isUnknownAccount || receipt?.isUnknownAccount) && (
                 <p className="mb-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs leading-relaxed text-amber-100/80">
                   Instagram&apos;s export did not include a usable name for this
                   account. This may be a deleted, deactivated, renamed, or
@@ -179,78 +234,101 @@ export function AccountDetailDrawer({
                 </>
               )}
 
-              <SectionTitle>Follow relationship</SectionTitle>
+              <SectionTitle>Network status</SectionTitle>
+              <DetailRow
+                label="Relationship"
+                value={
+                  u?.relationshipLabel ??
+                  receipt?.relationshipLabel ??
+                  (detail?.categories.join(", ") || "—")
+                }
+              />
               <DetailRow
                 label="Follows you"
-                value={detail.followsMe ? "Yes" : "No"}
+                value={(receipt?.followsMe ?? detail?.followsMe) ? "Yes" : "No"}
               />
               <DetailRow
                 label="You follow"
-                value={detail.iFollowThem ? "Yes" : "No"}
-              />
-              <DetailRow label="Mutual" value={detail.isMutual ? "Yes" : "No"} />
-              <DetailRow
-                label="Who followed first"
-                value={u?.whoFollowedFirst ?? "Unknown"}
+                value={(receipt?.iFollowThem ?? detail?.iFollowThem) ? "Yes" : "No"}
               />
               <DetailRow
-                label="Follow-back time"
+                label="Mutual"
+                value={(receipt?.isMutual ?? detail?.isMutual) ? "Yes" : "No"}
+              />
+
+              <SectionTitle>Direct messages</SectionTitle>
+              <DetailRow label="Direct DM thread" value={dmThreadLabel(dm, u)} />
+              <DetailRow
+                label="Direct DM messages"
                 value={
-                  u?.followBackTimeMs
-                    ? `${Math.round(u.followBackTimeMs / 86400000)} days`
-                    : "—"
+                  (dm?.directDmCount ?? u?.dmMessageCount ?? 0) > 0
+                    ? (dm?.directDmCount ?? u?.dmMessageCount ?? 0).toLocaleString()
+                    : "No direct 1-on-1 DM thread matched"
                 }
               />
-
-              <SectionTitle>Relationship timeline</SectionTitle>
+              {(dm?.directDmCount ?? u?.dmMessageCount ?? 0) > 0 &&
+                (dm?.senderSplitAvailable || u?.dmSenderSplitAvailable ? (
+                  <>
+                    <DetailRow
+                      label="Sent by you"
+                      value={(
+                        dm?.sentByMe ??
+                        u?.dmSentByMe
+                      )?.toLocaleString() ?? "—"}
+                    />
+                    <DetailRow
+                      label="Sent by them"
+                      value={(
+                        dm?.sentByThem ??
+                        u?.dmSentByThem
+                      )?.toLocaleString() ?? "—"}
+                    />
+                  </>
+                ) : null)}
               <DetailRow
-                label="They followed you"
-                value={formatTimestamp(detail.followedMeAt)}
+                label="First DM"
+                value={formatTimestamp(dm?.firstDmAt ?? u?.firstDmAt)}
               />
               <DetailRow
-                label="You followed them"
-                value={formatTimestamp(detail.iFollowedAt)}
+                label="Last DM"
+                value={formatTimestamp(dm?.lastDmAt ?? u?.lastDmAt)}
               />
               <DetailRow
-                label="First connected"
-                value={formatTimestamp(u?.firstConnectedAt ?? detail.firstConnectedAt)}
+                label="Match confidence"
+                value={dm?.matchConfidence ?? u?.nameConfidence ?? "—"}
               />
               <DetailRow
-                label="Became mutual"
-                value={formatTimestamp(u?.becameMutualAt ?? detail.becameMutualAt)}
-              />
-
-              <SectionTitle>DM connection</SectionTitle>
-              <DetailRow
-                label="Has DM thread"
-                value={u?.hasDmThread ? "Yes" : "No"}
-              />
-              <DetailRow
-                label="DM messages (1-on-1)"
-                value={u?.dmMessageCount?.toLocaleString() ?? "0"}
+                label="Match source"
+                value={dm?.matchSource ?? u?.dmMatchMethod?.replace(/-/g, " ") ?? "—"}
               />
               {(u?.groupMessageCount ?? 0) > 0 && (
                 <DetailRow
                   label="Group messages sent"
-                  value={u?.groupMessageCount?.toLocaleString() ?? "0"}
+                  value={u!.groupMessageCount!.toLocaleString()}
                 />
               )}
-              <DetailRow
-                label="Last DM"
-                value={formatTimestamp(u?.lastDmAt)}
-              />
 
-              {(u?.likedCount || u?.commentedCount || u?.storyInteractionCount) ? (
-                <>
-                  <SectionTitle>Interaction stats</SectionTitle>
-                  <DetailRow label="Likes" value={u?.likedCount ?? 0} />
-                  <DetailRow label="Comments" value={u?.commentedCount ?? 0} />
-                  <DetailRow
-                    label="Story interactions"
-                    value={u?.storyInteractionCount ?? 0}
-                  />
-                </>
-              ) : null}
+              {u?.dataSourceNotes && u.dataSourceNotes.length > 0 && (
+                <div className="mt-4">
+                  <button
+                    type="button"
+                    onClick={() => setSourcesOpen((o) => !o)}
+                    className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-white/60"
+                  >
+                    Why this says this
+                    <ChevronDown
+                      className={`h-4 w-4 transition ${sourcesOpen ? "rotate-180" : ""}`}
+                    />
+                  </button>
+                  {sourcesOpen && (
+                    <ul className="mt-2 space-y-1 rounded-xl border border-white/8 bg-white/[0.02] px-3 py-2 text-xs text-white/45">
+                      {u.dataSourceNotes.map((note) => (
+                        <li key={note}>• {note}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
 
               {linkedinEntry && (
                 <>
@@ -268,8 +346,29 @@ export function AccountDetailDrawer({
               <SectionTitle>Recommended action</SectionTitle>
               <p className="text-sm text-white/55">
                 {u?.recommendedAction ??
+                  receipt?.recommendedAction ??
                   "Review this account in Network Manager."}
               </p>
+
+              {realOne?.rankReason && (
+                <>
+                  <SectionTitle>Why they ranked</SectionTitle>
+                  <p className="text-sm text-white/55">{realOne.rankReason}</p>
+                </>
+              )}
+
+              {u?.sourceBreakdown && (
+                <div className="mt-3">
+                  <AccountSourcesPopover breakdown={u.sourceBreakdown} />
+                </div>
+              )}
+
+              {fileFingerprint && (
+                <AccountCrmPanel
+                  fingerprint={fileFingerprint}
+                  username={profileUsername}
+                />
+              )}
 
               <p className="mt-4 text-xs leading-relaxed text-white/35">
                 Dates come from Instagram export timestamps. Availability
@@ -291,7 +390,7 @@ export function AccountDetailDrawer({
                 Copy username
               </button>
               <a
-                href={detail.href}
+                href={profileHref}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#DD2A7B]/30 bg-[#DD2A7B]/10 px-3 py-2 text-xs text-[#DD2A7B] hover:bg-[#DD2A7B]/20"
@@ -299,13 +398,13 @@ export function AccountDetailDrawer({
                 Instagram <ExternalLink className="h-3.5 w-3.5" />
               </a>
               <a
-                href={linkedInSearchUrl(detail.displayUsername)}
+                href={linkedInSearchUrl(profileUsername, displayUsername)}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#515BD4]/30 bg-[#515BD4]/10 px-3 py-2 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
               >
                 <Briefcase className="h-3.5 w-3.5" />
-                LinkedIn search
+                Search LinkedIn
               </a>
             </div>
           </motion.aside>
@@ -316,15 +415,21 @@ export function AccountDetailDrawer({
 }
 
 export function useAccountDetail() {
-  const [selectedUsername, setSelectedUsername] = useState<string | null>(
+  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(
     null
   );
 
   return {
-    selectedUsername,
-    openAccount: (username: string) =>
-      setSelectedUsername(normalizeUsername(username)),
-    closeAccount: () => setSelectedUsername(null),
-    isOpen: Boolean(selectedUsername),
+    selectedAccountKey,
+    /** @deprecated use selectedAccountKey */
+    selectedUsername: selectedAccountKey,
+    selectedReceipt: null as AccountReceipt | null,
+    openAccount: (accountKey: string) => {
+      setSelectedAccountKey(accountKey.trim());
+    },
+    closeAccount: () => {
+      setSelectedAccountKey(null);
+    },
+    isOpen: Boolean(selectedAccountKey),
   };
 }

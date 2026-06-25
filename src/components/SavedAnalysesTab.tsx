@@ -130,7 +130,7 @@ export function SavedAnalysesTab({
   };
 
   return (
-    <div className="space-y-6">
+    <div id="saved-analyses-section" className="scroll-mt-28 space-y-6">
       <div className="rounded-2xl border border-[#515BD4]/20 bg-[#515BD4]/10 p-4">
         <p className="text-sm text-white/70">
           <span className="font-medium text-white">Account save enabled.</span>{" "}

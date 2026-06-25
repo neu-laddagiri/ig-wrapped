@@ -3,14 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { ChevronDown, LogOut, Cloud, User } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import type { DashboardTabId } from "@/components/DashboardTabs";
 
 interface AccountMenuProps {
   onSignIn: () => void;
-  onNavigateTab?: (tab: DashboardTabId) => void;
+  onNavigateToSavedAnalyses?: () => void;
 }
 
-export function AccountMenu({ onSignIn, onNavigateTab }: AccountMenuProps) {
+export function AccountMenu({ onSignIn, onNavigateToSavedAnalyses }: AccountMenuProps) {
   const { user, loading, signOut, isConfigured } = useAuth();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -69,7 +68,7 @@ export function AccountMenu({ onSignIn, onNavigateTab }: AccountMenuProps) {
               type="button"
               onClick={() => {
                 setOpen(false);
-                onNavigateTab?.("saved");
+                onNavigateToSavedAnalyses?.();
               }}
               className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-white/80 transition hover:bg-white/5"
             >

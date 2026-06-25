@@ -12,7 +12,11 @@ import { computeFunStats, resolveFunStatValue } from "@/lib/funStats";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
-import type { DmAward, ReplyPatternResult } from "@/types/insights";
+import type { DmAward, ReplyPatternResult, InsightsBundle } from "@/types/insights";
+import { HallOfFameSection } from "@/components/HallOfFameSection";
+import { BurnoutPanel } from "@/components/BurnoutPanel";
+import { SocialAuditSection } from "@/components/SocialAuditSection";
+import { resolveDmAwardLabel } from "@/lib/dmDisplayLabels";
 
 interface FunStatsTabProps {
   network: NetworkStats | null;
@@ -20,9 +24,13 @@ interface FunStatsTabProps {
   messages: DmAnalytics | null;
   ads: AdsPrivacyData | null;
   mostActiveEra: MostActiveEraData | null;
-  showThreadNames: boolean;
+  showNames: boolean;
   dmAwards?: DmAward[];
   replyPatterns?: ReplyPatternResult | null;
+  hallOfFame?: InsightsBundle["hallOfFame"];
+  burnoutMeter?: InsightsBundle["burnoutMeter"];
+  socialAudit?: InsightsBundle["socialAudit"];
+  onOpenAccount?: (username: string) => void;
 }
 
 export function FunStatsTab({
@@ -31,9 +39,13 @@ export function FunStatsTab({
   messages,
   ads,
   mostActiveEra,
-  showThreadNames,
+  showNames,
   dmAwards = [],
   replyPatterns,
+  hallOfFame = [],
+  burnoutMeter,
+  socialAudit = [],
+  onOpenAccount,
 }: FunStatsTabProps) {
   const cards = computeFunStats({
     network,
@@ -97,7 +109,10 @@ export function FunStatsTab({
                 className="rounded-xl border border-[#DD2A7B]/20 bg-[#DD2A7B]/5 px-3 py-2.5"
               >
                 <p className="text-sm font-medium text-white">{award.title}</p>
-                <p className="text-xs text-white/45">{award.description}</p>
+                <p className="text-xs text-[#DD2A7B]/90">
+                  {resolveDmAwardLabel(award, showNames)}
+                </p>
+                <p className="mt-0.5 text-xs text-white/45">{award.description}</p>
               </div>
             ))}
           </div>
@@ -141,6 +156,20 @@ export function FunStatsTab({
         </div>
       )}
 
+      {burnoutMeter && <BurnoutPanel burnout={burnoutMeter} />}
+
+      {hallOfFame && hallOfFame.length > 0 && (
+        <HallOfFameSection
+          awards={hallOfFame}
+          showNames={showNames}
+          onOpenAccount={onOpenAccount}
+        />
+      )}
+
+      {socialAudit && socialAudit.length > 0 && (
+        <SocialAuditSection items={socialAudit} />
+      )}
+
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {cards
           .filter((c) => c.available)
@@ -153,7 +182,7 @@ export function FunStatsTab({
                 {card.title}
               </p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-white">
-                {resolveFunStatValue(card, showThreadNames, threads)}
+                {resolveFunStatValue(card, showNames, threads)}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-white/40">
                 {card.description}

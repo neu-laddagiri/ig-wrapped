@@ -61,11 +61,14 @@ export function ShareWrappedCard({
       <div
         ref={ref}
         className={`relative overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12]/90 ${
-          isHero
-            ? "min-h-[320px] p-8"
-            : "p-6"
+          isHero ? "min-h-[320px]" : ""
         }`}
       >
+        <div
+          className={`animated-gradient-bg ${isHero ? "h-2" : "h-1.5"}`}
+          aria-hidden
+        />
+        <div className={isHero ? "p-8" : "p-6"}>
         <div className="relative">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-[#DD2A7B]" />
@@ -119,6 +122,7 @@ export function ShareWrappedCard({
               );
             })}
           </ul>
+        </div>
         </div>
       </div>
 

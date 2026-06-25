@@ -56,6 +56,13 @@ export interface DmThreadDebugEntry {
   isUnknownAccount: boolean;
 }
 
+export type DmMatchStatus = "matched" | "possible" | "none";
+export type AttributionStatus =
+  | "attributed"
+  | "not_in_export"
+  | "not_matched"
+  | "not_account_level";
+
 export interface UnifiedAccount {
   username: string;
   displayName: string;
@@ -75,9 +82,21 @@ export interface UnifiedAccount {
   /** Messages this account sent in group chats (not membership). */
   groupMessageCount: number;
   lastDmAt?: number;
+  firstDmAt?: number;
+  dmSentByMe?: number;
+  dmSentByThem?: number;
+  dmSenderSplitAvailable?: boolean;
+  dmSenderSplitConfidence?: NameConfidence;
+  dmMatchStatus?: DmMatchStatus;
+  dmMatchMethod?: string;
   likedCount: number;
+  likesAttribution?: AttributionStatus;
   commentedCount: number;
+  commentsAttribution?: AttributionStatus;
   storyInteractionCount: number;
+  storiesAttribution?: AttributionStatus;
+  searchCount?: number;
+  searchAttribution?: AttributionStatus;
   linkedInStatus?: LinkedInStatus;
   linkedInNotes?: string;
   relationshipLabel: RelationshipLabel;
@@ -85,6 +104,8 @@ export interface UnifiedAccount {
   isUnknownAccount?: boolean;
   nameConfidence?: NameConfidence;
   sourceBreakdown?: AccountSourceBreakdown;
+  aliases?: string[];
+  dataSourceNotes?: string[];
 }
 
 export interface CleanupAccount {
@@ -113,6 +134,10 @@ export interface RealOnesAccount {
   interactionScore: number;
   isSilentMutual: boolean;
   sourceBreakdown?: AccountSourceBreakdown;
+  /** Human-readable why they ranked */
+  rankReason?: string;
+  /** Debug: weighted score components */
+  scoreBreakdown?: string;
 }
 
 export interface DmRelationshipInsight {
@@ -316,6 +341,33 @@ export interface DataExplorerFile {
   feature?: string;
 }
 
+export interface IdentityMatchDebugRow {
+  resolvedName: string;
+  username?: string;
+  messageCount: number;
+  matchMethod: string;
+  confidence: NameConfidence;
+  threadTitle?: string;
+}
+
+export interface UnmatchedDmThreadRow {
+  threadId: string;
+  title: string;
+  messageCount: number;
+  participants: string[];
+  folderSlug?: string;
+}
+
+export interface IdentityResolutionDebug {
+  totalCanonicalPeople: number;
+  networkOnlyPeople: number;
+  directDmMatchedPeople: number;
+  possibleDmMatches: number;
+  unmatchedDmThreads: number;
+  topMatches: IdentityMatchDebugRow[];
+  topUnmatched: UnmatchedDmThreadRow[];
+}
+
 export interface DataExplorerMeta {
   files: DataExplorerFile[];
   jsonCount: number;
@@ -323,6 +375,54 @@ export interface DataExplorerMeta {
   totalCount: number;
   leaderboardSources?: Record<string, string>;
   dmThreadDebug?: DmThreadDebugEntry[];
+  identityResolution?: IdentityResolutionDebug;
+  coreAnalytics?: {
+    directDmThreadCount: number;
+    groupDmThreadCount: number;
+    topDirectDmThreads: {
+      rank: number;
+      name: string;
+      messageCount: number;
+      threadTitle?: string;
+    }[];
+    topDmPeople: {
+      rank: number;
+      name: string;
+      username?: string;
+      messageCount: number;
+      matchMethod?: string;
+    }[];
+    topLinkedInMostInteracted: {
+      name: string;
+      username: string;
+      score: number;
+      breakdown: string;
+    }[];
+    topRealOnes: {
+      name: string;
+      username: string;
+      score: number;
+      breakdown: string;
+    }[];
+    validation?: {
+      dmLeaderboardParityOk: boolean;
+      dmLeaderboardParityNotes: string[];
+      blockedIncluded: boolean;
+      restrictedIncluded: boolean;
+      ownerIdentityConfidence: string;
+      ownerIdentityUsernames?: string[];
+      ownerIdentityDisplayNames?: string[];
+      ownerIdentitySources?: string[];
+      interactionExportMeta?: {
+        likesFilePresent: boolean;
+        commentsFilePresent: boolean;
+        storiesFilePresent: boolean;
+        hasAccountLevelLikes: boolean;
+        hasAccountLevelComments: boolean;
+        hasAccountLevelStories: boolean;
+      };
+    };
+  };
 }
 
 export type ConfidenceLevel = "high" | "medium" | "low";
@@ -400,9 +500,77 @@ export interface AccountFlag {
   tone: "green" | "red";
 }
 
+export interface HallOfFameAward {
+  id: string;
+  title: string;
+  winnerLabel: string;
+  winnerUsername?: string;
+  why: string;
+  confidence: ConfidenceLevel;
+  category: "fame" | "shame";
+}
+
+export interface YearbookCard {
+  id: string;
+  superlative: string;
+  winnerLabel: string;
+  winnerUsername?: string;
+  caption: string;
+  category: YearbookCategory;
+  confidence?: ConfidenceLevel;
+  icon?: string;
+}
+
+export type YearbookCategory =
+  | "DMs"
+  | "Network"
+  | "Privacy"
+  | "Ads"
+  | "Search"
+  | "Groups";
+
+export interface AdRoastResult {
+  personality: string;
+  fbiNotes: string;
+  identityCrisisScore: number;
+  topAdvertiser: string;
+  brandsStalkingYou: string[];
+  roastLine: string;
+  confidence: ConfidenceLevel;
+  themedCategories: AdsPrivacyInsights["themedCategories"];
+}
+
+export interface SocialAuditItem {
+  id: string;
+  label: string;
+  tone: "green" | "red";
+  explanation: string;
+  confidence: ConfidenceLevel;
+}
+
+export interface BurnoutMeterResult {
+  confidence: ConfidenceLevel;
+  disclaimer: string;
+  mostActiveHour?: number;
+  mostActiveDay?: string;
+  peakDoomscrollMonth?: string;
+  lateNightScore: number;
+  passiveScrollingRatio: number;
+  touchGrassScore: number;
+  socialBatteryDrain: number;
+  secondHomeMonth?: string;
+  weekendVsWeekday: "weekend" | "weekday" | "balanced";
+  nightOwlScore: number;
+  metrics: { label: string; value: string }[];
+}
+
 export interface InsightsBundle {
   version: number;
   accounts: UnifiedAccount[];
+  /** Canonical DM receipt slices keyed by network username — same source as DMs tab. */
+  dmReceiptByUsername?: import("@/lib/accountReceipt").DmReceiptByUsername;
+  /** Canonical account records — DM stats match DMs tab. */
+  canonicalAccounts?: import("@/lib/canonicalAccounts").CanonicalAccount[];
   cleanup: CleanupAccount[];
   realOnes: RealOnesAccount[];
   silentMutuals: RealOnesAccount[];
@@ -423,4 +591,9 @@ export interface InsightsBundle {
   replyPatterns?: ReplyPatternResult | null;
   networkClusters?: NetworkCluster[];
   wrappedScoreboard?: WrappedScoreboard | null;
+  hallOfFame?: HallOfFameAward[];
+  yearbook?: YearbookCard[];
+  adRoast?: AdRoastResult | null;
+  burnoutMeter?: BurnoutMeterResult | null;
+  socialAudit?: SocialAuditItem[];
 }

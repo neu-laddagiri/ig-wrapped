@@ -1,5 +1,5 @@
 import { parseTimestamp } from "@/lib/formatters";
-import { isValidAccountName } from "@/lib/accountNameFilter";
+import { isValidAccountName, isGenericSearchLabel } from "@/lib/accountNameFilter";
 import type { SearchWrappedResult } from "@/types/insights";
 
 type JsonRecord = Record<string, unknown>;
@@ -51,7 +51,12 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
     for (const field of queryFields) {
       if (typeof field === "string") {
         const q = field.trim();
-        if (q.length > 1 && q.length < 120 && !q.startsWith("http")) {
+        if (
+          q.length > 1 &&
+          q.length < 120 &&
+          !q.startsWith("http") &&
+          !isGenericSearchLabel(q)
+        ) {
           if (isValidAccountName(q) || q.includes(" ") || q.startsWith("@")) {
             results.push({ query: q, ts });
           }
@@ -69,7 +74,7 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
         const v =
           typeof entry.value === "string" ? entry.value.trim() : undefined;
         const t = parseTimestamp(entry.timestamp ?? entry.timestamp_ms);
-        if (v && v.length > 1 && v.length < 120 && !v.startsWith("http")) {
+        if (v && v.length > 1 && v.length < 120 && !v.startsWith("http") && !isGenericSearchLabel(v)) {
           results.push({ query: v, ts: t });
         }
       }
@@ -157,6 +162,6 @@ export function parseSearchHistory(
     filesParsed,
     searchTimeline,
     privacyNote:
-      "Search history can be extremely private. This summary uses parsed counts only — raw search text is not saved to cloud.",
+      "Instagram export may only include search history retained in this download. Search history can be extremely private — raw search text is not saved to cloud.",
   };
 }

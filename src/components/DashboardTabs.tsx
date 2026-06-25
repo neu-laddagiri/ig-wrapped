@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { ElementType } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import {
   LayoutDashboard,
   Users,
@@ -26,7 +26,7 @@ import {
   Menu,
   ListChecks,
   GitCompare,
-  Bot,
+  BookOpen,
 } from "lucide-react";
 
 export type DashboardTabId =
@@ -49,7 +49,8 @@ export type DashboardTabId =
   | "export"
   | "saved"
   | "compare"
-  | "actionplan";
+  | "actionplan"
+  | "yearbook";
 
 type NavGroupId = "dashboard" | "people" | "messages" | "privacy" | "data";
 
@@ -74,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
       { id: "actionplan", label: "Action Plan", icon: ListChecks },
       { id: "wrapped", label: "Wrapped", icon: Sparkles },
       { id: "funstats", label: "Fun Stats", icon: BarChart3 },
+      { id: "yearbook", label: "Yearbook", icon: BookOpen },
       { id: "eras", label: "Eras", icon: Calendar },
       { id: "personality", label: "Personality", icon: Brain },
     ],
@@ -120,7 +122,7 @@ const NAV_GROUPS: NavGroup[] = [
 
 const ALL_TABS = NAV_GROUPS.flatMap((g) => g.tabs);
 
-function groupForTab(tabId: DashboardTabId): NavGroupId {
+export function groupForTab(tabId: DashboardTabId): NavGroupId {
   for (const group of NAV_GROUPS) {
     if (group.tabs.some((t) => t.id === tabId)) return group.id;
   }
@@ -158,7 +160,7 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
             {activeGroup.label} · {activeTabDef.label}
           </span>
           <ChevronDown
-            className={`h-4 w-4 text-white/40 transition ${mobileOpen ? "rotate-180" : ""}`}
+            className={`h-4 w-4 text-white/40 transition-transform ${mobileOpen ? "rotate-180" : ""}`}
           />
         </button>
         <AnimatePresence>
@@ -187,7 +189,7 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
                         }}
                         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${
                           isActive
-                            ? "animated-gradient-bg text-white"
+                            ? "tab-selected-gradient font-semibold"
                             : "text-white/55 hover:bg-white/5 hover:text-white/80"
                         }`}
                       >
@@ -217,11 +219,11 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
                     onTabChange(group.tabs[0].id);
                   }
                 }}
-                className={`rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide transition ${
+                className={
                   isGroupActive
-                    ? "animated-gradient-bg text-white"
-                    : "border border-white/10 bg-white/[0.03] text-white/45 hover:text-white/70"
-                }`}
+                    ? "tab-selected-gradient rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
+                    : "tab-inactive-glass rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors"
+                }
               >
                 {group.label}
               </button>
@@ -238,19 +240,14 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => onTabChange(tab.id)}
-                        className={`relative flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition ${
-                          isActive ? "text-white" : "text-white/45 hover:text-white/70"
-                        }`}
+                className={
+                  isActive
+                    ? "tab-selected-gradient flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
+                    : "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-white/45 transition-colors hover:text-white/70"
+                }
               >
-                {isActive && (
-                  <motion.div
-                    layoutId="activeSubTab"
-                    className="absolute inset-0 rounded-xl border border-white/10 animated-gradient-bg opacity-20"
-                    transition={{ type: "spring", bounce: 0.2, duration: 0.45 }}
-                  />
-                )}
-                <Icon className="relative h-4 w-4 shrink-0" />
-                <span className="relative">{tab.label}</span>
+                <Icon className="h-4 w-4 shrink-0" />
+                {tab.label}
               </button>
             );
           })}

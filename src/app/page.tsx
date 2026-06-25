@@ -1,11 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Cloud } from "lucide-react";
 import { Hero } from "@/components/Hero";
 import { UploadCard } from "@/components/UploadCard";
 import { PrivacyBadges } from "@/components/PrivacyBadges";
+import { BetaBuildBanner } from "@/components/BetaBuildBanner";
 import { DataCoverage } from "@/components/DataCoverage";
 import { ExportSuccessBanner } from "@/components/ExportSuccessBanner";
 import { AccountMenu } from "@/components/AccountMenu";
@@ -15,6 +16,7 @@ import { SaveFullAnalysisPanel } from "@/components/SaveFullAnalysisPanel";
 import { ExportGuide } from "@/components/ExportGuide";
 import {
   DashboardTabs,
+  groupForTab,
   type DashboardTabId,
 } from "@/components/DashboardTabs";
 import { OverviewTab } from "@/components/OverviewTab";
@@ -30,6 +32,12 @@ import { FunStatsTab } from "@/components/FunStatsTab";
 import { parseInstagramZip } from "@/lib/zipParser";
 import { resolveMostActiveEra } from "@/lib/mostActiveEra";
 import { resolveInsightsBundle } from "@/lib/insightsEngine";
+import { findUnifiedAccount } from "@/lib/relationshipEngine";
+import {
+  indexFromCanonicalList,
+  openAccountReceipt,
+  resolveCanonicalAccount,
+} from "@/lib/canonicalAccounts";
 import {
   AccountDetailDrawer,
   useAccountDetail,
@@ -37,6 +45,7 @@ import {
 import { SocialGraphTab } from "@/components/SocialGraphTab";
 import { ErasTab } from "@/components/ErasTab";
 import { PersonalityTab } from "@/components/PersonalityTab";
+import { YearbookTab } from "@/components/YearbookTab";
 import { DataExplorerTab } from "@/components/DataExplorerTab";
 import { SearchWrappedTab } from "@/components/SearchWrappedTab";
 import { GroupChatsTab } from "@/components/GroupChatsTab";
@@ -96,6 +105,52 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const accountDetail = useAccountDetail();
+
+  const insights = useMemo(
+    () =>
+      parsedData
+        ? resolveInsightsBundle(parsedData, linkedinProgress)
+        : null,
+    [parsedData, linkedinProgress]
+  );
+
+  const canonicalIndex = useMemo(
+    () => indexFromCanonicalList(insights?.canonicalAccounts ?? []),
+    [insights?.canonicalAccounts]
+  );
+
+  const dmAccountKeyByThreadId = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of insights?.canonicalAccounts ?? []) {
+      for (const threadId of c.directDmThreadIds ?? []) {
+        map.set(threadId, c.key);
+      }
+      if (c.directDmThreadId) {
+        map.set(c.directDmThreadId, c.key);
+      }
+    }
+    return map;
+  }, [insights?.canonicalAccounts]);
+
+  const selectedAccountKey =
+    accountDetail.selectedAccountKey ?? accountDetail.selectedUsername;
+  const selectedCanonical = selectedAccountKey
+    ? resolveCanonicalAccount(canonicalIndex, selectedAccountKey)
+    : undefined;
+  const drawerUsername = selectedCanonical?.username ?? selectedAccountKey;
+  const unifiedAccount =
+    drawerUsername && insights
+      ? findUnifiedAccount(insights.accounts, drawerUsername)
+      : undefined;
+  const linkedinForAccount = linkedinProgress.find(
+    (e) => e.username === drawerUsername || e.username === selectedAccountKey
+  );
+  const drawerReceipt = selectedAccountKey
+    ? openAccountReceipt(canonicalIndex, selectedAccountKey, {
+        linkedinEntry: linkedinForAccount,
+      })
+    : null;
+
   const [exportGuideExpanded, setExportGuideExpanded] = useState(true);
   const [dataCoverageExpanded, setDataCoverageExpanded] = useState(false);
   const [dashboardBanner, setDashboardBanner] = useState<{
@@ -104,38 +159,97 @@ export default function Home() {
   }>({ visible: false, mode: "upload" });
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
-  const [storyHideNames, setStoryHideNames] = useState(true);
+  const [storyHideNames, setStoryHideNames] = useState(false);
   const [chatOpen, setChatOpen] = useState(false);
   const { presentationMode } = usePresentationMode();
 
   const dashboardRef = useRef<HTMLDivElement>(null);
-  const dashboardContentRef = useRef<HTMLDivElement>(null);
+  const tabPanelRef = useRef<HTMLDivElement>(null);
+  const savePanelRef = useRef<HTMLDivElement>(null);
   const pendingScrollRef = useRef(false);
+  const [pendingScrollTarget, setPendingScrollTarget] = useState<
+    "saved-analyses" | null
+  >(null);
+
+  const DASHBOARD_SCROLL_OFFSET = 112;
+
+  const scrollToTabContent = useCallback((force = false) => {
+    requestAnimationFrame(() => {
+      const el = tabPanelRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      if (
+        !force &&
+        rect.top >= DASHBOARD_SCROLL_OFFSET - 24 &&
+        rect.top <= window.innerHeight * 0.55
+      ) {
+        return;
+      }
+      const y = rect.top + window.scrollY - DASHBOARD_SCROLL_OFFSET;
+      window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+    });
+  }, []);
 
   const scrollToDashboard = useCallback(() => {
-    requestAnimationFrame(() => {
-      dashboardContentRef.current?.scrollIntoView({
-        behavior: "smooth",
-        block: "start",
-      });
-    });
+    scrollToTabContent(true);
+  }, [scrollToTabContent]);
+
+  const navigateToSavedAnalyses = useCallback(() => {
+    setActiveTab("saved");
+    setPendingScrollTarget("saved-analyses");
   }, []);
 
   const handleTabChange = useCallback(
     (tab: DashboardTabId) => {
       setActiveTab(tab);
       if (!parsedData) return;
-      requestAnimationFrame(() => {
-        const el = dashboardContentRef.current;
-        if (!el) return;
-        const rect = el.getBoundingClientRect();
-        if (rect.top < -80 || rect.top > 160) {
-          el.scrollIntoView({ behavior: "smooth", block: "start" });
-        }
-      });
+      scrollToTabContent(false);
     },
-    [parsedData]
+    [parsedData, scrollToTabContent]
   );
+
+  useEffect(() => {
+    if (pendingScrollTarget !== "saved-analyses") return;
+
+    if (parsedData) {
+      if (activeTab !== "saved" || groupForTab(activeTab) !== "data") return;
+    }
+
+    let cancelled = false;
+    let attempts = 0;
+    const maxAttempts = 24;
+
+    const tryScroll = () => {
+      if (cancelled) return;
+      attempts += 1;
+      const el = document.getElementById("saved-analyses-section");
+      if (el) {
+        const y =
+          el.getBoundingClientRect().top +
+          window.scrollY -
+          DASHBOARD_SCROLL_OFFSET;
+        window.scrollTo({ top: Math.max(0, y), behavior: "smooth" });
+        setPendingScrollTarget(null);
+        return;
+      }
+      if (attempts < maxAttempts) {
+        window.setTimeout(tryScroll, 50);
+      } else {
+        setPendingScrollTarget(null);
+      }
+    };
+
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        window.setTimeout(tryScroll, 100);
+      });
+    });
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(frame);
+    };
+  }, [pendingScrollTarget, activeTab, parsedData]);
 
   useEffect(() => {
     if (!dashboardBanner.visible) return;
@@ -288,11 +402,13 @@ export default function Home() {
             <PresentationToggle />
             <AccountMenu
               onSignIn={() => setAuthOpen(true)}
-              onNavigateTab={setActiveTab}
+              onNavigateToSavedAnalyses={navigateToSavedAnalyses}
             />
           </div>
 
           <Hero />
+
+          <BetaBuildBanner />
 
           <div className="mt-10 space-y-6">
             <AccountStatusCard />
@@ -347,6 +463,7 @@ export default function Home() {
                   </div>
                 )}
 
+                <div ref={savePanelRef}>
                 <SaveFullAnalysisPanel
                   parsedData={parsedData}
                   fileName={fileName ?? "export.zip"}
@@ -366,9 +483,10 @@ export default function Home() {
                     setIsLoadedFromCloud(true);
                   }}
                   onDeleted={() => setCurrentSavedId(null)}
-                  onLoadSaved={() => setActiveTab("saved")}
+                  onLoadSaved={navigateToSavedAnalyses}
                   onClearLocal={handleClearLocalSession}
                 />
+                </div>
 
                 <DataCoverage
                   items={parsedData.coverage}
@@ -391,10 +509,7 @@ export default function Home() {
                     onTabChange={handleTabChange}
                   />
 
-                  <div
-                    ref={dashboardContentRef}
-                    className="scroll-mt-28"
-                  >
+                  <div ref={tabPanelRef} className="scroll-mt-28">
                   <motion.div
                     key={activeTab}
                     initial={{ opacity: 0, y: 8 }}
@@ -403,20 +518,12 @@ export default function Home() {
                     className="rounded-3xl border border-white/10 bg-white/[0.03] p-4 backdrop-blur-sm sm:p-6"
                   >
                     {(() => {
-                      const insights = resolveInsightsBundle(
-                        parsedData,
-                        linkedinProgress
-                      );
+                      if (!parsedData || !insights) return null;
+                      const showAccountNames = !presentationMode;
                       const effectiveShowThreadNames =
                         dmShowThreadNames && !presentationMode;
                       const effectiveShowFirstMessagePreview =
                         dmShowFirstMessagePreview && !presentationMode;
-                      const linkedinForAccount = linkedinProgress.find(
-                        (e) => e.username === accountDetail.selectedUsername
-                      );
-                      const unifiedAccount = insights.accounts.find(
-                        (a) => a.username === accountDetail.selectedUsername
-                      );
 
                       return (
                         <>
@@ -430,9 +537,14 @@ export default function Home() {
                         currentSavedId={currentSavedId}
                         onOpenStory={() => setStoryOpen(true)}
                         onOpenChat={() => setChatOpen(true)}
-                        hideShareNames={
-                          presentationMode || !effectiveShowThreadNames
-                        }
+                        hideShareNames={presentationMode}
+                        onNavigateTab={handleTabChange}
+                        onScrollToSave={() => {
+                          savePanelRef.current?.scrollIntoView({
+                            behavior: "smooth",
+                            block: "center",
+                          });
+                        }}
                       />
                     )}
                     {activeTab === "actionplan" && (
@@ -493,9 +605,20 @@ export default function Home() {
                         messages={parsedData.messages}
                         ads={parsedData.ads}
                         mostActiveEra={resolveMostActiveEra(parsedData)}
-                        showThreadNames={effectiveShowThreadNames}
+                        showNames={showAccountNames}
                         dmAwards={insights.dmAwards}
                         replyPatterns={insights.replyPatterns}
+                        hallOfFame={insights.hallOfFame}
+                        burnoutMeter={insights.burnoutMeter ?? undefined}
+                        socialAudit={insights.socialAudit}
+                        onOpenAccount={accountDetail.openAccount}
+                      />
+                    )}
+                    {activeTab === "yearbook" && (
+                      <YearbookTab
+                        cards={insights.yearbook ?? []}
+                        showNames={showAccountNames}
+                        onOpenAccount={accountDetail.openAccount}
                       />
                     )}
                     {activeTab === "eras" && (
@@ -521,6 +644,9 @@ export default function Home() {
                         isLoadedFromCloud={isLoadedFromCloud}
                         dmHeatmap={insights.dmHeatmap}
                         replyPatterns={insights.replyPatterns}
+                        dmRelationshipInsights={insights.dmRelationshipInsights}
+                        onOpenAccount={accountDetail.openAccount}
+                        dmAccountKeyByThreadId={dmAccountKeyByThreadId}
                       />
                     )}
                     {activeTab === "groups" && (
@@ -530,6 +656,7 @@ export default function Home() {
                       <AdsPrivacyTab
                         ads={parsedData.ads}
                         adsInsights={insights.adsInsights}
+                        adRoast={insights.adRoast}
                       />
                     )}
                     {activeTab === "security" && (
@@ -552,8 +679,10 @@ export default function Home() {
                         key={fileFingerprint || fileName}
                         network={parsedData.network}
                         fingerprint={fileFingerprint}
+                        canonicalAccounts={insights.canonicalAccounts ?? []}
                         entries={linkedinProgress}
                         onEntriesChange={setLinkedinProgress}
+                        onOpenAccount={accountDetail.openAccount}
                       />
                     )}
                     {activeTab === "compare" && (
@@ -574,11 +703,13 @@ export default function Home() {
                     <AccountDetailDrawer
                       open={accountDetail.isOpen}
                       onClose={accountDetail.closeAccount}
-                      username={accountDetail.selectedUsername}
+                      username={drawerUsername ?? null}
                       network={parsedData.network}
                       linkedinEntry={linkedinForAccount}
                       unifiedAccount={unifiedAccount}
+                      receipt={drawerReceipt}
                       insights={insights}
+                      fileFingerprint={fileFingerprint}
                     />
                         </>
                       );
@@ -632,13 +763,13 @@ export default function Home() {
           linkedinProgress={linkedinProgress}
         />
       )}
-      {parsedData && (
+      {parsedData && insights && (
         <StoryModeModal
           open={storyOpen}
           onClose={() => setStoryOpen(false)}
           data={parsedData}
-          insights={resolveInsightsBundle(parsedData, linkedinProgress)}
-          hideNames={storyHideNames}
+          insights={insights}
+          hideNames={presentationMode || storyHideNames}
           onHideNamesChange={setStoryHideNames}
         />
       )}

@@ -318,7 +318,8 @@ function parseThread(
   )[0]?.month;
 
   const participantCount = Math.max(participants.length, 1);
-  const isGroupChat = participantCount > 2;
+  const senderCount = Object.keys(messagesBySender).length;
+  const isGroupChat = participantCount > 2 || senderCount > 2;
   const mediaCount = photoCount + videoCount + audioCount;
   const instagramReelLinks = reelOrPostCount;
 

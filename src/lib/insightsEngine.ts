@@ -5,7 +5,7 @@ import type {
   InsightsBundle,
   PersonalityResult,
 } from "@/types/insights";
-import { buildUnifiedAccounts } from "@/lib/relationshipEngine";
+import { buildUnifiedAccounts, buildSearchMap } from "@/lib/relationshipEngine";
 import { computeCleanupScores } from "@/lib/cleanupScoring";
 import { computeRealOnesScores, computeSilentMutuals } from "@/lib/realOnesScoring";
 import { buildDmStatsAndDebug } from "@/lib/dmParticipantResolution";
@@ -15,9 +15,21 @@ import { buildErasTimeline } from "@/lib/activityTimeline";
 import { computeContentDiet } from "@/lib/contentDiet";
 import {
   buildAccountLeaderboards,
-  extractInteractionAccounts,
   LEADERBOARD_SOURCE_LABELS,
 } from "@/lib/accountLeaderboards";
+import { extractInteractionAccounts } from "@/lib/interactionExportParser";
+import { validateDmLeaderboardParity } from "@/lib/canonicalAccount";
+import {
+  buildDmAccountIndex,
+  overlayDmStatsOnAccounts,
+} from "@/lib/dmAccountIndex";
+import type { CanonicalAccount } from "@/lib/canonicalAccounts";
+import {
+  buildCanonicalAccountIndex,
+  compareCanonicalForLinkedIn,
+  syncUnifiedDmFromCanonical,
+} from "@/lib/canonicalAccounts";
+import { buildDmReceiptIndex } from "@/lib/accountReceipt";
 import { computeAdsPrivacyInsights } from "@/lib/adsPrivacyInsights";
 import { computeSecurityAudit } from "@/lib/securityAudit";
 import { parseSearchHistory } from "@/lib/searchHistoryParser";
@@ -26,8 +38,17 @@ import { buildShareCards } from "@/lib/shareCard";
 import { parseConnectedApps } from "@/lib/parsers/appsParser";
 import type { LinkedInHelperEntry } from "@/types/instagram";
 import { enrichInsightsBundle } from "@/lib/advancedInsights";
+import { buildCoreAnalytics } from "@/lib/insights/coreAnalytics";
+import {
+  getCanonicalAccountKey,
+  getDisplayLabel,
+  getSecondaryLabel,
+  isLikelyInstagramUsername,
+  validateIdentityIndex,
+} from "@/lib/accountIdentity";
+import { computeLinkedInInteractionScore } from "@/lib/linkedinInteractionScore";
 
-export const INSIGHTS_BUNDLE_VERSION = 5;
+export const INSIGHTS_BUNDLE_VERSION = 17;
 
 function computePersonality(
   parsed: ParsedExportData,
@@ -145,24 +166,68 @@ export function computeInsightsBundle(
   files?: Map<string, string>,
   linkedinProgress: LinkedInHelperEntry[] = []
 ): InsightsBundle {
-  const interactionMap = files
+  const interactionResult = files
     ? extractInteractionAccounts(files)
-    : new Map();
+    : { map: new Map(), meta: undefined };
+  const interactionMap = interactionResult.map;
+  const interactionMeta = interactionResult.meta;
 
-  const accounts = buildUnifiedAccounts({
+  const searchWrapped = files
+    ? parseSearchHistory(files)
+    : (parsed.insights?.searchWrapped ?? null);
+
+  const searchByUsername = buildSearchMap(searchWrapped);
+
+  const coreAnalytics = buildCoreAnalytics({
+    messages: parsed.messages,
+    network: parsed.network,
+    files,
+  });
+
+  const { threadDebug, graph } = buildDmStatsAndDebug({
+    messages: parsed.messages,
+    network: parsed.network,
+    interactionCounts: interactionMap,
+    interactionMeta,
+    searchByUsername,
+    hasSearchExport: Boolean(searchWrapped?.topAccounts?.length),
+    coreAnalytics,
+    files,
+  });
+
+  let accounts = buildUnifiedAccounts({
     network: parsed.network,
     messages: parsed.messages,
     linkedinProgress,
     interactionCounts: interactionMap,
+    interactionMeta,
+    searchWrapped,
+    graph,
+    coreAnalytics,
+    files,
   });
+
+  const dmAccountIndex = buildDmAccountIndex(coreAnalytics);
+  accounts = overlayDmStatsOnAccounts(accounts, dmAccountIndex);
+
+  const canonicalIndex = buildCanonicalAccountIndex(coreAnalytics, accounts);
+  accounts = syncUnifiedDmFromCanonical(accounts, canonicalIndex);
+  const canonicalAccounts: CanonicalAccount[] = canonicalIndex.accounts;
+  const dmReceiptByUsername = buildDmReceiptIndex(accounts);
+
+  validateIdentityIndex(
+    accounts.map((a) => ({
+      canonicalKey: getCanonicalAccountKey({ username: a.username }),
+      username: a.username,
+      displayName: getDisplayLabel(a),
+      secondaryLabel: getSecondaryLabel(a),
+      isUnknownDeleted: Boolean(a.isUnknownAccount),
+    }))
+  );
 
   const cleanup = computeCleanupScores(accounts);
   const realOnes = computeRealOnesScores(accounts);
-  const silentMutuals = computeSilentMutuals(realOnes);
-  const { threadDebug } = buildDmStatsAndDebug({
-    messages: parsed.messages,
-    network: parsed.network,
-  });
+  const silentMutuals = computeSilentMutuals(accounts);
   const { insights: dmRelationshipInsights, awards: dmAwards } =
     computeDmRelationshipInsights(parsed.messages);
   const groupChats = computeGroupChatInsights(parsed.messages);
@@ -171,14 +236,16 @@ export function computeInsightsBundle(
     messages: parsed.messages,
     ads: parsed.ads,
   });
-  const leaderboards = buildAccountLeaderboards(accounts, interactionMap);
+  const leaderboards = buildAccountLeaderboards(
+    accounts,
+    interactionMap,
+    realOnes,
+    coreAnalytics
+  );
   const leaderboardSources = { ...LEADERBOARD_SOURCE_LABELS };
   const adsInsights = computeAdsPrivacyInsights(parsed.ads);
   const connectedApps = files ? parseConnectedApps(files) : [];
   const securityAudit = computeSecurityAudit(parsed.security, connectedApps);
-  const searchWrapped = files
-    ? parseSearchHistory(files)
-    : (parsed.insights?.searchWrapped ?? null);
   const personality = computePersonality(parsed, contentDiet);
   const exportCompleteness = computeExportCompleteness(parsed.coverage, {
     hasSearch: Boolean(searchWrapped),
@@ -207,16 +274,73 @@ export function computeInsightsBundle(
     false,
     partialInsights
   );
+  const topLinkedInMostInteracted = canonicalAccounts
+    .filter((c) => isLikelyInstagramUsername(c.username) || c.directDmCount > 0)
+    .map((canonical) => {
+      const interaction = computeLinkedInInteractionScore(canonical);
+      return {
+        name: canonical.displayLabel,
+        username: canonical.username,
+        score: interaction.score,
+        breakdown: interaction.reason,
+      };
+    })
+    .sort((a, b) => {
+      const ca = canonicalIndex.byUsername.get(a.username);
+      const cb = canonicalIndex.byUsername.get(b.username);
+      if (ca && cb) {
+        return compareCanonicalForLinkedIn(ca, cb);
+      }
+      return b.score - a.score;
+    })
+    .slice(0, 20);
+
+  const topRealOnesDebug = realOnes.slice(0, 20).map((r) => ({
+    name: r.displayName,
+    username: r.username,
+    score: r.realOnesScore,
+    breakdown: r.scoreBreakdown ?? r.rankReason ?? "",
+  }));
+
+  const topDmBoard = leaderboards.find((b) => b.id === "top-dm");
+  const parity = validateDmLeaderboardParity(
+    coreAnalytics,
+    (topDmBoard?.entries ?? []).map((e) => ({
+      displayName: e.displayName,
+      dmCount: e.dmCount,
+    }))
+  );
+
   const dataExplorer = {
     ...buildDataExplorer(parsed),
     leaderboardSources,
     dmThreadDebug: threadDebug.slice(0, 200),
+    identityResolution: graph.debug,
+    coreAnalytics: {
+      ...coreAnalytics.debug,
+      topLinkedInMostInteracted,
+      topRealOnes: topRealOnesDebug,
+      validation: {
+        dmLeaderboardParityOk: parity.ok,
+        dmLeaderboardParityNotes: parity.notes,
+        blockedIncluded: parsed.network?.blockedMeta?.includedInExport ?? false,
+        restrictedIncluded:
+          parsed.network?.restrictedMeta?.includedInExport ?? false,
+        ownerIdentityConfidence: coreAnalytics.ownerIdentity.confidence,
+        ownerIdentityUsernames: coreAnalytics.ownerIdentity.usernames,
+        ownerIdentityDisplayNames: coreAnalytics.ownerIdentity.displayNames,
+        ownerIdentitySources: coreAnalytics.ownerIdentity.sources,
+        interactionExportMeta: interactionMeta,
+      },
+    },
   };
 
   return enrichInsightsBundle(
     {
       version: INSIGHTS_BUNDLE_VERSION,
       accounts,
+      canonicalAccounts,
+      dmReceiptByUsername,
       cleanup,
       realOnes,
       silentMutuals,
