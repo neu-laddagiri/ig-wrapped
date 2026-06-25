@@ -18,17 +18,17 @@ import {
   LEADERBOARD_SOURCE_LABELS,
 } from "@/lib/accountLeaderboards";
 import { extractInteractionAccounts } from "@/lib/interactionExportParser";
-import { validateDmLeaderboardParity } from "@/lib/canonicalAccount";
 import {
   buildDmAccountIndex,
   overlayDmStatsOnAccounts,
 } from "@/lib/dmAccountIndex";
-import type { CanonicalAccount } from "@/lib/canonicalAccounts";
 import {
-  buildCanonicalAccountIndex,
-  compareCanonicalForLinkedIn,
-  syncUnifiedDmFromCanonical,
-} from "@/lib/canonicalAccounts";
+  buildDirectDmIndexFromMessages,
+  indexFromDirectDmRecords,
+  topDirectDmThreadsFromIndex,
+  validateDirectDmParity,
+  type DirectDmRecord,
+} from "@/lib/insights/directDmIndex";
 import { buildDmReceiptIndex } from "@/lib/accountReceipt";
 import { computeAdsPrivacyInsights } from "@/lib/adsPrivacyInsights";
 import { computeSecurityAudit } from "@/lib/securityAudit";
@@ -38,6 +38,12 @@ import { buildShareCards } from "@/lib/shareCard";
 import { parseConnectedApps } from "@/lib/parsers/appsParser";
 import type { LinkedInHelperEntry } from "@/types/instagram";
 import { enrichInsightsBundle } from "@/lib/advancedInsights";
+import {
+  buildCanonicalAccountIndex,
+  compareCanonicalForLinkedIn,
+  syncUnifiedDmFromCanonical,
+  type CanonicalAccount,
+} from "@/lib/canonicalAccounts";
 import { buildCoreAnalytics } from "@/lib/insights/coreAnalytics";
 import {
   getCanonicalAccountKey,
@@ -48,7 +54,7 @@ import {
 } from "@/lib/accountIdentity";
 import { computeLinkedInInteractionScore } from "@/lib/linkedinInteractionScore";
 
-export const INSIGHTS_BUNDLE_VERSION = 17;
+export const INSIGHTS_BUNDLE_VERSION = 18;
 
 function computePersonality(
   parsed: ParsedExportData,
@@ -210,7 +216,15 @@ export function computeInsightsBundle(
   const dmAccountIndex = buildDmAccountIndex(coreAnalytics);
   accounts = overlayDmStatsOnAccounts(accounts, dmAccountIndex);
 
-  const canonicalIndex = buildCanonicalAccountIndex(coreAnalytics, accounts);
+  const directDmIndex = buildDirectDmIndexFromMessages(parsed.messages, {
+    network: parsed.network,
+    files,
+  });
+  const directDmThreadRecords: DirectDmRecord[] = [
+    ...directDmIndex.byThreadId.values(),
+  ];
+
+  const canonicalIndex = buildCanonicalAccountIndex(directDmIndex, accounts);
   accounts = syncUnifiedDmFromCanonical(accounts, canonicalIndex);
   const canonicalAccounts: CanonicalAccount[] = canonicalIndex.accounts;
   const dmReceiptByUsername = buildDmReceiptIndex(accounts);
@@ -240,7 +254,7 @@ export function computeInsightsBundle(
     accounts,
     interactionMap,
     realOnes,
-    coreAnalytics
+    directDmIndex
   );
   const leaderboardSources = { ...LEADERBOARD_SOURCE_LABELS };
   const adsInsights = computeAdsPrivacyInsights(parsed.ads);
@@ -303,13 +317,29 @@ export function computeInsightsBundle(
   }));
 
   const topDmBoard = leaderboards.find((b) => b.id === "top-dm");
-  const parity = validateDmLeaderboardParity(
-    coreAnalytics,
-    (topDmBoard?.entries ?? []).map((e) => ({
-      displayName: e.displayName,
-      dmCount: e.dmCount,
-    }))
-  );
+  const dmTabTop = topDirectDmThreadsFromIndex(directDmIndex, 10).map((r) => ({
+    name: r.displayName,
+    username: r.username,
+    count: r.totalMessages,
+  }));
+  const linkedInTop = canonicalAccounts
+    .filter((c) => c.directDmCount > 0)
+    .slice(0, 10)
+    .map((c) => ({
+      name: c.displayLabel,
+      username: c.username,
+      count: c.directDmCount,
+    }));
+  const leaderboardTop = (topDmBoard?.entries ?? []).slice(0, 10).map((e) => ({
+    name: e.displayName,
+    username: e.username,
+    count: e.dmCount ?? 0,
+  }));
+  const parity = validateDirectDmParity({
+    dmTabTop,
+    linkedInTop,
+    leaderboardTop,
+  });
 
   const dataExplorer = {
     ...buildDataExplorer(parsed),
@@ -340,6 +370,7 @@ export function computeInsightsBundle(
       version: INSIGHTS_BUNDLE_VERSION,
       accounts,
       canonicalAccounts,
+      directDmThreadRecords,
       dmReceiptByUsername,
       cleanup,
       realOnes,

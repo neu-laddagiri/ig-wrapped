@@ -11,8 +11,8 @@ import type {
 import type { UnifiedAccount, InsightsBundle } from "@/types/insights";
 import type { AccountReceipt } from "@/lib/accountReceipt";
 import { buildAccountReceipt } from "@/lib/accountReceipt";
+import type { AccountReceiptTarget } from "@/lib/canonicalAccounts";
 import { getDisplayLabel, getSecondaryLabel } from "@/lib/accountIdentity";
-import { computeAccountFlags } from "@/lib/accountInsights";
 import { buildAccountNetworkDetail } from "@/lib/networkAccountDetail";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
 import { AccountCrmPanel } from "@/components/AccountCrmPanel";
@@ -56,11 +56,12 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
   );
 }
 
-function dmThreadLabel(dm?: AccountReceipt["dm"], u?: UnifiedAccount): string {
-  const count = dm?.directDmCount ?? u?.dmMessageCount ?? 0;
-  if (count > 0 || dm?.hasDirectThread || u?.hasDmThread) return "Yes";
-  if (u?.dmMatchStatus === "possible") return "Possible";
-  return "No";
+function dmThreadLabel(dm?: AccountReceipt["dm"]): string {
+  if (dm?.lookupStatus === "matched" || (dm?.directDmCount ?? 0) > 0) {
+    return "Yes";
+  }
+  if (dm?.lookupStatus === "not-found") return "Not found";
+  return "Not found";
 }
 
 export function AccountDetailDrawer({
@@ -118,12 +119,12 @@ export function AccountDetailDrawer({
 
   const u = unifiedAccount;
   const dm = receipt?.dm;
-  const flags = u ? computeAccountFlags(u, insights) : { green: [], red: [] };
   const realOne = insights?.realOnes.find(
     (r) =>
       r.username === profileUsername ||
       r.username === u?.username
   );
+  const hasDmMatch = dm?.lookupStatus === "matched" && (dm?.directDmCount ?? 0) > 0;
 
   return (
     <AnimatePresence>
@@ -200,107 +201,47 @@ export function AccountDetailDrawer({
                 </p>
               )}
 
-              {(flags.green.length > 0 || flags.red.length > 0) && (
-                <>
-                  <SectionTitle>Account flags</SectionTitle>
-                  {flags.green.length > 0 && (
-                    <div className="mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-3 py-2">
-                      <p className="text-[10px] font-semibold uppercase text-emerald-300/80">
-                        Green flags
-                      </p>
-                      <ul className="mt-1 space-y-1">
-                        {flags.green.map((f) => (
-                          <li key={f.id} className="text-xs text-emerald-100/90">
-                            + {f.label}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                  {flags.red.length > 0 && (
-                    <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2">
-                      <p className="text-[10px] font-semibold uppercase text-red-300/80">
-                        Red flags
-                      </p>
-                      <ul className="mt-1 space-y-1">
-                        {flags.red.map((f) => (
-                          <li key={f.id} className="text-xs text-red-100/90">
-                            − {f.label}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </>
-              )}
-
-              <SectionTitle>Network status</SectionTitle>
+              <SectionTitle>Available matched data</SectionTitle>
               <DetailRow
-                label="Relationship"
-                value={
-                  u?.relationshipLabel ??
-                  receipt?.relationshipLabel ??
-                  (detail?.categories.join(", ") || "—")
-                }
-              />
-              <DetailRow
-                label="Follows you"
+                label="Network · follows you"
                 value={(receipt?.followsMe ?? detail?.followsMe) ? "Yes" : "No"}
               />
               <DetailRow
-                label="You follow"
+                label="Network · you follow"
                 value={(receipt?.iFollowThem ?? detail?.iFollowThem) ? "Yes" : "No"}
               />
               <DetailRow
-                label="Mutual"
+                label="Network · mutual"
                 value={(receipt?.isMutual ?? detail?.isMutual) ? "Yes" : "No"}
               />
-
-              <SectionTitle>Direct messages</SectionTitle>
-              <DetailRow label="Direct DM thread" value={dmThreadLabel(dm, u)} />
+              <DetailRow label="Direct DM thread" value={dmThreadLabel(dm)} />
               <DetailRow
                 label="Direct DM messages"
                 value={
-                  (dm?.directDmCount ?? u?.dmMessageCount ?? 0) > 0
-                    ? (dm?.directDmCount ?? u?.dmMessageCount ?? 0).toLocaleString()
-                    : "No direct 1-on-1 DM thread matched"
+                  hasDmMatch
+                    ? dm!.directDmCount.toLocaleString()
+                    : dm?.lookupStatus === "not-found"
+                      ? "No direct 1-on-1 thread in export"
+                      : "—"
                 }
               />
-              {(dm?.directDmCount ?? u?.dmMessageCount ?? 0) > 0 &&
-                (dm?.senderSplitAvailable || u?.dmSenderSplitAvailable ? (
-                  <>
-                    <DetailRow
-                      label="Sent by you"
-                      value={(
-                        dm?.sentByMe ??
-                        u?.dmSentByMe
-                      )?.toLocaleString() ?? "—"}
-                    />
-                    <DetailRow
-                      label="Sent by them"
-                      value={(
-                        dm?.sentByThem ??
-                        u?.dmSentByThem
-                      )?.toLocaleString() ?? "—"}
-                    />
-                  </>
-                ) : null)}
               <DetailRow
                 label="First DM"
-                value={formatTimestamp(dm?.firstDmAt ?? u?.firstDmAt)}
+                value={hasDmMatch ? formatTimestamp(dm?.firstDmAt) : "—"}
               />
               <DetailRow
                 label="Last DM"
-                value={formatTimestamp(dm?.lastDmAt ?? u?.lastDmAt)}
-              />
-              <DetailRow
-                label="Match confidence"
-                value={dm?.matchConfidence ?? u?.nameConfidence ?? "—"}
+                value={hasDmMatch ? formatTimestamp(dm?.lastDmAt) : "—"}
               />
               <DetailRow
                 label="Match source"
-                value={dm?.matchSource ?? u?.dmMatchMethod?.replace(/-/g, " ") ?? "—"}
+                value={hasDmMatch ? (dm?.matchSource ?? "DM thread source of truth") : "—"}
               />
+              <DetailRow
+                label="Confidence"
+                value={hasDmMatch ? (dm?.matchConfidence ?? "high") : "—"}
+              />
+
               {(u?.groupMessageCount ?? 0) > 0 && (
                 <DetailRow
                   label="Group messages sent"
@@ -415,21 +356,29 @@ export function AccountDetailDrawer({
 }
 
 export function useAccountDetail() {
-  const [selectedAccountKey, setSelectedAccountKey] = useState<string | null>(
-    null
-  );
+  const [selection, setSelection] = useState<{
+    accountKey?: string;
+    threadId?: string;
+  } | null>(null);
 
   return {
-    selectedAccountKey,
-    /** @deprecated use selectedAccountKey */
-    selectedUsername: selectedAccountKey,
+    selection,
+    selectedAccountKey: selection?.accountKey ?? selection?.threadId ?? null,
+    selectedUsername: selection?.accountKey ?? selection?.threadId ?? null,
     selectedReceipt: null as AccountReceipt | null,
-    openAccount: (accountKey: string) => {
-      setSelectedAccountKey(accountKey.trim());
+    openAccount: (target: AccountReceiptTarget) => {
+      if (typeof target === "string") {
+        setSelection({ accountKey: target.trim() });
+        return;
+      }
+      setSelection({
+        accountKey: target.accountKey?.trim(),
+        threadId: target.threadId?.trim(),
+      });
     },
     closeAccount: () => {
-      setSelectedAccountKey(null);
+      setSelection(null);
     },
-    isOpen: Boolean(selectedAccountKey),
+    isOpen: Boolean(selection?.accountKey || selection?.threadId),
   };
 }

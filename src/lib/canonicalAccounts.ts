@@ -1,16 +1,22 @@
-import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import {
+  formatAccountDisplayName,
+  UNKNOWN_ACCOUNT_LABEL,
+} from "@/lib/accountNameFilter";
 import {
   getCanonicalAccountKey,
   getDisplayLabel,
   getSecondaryLabel,
   isLikelyInstagramUsername,
   normalizeUsername as identityNormalizeUsername,
-  usernamesMatch,
 } from "@/lib/accountIdentity";
-import type { CoreAnalytics, DmPersonRecord } from "@/lib/insights/coreAnalytics";
+import type { DirectDmIndex, DirectDmRecord } from "@/lib/insights/directDmIndex";
+import {
+  directDmRankReason,
+  resolveDirectDmRecord,
+} from "@/lib/insights/directDmIndex";
 import { instagramProfileUrl, formatTimestamp } from "@/lib/formatters";
 import type { UnifiedAccount, NameConfidence } from "@/types/insights";
-import type { LinkedInHelperEntry, NetworkStats } from "@/types/instagram";
+import type { LinkedInHelperEntry } from "@/types/instagram";
 import type { AccountReceipt, AccountReceiptDm } from "@/lib/accountReceipt";
 
 /** Single source of truth for account identity + DM stats across all tabs. */
@@ -54,39 +60,14 @@ export interface CanonicalAccountIndex {
   byUsername: Map<string, CanonicalAccount>;
 }
 
+export type AccountReceiptTarget =
+  | string
+  | { accountKey?: string; threadId?: string };
+
 function lastActiveLabel(lastDmAt?: number): string | undefined {
   if (!lastDmAt) return undefined;
   const formatted = formatTimestamp(lastDmAt);
   return formatted === "—" ? undefined : formatted;
-}
-
-function dmFromPerson(dm: DmPersonRecord): Pick<
-  CanonicalAccount,
-  | "directDmCount"
-  | "directDmSentByMe"
-  | "directDmSentByThem"
-  | "senderSplitAvailable"
-  | "firstDmAt"
-  | "lastDmAt"
-  | "lastActiveLabel"
-  | "directDmThreadId"
-  | "directDmThreadIds"
-  | "dmMatchMethod"
-  | "dmMatchConfidence"
-> {
-  return {
-    directDmCount: dm.directDmCount,
-    directDmSentByMe: dm.senderSplitAvailable ? dm.directDmSentByMe : undefined,
-    directDmSentByThem: dm.senderSplitAvailable ? dm.directDmSentByThem : undefined,
-    senderSplitAvailable: dm.senderSplitAvailable,
-    firstDmAt: dm.firstDmAt,
-    lastDmAt: dm.lastDmAt,
-    lastActiveLabel: lastActiveLabel(dm.lastDmAt),
-    directDmThreadId: dm.threadIds[0],
-    directDmThreadIds: [...dm.threadIds],
-    dmMatchMethod: dm.matchMethod,
-    dmMatchConfidence: dm.matchConfidence,
-  };
 }
 
 function networkFieldsFromUnified(u: UnifiedAccount): Pick<
@@ -126,18 +107,48 @@ function networkFieldsFromUnified(u: UnifiedAccount): Pick<
   };
 }
 
-function personToCanonical(
-  dm: DmPersonRecord,
+function unifiedToCanonical(u: UnifiedAccount): CanonicalAccount {
+  const username = u.username;
+  const displayName = formatAccountDisplayName(u.displayName);
+  const key = getCanonicalAccountKey({ username });
+
+  return {
+    key,
+    username,
+    displayName,
+    displayLabel: getDisplayLabel({ displayName, username }),
+    secondaryLabel: getSecondaryLabel({ username }),
+    directDmCount: 0,
+    senderSplitAvailable: false,
+    directDmThreadIds: [],
+    dmMatchConfidence: u.nameConfidence,
+    ...networkFieldsFromUnified(u),
+  };
+}
+
+function directRecordToCanonical(
+  dm: DirectDmRecord,
   unified?: UnifiedAccount
 ): CanonicalAccount {
-  const username = isLikelyInstagramUsername(dm.username)
-    ? identityNormalizeUsername(dm.username)
-    : dm.username;
+  const username = dm.username ?? dm.accountKey;
   const displayName = formatAccountDisplayName(
     unified?.displayName ?? dm.displayName
   );
-  const key = dm.stableKey;
-  const dmFields = dmFromPerson(dm);
+  const key = dm.accountKey;
+
+  const dmFields = {
+    directDmCount: dm.totalMessages,
+    directDmSentByMe: undefined,
+    directDmSentByThem: undefined,
+    senderSplitAvailable: false,
+    firstDmAt: dm.firstDmAt,
+    lastDmAt: dm.lastDmAt,
+    lastActiveLabel: lastActiveLabel(dm.lastDmAt),
+    directDmThreadId: dm.threadId,
+    directDmThreadIds: [dm.threadId],
+    dmMatchMethod: "dm-thread",
+    dmMatchConfidence: "high" as NameConfidence,
+  };
 
   if (unified) {
     return {
@@ -165,46 +176,19 @@ function personToCanonical(
     commentedCount: 0,
     storyInteractionCount: 0,
     groupMessageCount: 0,
-    isUnknownAccount: dm.isUnknownOrDeleted,
+    isUnknownAccount: displayName === UNKNOWN_ACCOUNT_LABEL,
     href: isLikelyInstagramUsername(username)
       ? instagramProfileUrl(username)
       : "#",
-    sourceNotes: [`DM source: ${dm.directDmCount.toLocaleString()} direct messages`],
+    sourceNotes: [
+      `DM source of truth: ${dm.totalMessages.toLocaleString()} direct messages`,
+    ],
   };
 }
 
-function unifiedToCanonical(u: UnifiedAccount): CanonicalAccount {
-  const username = u.username;
-  const displayName = formatAccountDisplayName(u.displayName);
-  const key = getCanonicalAccountKey({ username });
-  const hasDm = u.dmMessageCount > 0 || u.hasDmThread;
-
-  return {
-    key,
-    username,
-    displayName,
-    displayLabel: getDisplayLabel({ displayName, username }),
-    secondaryLabel: getSecondaryLabel({ username }),
-    directDmCount: hasDm ? u.dmMessageCount : 0,
-    directDmSentByMe: u.dmSenderSplitAvailable ? u.dmSentByMe : undefined,
-    directDmSentByThem: u.dmSenderSplitAvailable ? u.dmSentByThem : undefined,
-    senderSplitAvailable: Boolean(u.dmSenderSplitAvailable),
-    firstDmAt: u.firstDmAt,
-    lastDmAt: u.lastDmAt,
-    lastActiveLabel: lastActiveLabel(u.lastDmAt),
-    directDmThreadId: u.dmThreadId,
-    directDmThreadIds: u.dmThreadId ? [u.dmThreadId] : [],
-    dmMatchMethod: u.dmMatchMethod,
-    dmMatchConfidence: u.nameConfidence,
-    ...networkFieldsFromUnified(u),
-  };
-}
-
-/**
- * Build canonical accounts — DM stats from coreAnalytics.dmPeople (DMs tab source of truth).
- */
+/** Build canonical accounts — direct DM stats from DMs tab index only. */
 export function buildCanonicalAccountIndex(
-  coreAnalytics: CoreAnalytics,
+  directDmIndex: DirectDmIndex,
   unifiedAccounts: UnifiedAccount[]
 ): CanonicalAccountIndex {
   const byKey = new Map<string, CanonicalAccount>();
@@ -219,24 +203,25 @@ export function buildCanonicalAccountIndex(
 
   const claimedUnified = new Set<string>();
 
-  for (const dm of coreAnalytics.dmPeople) {
+  for (const dm of directDmIndex.records) {
     const unified =
-      unifiedByUsername.get(dm.username) ??
-      unifiedByUsername.get(identityNormalizeUsername(dm.username));
+      unifiedByUsername.get(dm.accountKey) ??
+      (dm.username
+        ? unifiedByUsername.get(identityNormalizeUsername(dm.username))
+        : undefined);
     if (unified) claimedUnified.add(unified.username);
 
-    const canonical = personToCanonical(dm, unified);
+    const canonical = directRecordToCanonical(dm, unified);
     byKey.set(canonical.key, canonical);
-    if (isLikelyInstagramUsername(canonical.username)) {
-      byUsername.set(identityNormalizeUsername(canonical.username), canonical);
-      byUsername.set(canonical.username, canonical);
-    }
+    byUsername.set(canonical.username, canonical);
+    const norm = identityNormalizeUsername(canonical.username);
+    if (norm) byUsername.set(norm, canonical);
   }
 
   for (const u of unifiedAccounts) {
     if (claimedUnified.has(u.username)) continue;
     const norm = identityNormalizeUsername(u.username);
-    if (byUsername.has(norm) || byUsername.has(u.username)) continue;
+    if (byUsername.has(u.username) || (norm && byUsername.has(norm))) continue;
 
     const canonical = unifiedToCanonical(u);
     if (!byKey.has(canonical.key)) {
@@ -280,24 +265,48 @@ export function resolveCanonicalAccount(
   );
 }
 
+export function dmRecordToReceiptDm(
+  record?: DirectDmRecord
+): AccountReceiptDm {
+  if (!record) {
+    return {
+      hasDirectThread: false,
+      directDmCount: 0,
+      senderSplitAvailable: false,
+      lookupStatus: "not-found",
+    };
+  }
+  return {
+    hasDirectThread: true,
+    directDmCount: record.totalMessages,
+    firstDmAt: record.firstDmAt,
+    lastDmAt: record.lastDmAt,
+    senderSplitAvailable: false,
+    matchConfidence: "high",
+    matchSource: "DM thread source of truth",
+    lookupStatus: "matched",
+  };
+}
+
 export function canonicalToReceiptDm(c: CanonicalAccount): AccountReceiptDm {
   return {
     hasDirectThread: c.directDmCount > 0,
     directDmCount: c.directDmCount,
     firstDmAt: c.firstDmAt,
     lastDmAt: c.lastDmAt,
-    sentByMe: c.senderSplitAvailable ? c.directDmSentByMe : undefined,
-    sentByThem: c.senderSplitAvailable ? c.directDmSentByThem : undefined,
-    senderSplitAvailable: c.senderSplitAvailable,
-    matchConfidence: c.dmMatchConfidence,
-    matchSource: c.dmMatchMethod?.replace(/-/g, " "),
+    senderSplitAvailable: false,
+    matchConfidence: c.dmMatchConfidence ?? "high",
+    matchSource: "DM thread source of truth",
+    lookupStatus: c.directDmCount > 0 ? "matched" : "not-found",
   };
 }
 
 export function buildReceiptFromCanonical(
   canonical: CanonicalAccount,
+  dmOverride?: AccountReceiptDm,
   linkedinEntry?: LinkedInHelperEntry
 ): AccountReceipt {
+  void linkedinEntry;
   return {
     username: canonical.username,
     displayName: canonical.displayLabel,
@@ -307,53 +316,72 @@ export function buildReceiptFromCanonical(
     relationshipLabel: canonical.relationshipLabel,
     recommendedAction: canonical.recommendedAction,
     isUnknownAccount: canonical.isUnknownAccount,
-    dm: canonicalToReceiptDm(canonical),
+    dm: dmOverride ?? canonicalToReceiptDm(canonical),
   };
 }
 
-export function openAccountReceipt(
-  index: CanonicalAccountIndex,
-  accountKey: string,
-  options?: {
-    network?: NetworkStats | null;
-    linkedinEntry?: LinkedInHelperEntry;
+export function openAccountReceipt(params: {
+  directDmIndex: DirectDmIndex;
+  canonicalIndex: CanonicalAccountIndex;
+  accountKey?: string;
+  threadId?: string;
+  linkedinEntry?: LinkedInHelperEntry;
+}): AccountReceipt | null {
+  const { directDmIndex, canonicalIndex, accountKey, threadId, linkedinEntry } =
+    params;
+
+  const dmRecord = resolveDirectDmRecord(directDmIndex, {
+    threadId,
+    accountKey,
+  });
+
+  const resolvedKey =
+    accountKey?.trim() ?? dmRecord?.accountKey ?? threadId ?? "";
+  const canonical = resolvedKey
+    ? resolveCanonicalAccount(canonicalIndex, resolvedKey)
+    : undefined;
+
+  if (!canonical && !dmRecord) return null;
+
+  const dmSlice = dmRecordToReceiptDm(dmRecord);
+
+  if (canonical) {
+    return buildReceiptFromCanonical(canonical, dmSlice, linkedinEntry);
   }
-): AccountReceipt | null {
-  const canonical = resolveCanonicalAccount(index, accountKey);
-  if (!canonical) return null;
-  return buildReceiptFromCanonical(canonical, options?.linkedinEntry);
+
+  if (dmRecord) {
+    return {
+      username: dmRecord.username ?? dmRecord.accountKey,
+      displayName: getDisplayLabel({
+        displayName: dmRecord.displayName,
+        username: dmRecord.username ?? dmRecord.accountKey,
+      }),
+      followsMe: false,
+      iFollowThem: false,
+      isMutual: false,
+      isUnknownAccount: dmRecord.displayName === UNKNOWN_ACCOUNT_LABEL,
+      dm: dmSlice,
+    };
+  }
+
+  return null;
 }
 
-/** LinkedIn "why ranked" label — no negative scores. */
 export function canonicalRankReason(c: CanonicalAccount): string {
-  const parts: string[] = [];
-
-  if (c.directDmCount > 0) {
-    parts.push(`${c.directDmCount.toLocaleString()} direct DMs`);
-    if (c.lastActiveLabel) parts.push(`active ${c.lastActiveLabel}`);
-    if (c.isMutual) parts.push("mutual");
-    else {
-      if (c.followsMe) parts.push("follows you");
-      if (c.iFollowThem) parts.push("you follow");
-    }
-    const likes =
-      c.likesAttribution === "attributed" ? c.likedCount : 0;
-    const comments =
-      c.commentsAttribution === "attributed" ? c.commentedCount : 0;
-    if (likes + comments > 0) {
-      parts.push(`${likes + comments} matched interactions`);
-    }
-    return parts.join(" · ");
-  }
-
-  if (c.isMutual) {
-    return "Network only · mutual · no direct DMs";
-  }
-  if (c.followsMe || c.iFollowThem) {
-    const rel = c.followsMe && c.iFollowThem ? "mutual" : c.followsMe ? "follows you" : "you follow";
-    return `Network only · ${rel} · no direct DMs`;
-  }
-  return "Network only · no direct DMs";
+  return directDmRankReason(
+    {
+      threadId: c.directDmThreadId ?? c.key,
+      accountKey: c.key,
+      displayName: c.displayName,
+      username: c.username,
+      aliases: [],
+      totalMessages: c.directDmCount,
+      lastDmAt: c.lastDmAt,
+      source: "dm-thread",
+      confidence: "high",
+    },
+    c.isMutual
+  );
 }
 
 export function compareCanonicalForLinkedIn(
@@ -370,18 +398,6 @@ export function compareCanonicalForLinkedIn(
   const aMutual = a.isMutual ? 1 : 0;
   const bMutual = b.isMutual ? 1 : 0;
   if (bMutual !== aMutual) return bMutual - aMutual;
-
-  const aRel = (a.followsMe ? 1 : 0) + (a.iFollowThem ? 1 : 0);
-  const bRel = (b.followsMe ? 1 : 0) + (b.iFollowThem ? 1 : 0);
-  if (bRel !== aRel) return bRel - aRel;
-
-  const aEng =
-    (a.likesAttribution === "attributed" ? a.likedCount : 0) +
-    (a.commentsAttribution === "attributed" ? a.commentedCount : 0);
-  const bEng =
-    (b.likesAttribution === "attributed" ? b.likedCount : 0) +
-    (b.commentsAttribution === "attributed" ? b.commentedCount : 0);
-  if (bEng !== aEng) return bEng - aEng;
 
   return a.displayLabel.localeCompare(b.displayLabel);
 }
@@ -406,17 +422,21 @@ export function syncUnifiedDmFromCanonical(
       dmThreadId: canonical.directDmThreadId ?? account.dmThreadId,
       firstDmAt: canonical.firstDmAt ?? account.firstDmAt,
       lastDmAt: canonical.lastDmAt ?? account.lastDmAt,
-      dmSentByMe: canonical.senderSplitAvailable
-        ? canonical.directDmSentByMe
-        : account.dmSentByMe,
-      dmSentByThem: canonical.senderSplitAvailable
-        ? canonical.directDmSentByThem
-        : account.dmSentByThem,
-      dmSenderSplitAvailable: canonical.senderSplitAvailable,
-      dmMatchMethod: (canonical.dmMatchMethod ??
-        account.dmMatchMethod) as UnifiedAccount["dmMatchMethod"],
-      nameConfidence:
-        canonical.dmMatchConfidence ?? account.nameConfidence,
+      dmSenderSplitAvailable: false,
+      dmMatchMethod: "folder-path" as UnifiedAccount["dmMatchMethod"],
+      nameConfidence: "high",
     };
   });
+}
+
+export function normalizeReceiptTarget(
+  target: AccountReceiptTarget
+): { accountKey?: string; threadId?: string } {
+  if (typeof target === "string") {
+    return { accountKey: target.trim() };
+  }
+  return {
+    accountKey: target.accountKey?.trim(),
+    threadId: target.threadId?.trim(),
+  };
 }

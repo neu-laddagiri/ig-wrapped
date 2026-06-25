@@ -17,44 +17,33 @@ import type {
   PageSize,
 } from "@/types/instagram";
 import type { CanonicalAccount } from "@/lib/canonicalAccounts";
+import type { AccountReceiptTarget } from "@/lib/canonicalAccounts";
+import type { DirectDmIndex } from "@/lib/insights/directDmIndex";
 import {
-  compareCanonicalForLinkedIn,
-  indexFromCanonicalList,
-} from "@/lib/canonicalAccounts";
+  buildLinkedInHelperRows,
+  compareLinkedInRows,
+  type LinkedInSortMode,
+} from "@/lib/linkedinRows";
 import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
-import { instagramProfileUrl } from "@/lib/formatters";
 import { getAccountsForLinkedInSource } from "@/lib/networkAccountDetail";
 import {
   loadLinkedInProgress,
   saveLinkedInProgress,
   clearLinkedInProgress,
 } from "@/lib/linkedinStorage";
-import {
-  computeLinkedInInteractionScore,
-  computeNetworkOnlyInteractionScore,
-  isSilentMutualCanonical,
-  type LinkedInInteractionScore,
-} from "@/lib/linkedinInteractionScore";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 interface LinkedInHelperTabProps {
   network: NetworkStats | null;
   fingerprint: string;
   canonicalAccounts: CanonicalAccount[];
+  directDmIndex: DirectDmIndex;
   entries: LinkedInHelperEntry[];
   onEntriesChange: (entries: LinkedInHelperEntry[]) => void;
-  onOpenAccount: (accountKey: string) => void;
+  onOpenAccount: (target: AccountReceiptTarget) => void;
 }
 
-type SortMode =
-  | "most-interacted"
-  | "direct-dms"
-  | "recent-dm"
-  | "mutuals-first"
-  | "followers"
-  | "following"
-  | "alphabetical"
-  | "not-reviewed";
+type SortMode = LinkedInSortMode;
 
 type InteractionFilter =
   | "all"
@@ -108,78 +97,6 @@ const INTERACTION_FILTERS: { value: InteractionFilter; label: string }[] = [
   { value: "has-notes", label: "Has notes" },
 ];
 
-interface LinkedInRow {
-  entry: LinkedInHelperEntry;
-  accountKey: string;
-  displayLabel: string;
-  secondaryLabel: string;
-  interaction: LinkedInInteractionScore;
-  canonical?: CanonicalAccount;
-}
-
-function compareRows(a: LinkedInRow, b: LinkedInRow, sortMode: SortMode): number {
-  switch (sortMode) {
-    case "alphabetical":
-      return a.displayLabel.localeCompare(b.displayLabel);
-    case "direct-dms":
-      return b.interaction.directDmCount - a.interaction.directDmCount;
-    case "recent-dm": {
-      const aTs = a.interaction.lastDmAt ?? 0;
-      const bTs = b.interaction.lastDmAt ?? 0;
-      return bTs - aTs;
-    }
-    case "mutuals-first": {
-      const aM = a.canonical?.isMutual ? 1 : 0;
-      const bM = b.canonical?.isMutual ? 1 : 0;
-      if (bM !== aM) return bM - aM;
-      if (a.canonical && b.canonical) {
-        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
-      }
-      return b.interaction.score - a.interaction.score;
-    }
-    case "followers": {
-      const aF = a.canonical?.followsMe ? 1 : 0;
-      const bF = b.canonical?.followsMe ? 1 : 0;
-      if (bF !== aF) return bF - aF;
-      if (a.canonical && b.canonical) {
-        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
-      }
-      return b.interaction.score - a.interaction.score;
-    }
-    case "following": {
-      const aF = a.canonical?.iFollowThem ? 1 : 0;
-      const bF = b.canonical?.iFollowThem ? 1 : 0;
-      if (bF !== aF) return bF - aF;
-      if (a.canonical && b.canonical) {
-        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
-      }
-      return b.interaction.score - a.interaction.score;
-    }
-    case "not-reviewed": {
-      const aN = a.entry.status === "not-reviewed" ? 1 : 0;
-      const bN = b.entry.status === "not-reviewed" ? 1 : 0;
-      if (bN !== aN) return bN - aN;
-      if (a.canonical && b.canonical) {
-        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
-      }
-      return b.interaction.score - a.interaction.score;
-    }
-    case "most-interacted":
-    default: {
-      if (a.canonical && b.canonical) {
-        return compareCanonicalForLinkedIn(a.canonical, b.canonical);
-      }
-      const dmDiff =
-        b.interaction.directDmCount - a.interaction.directDmCount;
-      if (dmDiff !== 0) return dmDiff;
-      const aTs = a.interaction.lastDmAt ?? 0;
-      const bTs = b.interaction.lastDmAt ?? 0;
-      if (bTs !== aTs) return bTs - aTs;
-      return b.interaction.score - a.interaction.score;
-    }
-  }
-}
-
 function openLinkedInSearch(username: string, displayName: string) {
   const query =
     displayName && displayName !== username
@@ -196,6 +113,7 @@ export function LinkedInHelperTab({
   network,
   fingerprint,
   canonicalAccounts,
+  directDmIndex,
   entries,
   onEntriesChange,
   onOpenAccount,
@@ -218,11 +136,6 @@ export function LinkedInHelperTab({
     const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 250);
     return () => window.clearTimeout(timer);
   }, [searchInput]);
-
-  const canonicalIndex = useMemo(
-    () => indexFromCanonicalList(canonicalAccounts),
-    [canonicalAccounts]
-  );
 
   const entryByUsername = useMemo(() => {
     const map = new Map<string, LinkedInHelperEntry>();
@@ -259,46 +172,31 @@ export function LinkedInHelperTab({
     setPage(1);
   }, [debouncedSearch, source, statusFilter, sortMode, interactionFilter]);
 
-  const baseRows = useMemo((): LinkedInRow[] => {
-    if (!network) return [];
-
-    return sourceAccounts.map((a) => {
-      const canonical =
-        canonicalIndex.byUsername.get(a.username) ??
-        canonicalIndex.byUsername.get(a.username.toLowerCase());
-      const entry =
-        entryByUsername.get(a.username) ?? {
-          username: a.username,
-          displayUsername: a.displayUsername,
-          instagramHref: a.href ?? instagramProfileUrl(a.username),
-          status: "not-reviewed" as LinkedInStatus,
-          notes: "",
-          category: a.category,
-        };
-
-      const interaction = canonical
-        ? computeLinkedInInteractionScore(canonical)
-        : computeNetworkOnlyInteractionScore(a.category);
-
-      const accountKey = canonical?.key ?? a.username;
-      const displayLabel = canonical?.displayLabel ?? a.displayUsername;
-      const secondaryLabel = canonical?.secondaryLabel ?? `@${a.username}`;
-
-      return {
-        entry,
-        accountKey,
-        displayLabel,
-        secondaryLabel,
-        interaction,
-        canonical,
-      };
-    });
-  }, [network, sourceAccounts, canonicalIndex, entryByUsername]);
+  const baseRows = useMemo(
+    () =>
+      buildLinkedInHelperRows({
+        directDmIndex,
+        canonicalAccounts,
+        sourceAccounts,
+        source,
+        entryByUsername,
+      }),
+    [
+      directDmIndex,
+      canonicalAccounts,
+      sourceAccounts,
+      source,
+      entryByUsername,
+    ]
+  );
 
   const displayRows = useMemo(() => {
     const q = debouncedSearch.trim().toLowerCase();
 
-    const filtered = baseRows.filter(({ entry, interaction, canonical, displayLabel, secondaryLabel }) => {
+    const filtered = baseRows.filter((row) => {
+      const { entry, directDmCount, isMutual, isUnknown, isSilentMutual, displayLabel, secondaryLabel } =
+        row;
+
       if (statusFilter !== "all" && entry.status !== statusFilter) {
         return false;
       }
@@ -313,24 +211,12 @@ export function LinkedInHelperTab({
         return false;
       }
 
-      const isUnknown =
-        interaction.isUnknown ||
-        canonical?.isUnknownAccount ||
-        entry.username.startsWith("unknown:");
-
-      const silent =
-        interaction.isSilentMutual ||
-        (canonical ? isSilentMutualCanonical(canonical) : false);
-
       if (interactionFilter === "hide-unknown" && isUnknown) return false;
-      if (interactionFilter === "hide-silent" && silent) return false;
-      if (
-        interactionFilter === "direct-dm" &&
-        interaction.directDmCount === 0
-      ) {
+      if (interactionFilter === "hide-silent" && isSilentMutual) return false;
+      if (interactionFilter === "direct-dm" && directDmCount === 0) {
         return false;
       }
-      if (interactionFilter === "mutuals" && !canonical?.isMutual) return false;
+      if (interactionFilter === "mutuals" && !isMutual) return false;
       if (
         interactionFilter === "dont-follow-back" &&
         entry.category !== "dontFollowMeBack"
@@ -356,7 +242,7 @@ export function LinkedInHelperTab({
       return true;
     });
 
-    return [...filtered].sort((a, b) => compareRows(a, b, sortMode));
+    return [...filtered].sort((a, b) => compareLinkedInRows(a, b, sortMode));
   }, [
     baseRows,
     debouncedSearch,
@@ -410,8 +296,8 @@ export function LinkedInHelperTab({
         <div>
           <h2 className="text-lg font-semibold text-white">LinkedIn helper</h2>
           <p className="text-xs text-white/40">
-            Review network accounts and find them on LinkedIn. DM rankings use
-            the same data as the DMs tab.
+            Ranked from the same 1-on-1 DM threads as the DMs tab. Network-only
+            accounts appear after everyone you actually DM.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -485,8 +371,8 @@ export function LinkedInHelperTab({
       <div className="flex items-start gap-2 rounded-xl border border-[#515BD4]/20 bg-[#515BD4]/8 px-3 py-2 text-xs text-white/50">
         <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#818cf8]" />
         <p>
-          Most interacted ranks by direct 1-on-1 DM count (same as DMs tab), then
-          recency, then mutual status. Network-only accounts stay at the bottom.
+          Most interacted: direct DM count → last DM date → mutual / follower /
+          following → username. No likes, comments, or fuzzy name matching.
         </p>
       </div>
 
@@ -495,7 +381,7 @@ export function LinkedInHelperTab({
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.02] text-xs uppercase tracking-wider text-white/40">
               <th className="px-4 py-3">Account</th>
-              <th className="px-4 py-3">Rank score</th>
+              <th className="px-4 py-3">Direct DMs</th>
               <th className="px-4 py-3">Why ranked</th>
               <th className="px-4 py-3">Category</th>
               <th className="px-4 py-3">Instagram</th>
@@ -515,85 +401,99 @@ export function LinkedInHelperTab({
                 </td>
               </tr>
             ) : (
-              pagedRows.map(({ entry, accountKey, displayLabel, secondaryLabel, interaction }) => (
-                <tr
-                  key={entry.username}
-                  className="border-b border-white/5 hover:bg-white/[0.03]"
-                >
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() => onOpenAccount(accountKey)}
-                      className="text-left font-medium text-white hover:text-[#DD2A7B]"
-                    >
-                      {displayLabel}
-                    </button>
-                    <p className="text-[10px] text-white/35">{secondaryLabel}</p>
-                  </td>
-                  <td className="px-4 py-3 font-semibold tabular-nums text-white">
-                    {interaction.directDmCount > 0
-                      ? interaction.directDmCount.toLocaleString()
-                      : "—"}
-                  </td>
-                  <td className="max-w-[220px] px-4 py-3 text-xs leading-snug text-white/45">
-                    {interaction.reason}
-                  </td>
-                  <td className="max-w-[100px] truncate px-4 py-3 text-xs capitalize text-white/45">
-                    {entry.category ?? "—"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <a
-                      href={entry.instagramHref}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
-                    >
-                      IG profile
-                      <ExternalLink className="h-3 w-3" />
-                    </a>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        openLinkedInSearch(entry.username, displayLabel)
-                      }
-                      className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
-                    >
-                      <Briefcase className="h-3 w-3" />
-                      Search LinkedIn
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={entry.status}
-                      onChange={(e) =>
-                        updateEntry(entry.username, {
-                          status: e.target.value as LinkedInStatus,
-                        })
-                      }
-                      className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
-                    >
-                      {STATUS_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3">
-                    <input
-                      type="text"
-                      value={entry.notes}
-                      onChange={(e) =>
-                        updateEntry(entry.username, { notes: e.target.value })
-                      }
-                      placeholder="Add note…"
-                      className="w-full min-w-[100px] rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/25 outline-none"
-                    />
-                  </td>
-                </tr>
-              ))
+              pagedRows.map(
+                ({
+                  entry,
+                  accountKey,
+                  threadId,
+                  displayLabel,
+                  secondaryLabel,
+                  directDmCount,
+                  reason,
+                }) => (
+                  <tr
+                    key={`${entry.username}:${threadId ?? accountKey}`}
+                    className="border-b border-white/5 hover:bg-white/[0.03]"
+                  >
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenAccount({ accountKey, threadId })
+                        }
+                        className="text-left font-medium text-white hover:text-[#DD2A7B]"
+                      >
+                        {displayLabel}
+                      </button>
+                      <p className="text-[10px] text-white/35">
+                        {secondaryLabel}
+                      </p>
+                    </td>
+                    <td className="px-4 py-3 font-semibold tabular-nums text-white">
+                      {directDmCount > 0
+                        ? directDmCount.toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="max-w-[220px] px-4 py-3 text-xs leading-snug text-white/45">
+                      {reason}
+                    </td>
+                    <td className="max-w-[100px] truncate px-4 py-3 text-xs capitalize text-white/45">
+                      {entry.category ?? "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <a
+                        href={entry.instagramHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
+                      >
+                        IG profile
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          openLinkedInSearch(entry.username, displayLabel)
+                        }
+                        className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
+                      >
+                        <Briefcase className="h-3 w-3" />
+                        Search LinkedIn
+                      </button>
+                    </td>
+                    <td className="px-4 py-3">
+                      <select
+                        value={entry.status}
+                        onChange={(e) =>
+                          updateEntry(entry.username, {
+                            status: e.target.value as LinkedInStatus,
+                          })
+                        }
+                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
+                      >
+                        {STATUS_OPTIONS.map((opt) => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                    <td className="px-4 py-3">
+                      <input
+                        type="text"
+                        value={entry.notes}
+                        onChange={(e) =>
+                          updateEntry(entry.username, { notes: e.target.value })
+                        }
+                        placeholder="Add note…"
+                        className="w-full min-w-[100px] rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/25 outline-none"
+                      />
+                    </td>
+                  </tr>
+                )
+              )
             )}
           </tbody>
         </table>

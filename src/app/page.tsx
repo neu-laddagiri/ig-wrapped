@@ -39,6 +39,10 @@ import {
   resolveCanonicalAccount,
 } from "@/lib/canonicalAccounts";
 import {
+  buildDirectDmIndexFromMessages,
+  indexFromDirectDmRecords,
+} from "@/lib/insights/directDmIndex";
+import {
   AccountDetailDrawer,
   useAccountDetail,
 } from "@/components/AccountDetailDrawer";
@@ -119,37 +123,64 @@ export default function Home() {
     [insights?.canonicalAccounts]
   );
 
+  const directDmIndex = useMemo(() => {
+    if (insights?.directDmThreadRecords?.length) {
+      return indexFromDirectDmRecords(insights.directDmThreadRecords);
+    }
+    if (parsedData?.messages) {
+      return buildDirectDmIndexFromMessages(parsedData.messages, {
+        network: parsedData.network ?? null,
+      });
+    }
+    return indexFromDirectDmRecords([]);
+  }, [insights?.directDmThreadRecords, parsedData?.messages, parsedData?.network]);
+
   const dmAccountKeyByThreadId = useMemo(() => {
     const map = new Map<string, string>();
-    for (const c of insights?.canonicalAccounts ?? []) {
-      for (const threadId of c.directDmThreadIds ?? []) {
-        map.set(threadId, c.key);
-      }
-      if (c.directDmThreadId) {
-        map.set(c.directDmThreadId, c.key);
-      }
+    for (const r of directDmIndex.byThreadId.values()) {
+      map.set(r.threadId, r.accountKey);
     }
     return map;
-  }, [insights?.canonicalAccounts]);
+  }, [directDmIndex]);
 
-  const selectedAccountKey =
-    accountDetail.selectedAccountKey ?? accountDetail.selectedUsername;
+  const selectedAccountKey = accountDetail.selection?.accountKey ?? null;
+  const selectedThreadId = accountDetail.selection?.threadId;
+  const selectedDmRecord = selectedThreadId
+    ? directDmIndex.byThreadId.get(selectedThreadId)
+    : selectedAccountKey
+      ? directDmIndex.byAccountKey.get(selectedAccountKey) ??
+        directDmIndex.byAccountKey.get(selectedAccountKey.toLowerCase())
+      : undefined;
   const selectedCanonical = selectedAccountKey
     ? resolveCanonicalAccount(canonicalIndex, selectedAccountKey)
-    : undefined;
-  const drawerUsername = selectedCanonical?.username ?? selectedAccountKey;
+    : selectedDmRecord
+      ? resolveCanonicalAccount(canonicalIndex, selectedDmRecord.accountKey)
+      : undefined;
+  const drawerUsername =
+    selectedCanonical?.username ??
+    selectedAccountKey ??
+    selectedDmRecord?.username ??
+    selectedDmRecord?.accountKey ??
+    undefined;
   const unifiedAccount =
     drawerUsername && insights
       ? findUnifiedAccount(insights.accounts, drawerUsername)
       : undefined;
   const linkedinForAccount = linkedinProgress.find(
-    (e) => e.username === drawerUsername || e.username === selectedAccountKey
+    (e) =>
+      e.username === drawerUsername ||
+      e.username === selectedAccountKey
   );
-  const drawerReceipt = selectedAccountKey
-    ? openAccountReceipt(canonicalIndex, selectedAccountKey, {
-        linkedinEntry: linkedinForAccount,
-      })
-    : null;
+  const drawerReceipt =
+    selectedAccountKey || selectedThreadId
+      ? openAccountReceipt({
+          directDmIndex,
+          canonicalIndex,
+          accountKey: selectedAccountKey ?? undefined,
+          threadId: selectedThreadId,
+          linkedinEntry: linkedinForAccount,
+        })
+      : null;
 
   const [exportGuideExpanded, setExportGuideExpanded] = useState(true);
   const [dataCoverageExpanded, setDataCoverageExpanded] = useState(false);
@@ -680,6 +711,7 @@ export default function Home() {
                         network={parsedData.network}
                         fingerprint={fileFingerprint}
                         canonicalAccounts={insights.canonicalAccounts ?? []}
+                        directDmIndex={directDmIndex}
                         entries={linkedinProgress}
                         onEntriesChange={setLinkedinProgress}
                         onOpenAccount={accountDetail.openAccount}

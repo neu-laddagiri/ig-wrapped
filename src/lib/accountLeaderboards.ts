@@ -2,6 +2,7 @@ import type { UnifiedAccount } from "@/types/insights";
 import type { AccountLeaderboard, AccountLeaderboardEntry } from "@/types/insights";
 import type { RealOnesAccount } from "@/types/insights";
 import { findUnifiedAccount } from "@/lib/relationshipEngine";
+import type { DirectDmIndex } from "@/lib/insights/directDmIndex";
 
 function toEntry(
   account: UnifiedAccount | { username: string; displayName: string },
@@ -44,7 +45,7 @@ export function buildAccountLeaderboards(
   accounts: UnifiedAccount[],
   interactionMap: Map<string, { likes: number; comments: number; stories: number; saves: number }>,
   realOnes: RealOnesAccount[] = [],
-  coreAnalytics?: import("@/lib/insights/coreAnalytics").CoreAnalytics
+  directDmIndex?: DirectDmIndex
 ): AccountLeaderboard[] {
   const boards: AccountLeaderboard[] = [];
   const networkAccounts = accounts.filter((a) => !a.isUnknownAccount);
@@ -95,13 +96,16 @@ export function buildAccountLeaderboards(
   boards.push({
     id: "top-dm",
     title: "Most DM'd Accounts",
-    entries: (coreAnalytics?.topDirectDmPeople.length
-      ? coreAnalytics.topDirectDmPeople.slice(0, 20).map((p) => {
-          const acc = findUnifiedAccount(accounts, p.username);
+    entries: (directDmIndex?.records.length
+      ? directDmIndex.records.slice(0, 20).map((r) => {
+          const acc = findUnifiedAccount(accounts, r.accountKey);
           return toEntry(
-            acc ?? { username: p.username, displayName: p.displayName },
-            p.directDmCount,
-            { dmCount: p.directDmCount },
+            acc ?? {
+              username: r.username ?? r.accountKey,
+              displayName: r.displayName,
+            },
+            r.totalMessages,
+            { dmCount: r.totalMessages },
             acc?.sourceBreakdown
           );
         })

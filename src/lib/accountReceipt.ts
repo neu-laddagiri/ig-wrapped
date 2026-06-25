@@ -17,6 +17,7 @@ export interface AccountReceiptDm {
   senderSplitAvailable: boolean;
   matchConfidence?: NameConfidence;
   matchSource?: string;
+  lookupStatus?: "matched" | "not-found";
 }
 
 export interface AccountReceipt {

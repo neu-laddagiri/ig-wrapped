@@ -1,6 +1,6 @@
 import type { CanonicalAccount } from "@/lib/canonicalAccounts";
-import { canonicalRankReason } from "@/lib/canonicalAccounts";
-import type { UnifiedAccount } from "@/types/insights";
+import { directDmRankReason } from "@/lib/insights/directDmIndex";
+import type { DirectDmRecord } from "@/lib/insights/directDmIndex";
 
 export interface LinkedInInteractionScore {
   score: number;
@@ -11,43 +11,38 @@ export interface LinkedInInteractionScore {
   isUnknown: boolean;
 }
 
-/** Score is for tie-breaking only — primary sort uses DM count + recency. Never negative. */
 export function computeLinkedInInteractionScore(
-  canonical: CanonicalAccount
+  canonical: CanonicalAccount,
+  dmRecord?: DirectDmRecord
 ): LinkedInInteractionScore {
-  const directDmCount = canonical.directDmCount;
+  const directDmCount = dmRecord?.totalMessages ?? canonical.directDmCount;
+  const lastDmAt = dmRecord?.lastDmAt ?? canonical.lastDmAt;
   const isUnknown = canonical.isUnknownAccount;
-  const lastDmAt = canonical.lastDmAt;
-
-  let score = directDmCount;
-
-  if (lastDmAt) {
-    const ageDays = (Date.now() / 1000 - lastDmAt) / 86400;
-    if (ageDays <= 30) score += 1000;
-    else if (ageDays <= 90) score += 500;
-  }
-
-  if (canonical.isMutual) score += 50;
-  else {
-    if (canonical.followsMe) score += 10;
-    if (canonical.iFollowThem) score += 10;
-  }
-
-  if (canonical.likesAttribution === "attributed") {
-    score += Math.min(canonical.likedCount, 20);
-  }
-  if (canonical.commentsAttribution === "attributed") {
-    score += Math.min(canonical.commentedCount, 20);
-  }
 
   const isSilentMutual =
-    canonical.isMutual &&
-    directDmCount === 0 &&
-    canonical.groupMessageCount < 2;
+    canonical.isMutual && directDmCount === 0 && canonical.groupMessageCount < 2;
+
+  const reason = directDmRankReason(
+    dmRecord ??
+      (directDmCount > 0
+        ? {
+            threadId: canonical.directDmThreadId ?? canonical.key,
+            accountKey: canonical.key,
+            displayName: canonical.displayName,
+            username: canonical.username,
+            aliases: [],
+            totalMessages: directDmCount,
+            lastDmAt,
+            source: "dm-thread",
+            confidence: "high",
+          }
+        : undefined),
+    canonical.isMutual
+  );
 
   return {
-    score,
-    reason: canonicalRankReason(canonical),
+    score: directDmCount,
+    reason,
     directDmCount,
     lastDmAt,
     isSilentMutual,
@@ -60,7 +55,7 @@ export function computeNetworkOnlyInteractionScore(
 ): LinkedInInteractionScore {
   const isMutual = category === "mutual";
   return {
-    score: isMutual ? 5 : 0,
+    score: 0,
     reason: isMutual
       ? "Network only · mutual · no direct DMs"
       : "Network only · no direct DMs",
@@ -70,14 +65,16 @@ export function computeNetworkOnlyInteractionScore(
   };
 }
 
-export function isSilentMutualAccount(account: UnifiedAccount): boolean {
-  return (
-    account.isMutual &&
-    account.dmMessageCount === 0 &&
-    (account.groupMessageCount ?? 0) < 2
-  );
-}
-
-export function isSilentMutualCanonical(c: CanonicalAccount): boolean {
-  return c.isMutual && c.directDmCount === 0 && c.groupMessageCount < 2;
+export function computeDirectDmInteractionScore(
+  dmRecord: DirectDmRecord,
+  network?: { isMutual?: boolean }
+): LinkedInInteractionScore {
+  return {
+    score: dmRecord.totalMessages,
+    reason: directDmRankReason(dmRecord, network?.isMutual ?? false),
+    directDmCount: dmRecord.totalMessages,
+    lastDmAt: dmRecord.lastDmAt,
+    isSilentMutual: false,
+    isUnknown: false,
+  };
 }

@@ -571,6 +571,8 @@ export interface InsightsBundle {
   dmReceiptByUsername?: import("@/lib/accountReceipt").DmReceiptByUsername;
   /** Canonical account records — DM stats match DMs tab. */
   canonicalAccounts?: import("@/lib/canonicalAccounts").CanonicalAccount[];
+  /** Per-thread direct DM records (DMs tab source of truth). */
+  directDmThreadRecords?: import("@/lib/insights/directDmIndex").DirectDmRecord[];
   cleanup: CleanupAccount[];
   realOnes: RealOnesAccount[];
   silentMutuals: RealOnesAccount[];

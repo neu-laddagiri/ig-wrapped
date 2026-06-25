@@ -59,7 +59,7 @@ interface DmsTabProps {
   dmHeatmap?: DmHeatmapResult | null;
   replyPatterns?: ReplyPatternResult | null;
   dmRelationshipInsights?: DmRelationshipInsight[];
-  onOpenAccount?: (accountKey: string) => void;
+  onOpenAccount?: (target: import("@/lib/canonicalAccounts").AccountReceiptTarget) => void;
   dmAccountKeyByThreadId?: Map<string, string>;
 }
 
@@ -715,13 +715,19 @@ export function DmsTab({
                             className="hover:text-[#DD2A7B]"
                             onClick={(e) => {
                               e.stopPropagation();
-                              onOpenAccount?.(accountKey!);
+                              onOpenAccount?.({
+                                threadId: thread.id,
+                                accountKey: accountKey!,
+                              });
                             }}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
                                 e.stopPropagation();
-                                onOpenAccount?.(accountKey!);
+                                onOpenAccount?.({
+                                  threadId: thread.id,
+                                  accountKey: accountKey!,
+                                });
                               }
                             }}
                           >
