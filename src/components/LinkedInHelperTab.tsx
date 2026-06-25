@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   Briefcase,
   Download,
@@ -24,13 +24,14 @@ import {
   compareLinkedInRows,
   type LinkedInSortMode,
 } from "@/lib/linkedinRows";
-import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
+import { normalizeUsername } from "@/lib/accountIdentity";
 import { getAccountsForLinkedInSource } from "@/lib/networkAccountDetail";
 import {
   loadLinkedInProgress,
   saveLinkedInProgress,
   clearLinkedInProgress,
 } from "@/lib/linkedinStorage";
+import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 interface LinkedInHelperTabProps {
@@ -39,7 +40,7 @@ interface LinkedInHelperTabProps {
   canonicalAccounts: CanonicalAccount[];
   directDmIndex: DirectDmIndex;
   entries: LinkedInHelperEntry[];
-  onEntriesChange: (entries: LinkedInHelperEntry[]) => void;
+  onEntriesChange: Dispatch<SetStateAction<LinkedInHelperEntry[]>>;
   onOpenAccount: (target: AccountReceiptTarget) => void;
 }
 
@@ -109,6 +110,10 @@ function openLinkedInSearch(username: string, displayName: string) {
   );
 }
 
+function stopRowClick(e: React.SyntheticEvent) {
+  e.stopPropagation();
+}
+
 export function LinkedInHelperTab({
   network,
   fingerprint,
@@ -137,10 +142,11 @@ export function LinkedInHelperTab({
     return () => window.clearTimeout(timer);
   }, [searchInput]);
 
-  const entryByUsername = useMemo(() => {
+  const entryByKey = useMemo(() => {
     const map = new Map<string, LinkedInHelperEntry>();
     for (const entry of entries) {
       map.set(entry.username, entry);
+      map.set(normalizeUsername(entry.username), entry);
     }
     return map;
   }, [entries]);
@@ -158,7 +164,7 @@ export function LinkedInHelperTab({
   }, [fingerprint, progressLoaded, onEntriesChange]);
 
   useEffect(() => {
-    if (!fingerprint || !progressLoaded || entries.length === 0) return;
+    if (!fingerprint || !progressLoaded) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       saveLinkedInProgress(fingerprint, entries);
@@ -179,14 +185,14 @@ export function LinkedInHelperTab({
         canonicalAccounts,
         sourceAccounts,
         source,
-        entryByUsername,
+        entryByKey,
       }),
     [
       directDmIndex,
       canonicalAccounts,
       sourceAccounts,
       source,
-      entryByUsername,
+      entryByKey,
     ]
   );
 
@@ -257,14 +263,38 @@ export function LinkedInHelperTab({
   );
 
   const updateEntry = useCallback(
-    (username: string, patch: Partial<LinkedInHelperEntry>) => {
-      onEntriesChange(
-        entries.map((e) =>
-          e.username === username ? { ...e, ...patch } : e
-        )
-      );
+    (
+      progressKey: string,
+      patch: Partial<LinkedInHelperEntry>,
+      baseEntry: LinkedInHelperEntry
+    ) => {
+      onEntriesChange((prev) => {
+        const existing = prev.find((e) => e.username === progressKey);
+        if (existing) {
+          return prev.map((e) =>
+            e.username === progressKey ? { ...e, ...patch } : e
+          );
+        }
+
+        const legacy = prev.find(
+          (e) =>
+            e.username !== progressKey &&
+            (e.username === baseEntry.username ||
+              normalizeUsername(e.username) ===
+                normalizeUsername(baseEntry.username))
+        );
+        if (legacy) {
+          return prev.map((e) =>
+            e === legacy
+              ? { ...baseEntry, ...legacy, ...patch, username: progressKey }
+              : e
+          );
+        }
+
+        return [...prev, { ...baseEntry, ...patch, username: progressKey }];
+      });
     },
-    [entries, onEntriesChange]
+    [onEntriesChange]
   );
 
   const handleExport = useCallback(() => {
@@ -377,24 +407,23 @@ export function LinkedInHelperTab({
       </div>
 
       <div className="overflow-x-auto rounded-2xl border border-white/10">
-        <table className="w-full min-w-[800px] text-left text-sm">
+        <table className="w-full min-w-[720px] table-fixed text-left text-sm">
           <thead>
             <tr className="border-b border-white/10 bg-white/[0.02] text-xs uppercase tracking-wider text-white/40">
-              <th className="px-4 py-3">Account</th>
-              <th className="px-4 py-3">Direct DMs</th>
-              <th className="px-4 py-3">Why ranked</th>
-              <th className="px-4 py-3">Category</th>
-              <th className="px-4 py-3">Instagram</th>
-              <th className="px-4 py-3">LinkedIn</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3">Notes</th>
+              <th className="w-[22%] px-4 py-3">Account</th>
+              <th className="w-[9%] px-4 py-3">Direct DMs</th>
+              <th className="w-[22%] px-4 py-3">Why ranked</th>
+              <th className="w-[10%] px-4 py-3">Instagram</th>
+              <th className="w-[12%] px-4 py-3">LinkedIn</th>
+              <th className="w-[12%] px-4 py-3">Status</th>
+              <th className="w-[13%] px-4 py-3">Notes</th>
             </tr>
           </thead>
           <tbody>
             {pagedRows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={7}
                   className="px-4 py-12 text-center text-white/40"
                 >
                   No accounts match your filters.
@@ -412,15 +441,17 @@ export function LinkedInHelperTab({
                   reason,
                 }) => (
                   <tr
-                    key={`${entry.username}:${threadId ?? accountKey}`}
-                    className="border-b border-white/5 hover:bg-white/[0.03]"
+                    key={`${accountKey}:${threadId ?? "network"}`}
+                    className="cursor-pointer border-b border-white/5 hover:bg-white/[0.03]"
+                    onClick={() => onOpenAccount({ accountKey, threadId })}
                   >
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 align-top">
                       <button
                         type="button"
-                        onClick={() =>
-                          onOpenAccount({ accountKey, threadId })
-                        }
+                        onClick={(e) => {
+                          stopRowClick(e);
+                          onOpenAccount({ accountKey, threadId });
+                        }}
                         className="text-left font-medium text-white hover:text-[#DD2A7B]"
                       >
                         {displayLabel}
@@ -429,49 +460,64 @@ export function LinkedInHelperTab({
                         {secondaryLabel}
                       </p>
                     </td>
-                    <td className="px-4 py-3 font-semibold tabular-nums text-white">
+                    <td className="px-4 py-3 align-top font-semibold tabular-nums text-white">
                       {directDmCount > 0
                         ? directDmCount.toLocaleString()
                         : "—"}
                     </td>
-                    <td className="max-w-[220px] px-4 py-3 text-xs leading-snug text-white/45">
+                    <td className="px-4 py-3 align-top text-xs leading-snug text-white/45">
                       {reason}
                     </td>
-                    <td className="max-w-[100px] truncate px-4 py-3 text-xs capitalize text-white/45">
-                      {entry.category ?? "—"}
-                    </td>
-                    <td className="px-4 py-3">
+                    <td
+                      className="px-4 py-3 align-top"
+                      onClick={stopRowClick}
+                    >
                       <a
                         href={entry.instagramHref}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={stopRowClick}
                         className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
                       >
                         IG profile
                         <ExternalLink className="h-3 w-3" />
                       </a>
                     </td>
-                    <td className="px-4 py-3">
+                    <td
+                      className="px-4 py-3 align-top"
+                      onClick={stopRowClick}
+                    >
                       <button
                         type="button"
-                        onClick={() =>
-                          openLinkedInSearch(entry.username, displayLabel)
-                        }
+                        onClick={(e) => {
+                          stopRowClick(e);
+                          openLinkedInSearch(entry.username, displayLabel);
+                        }}
                         className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
                       >
                         <Briefcase className="h-3 w-3" />
                         Search LinkedIn
                       </button>
                     </td>
-                    <td className="px-4 py-3">
+                    <td
+                      className="px-4 py-3 align-top"
+                      onClick={stopRowClick}
+                    >
                       <select
                         value={entry.status}
-                        onChange={(e) =>
-                          updateEntry(entry.username, {
-                            status: e.target.value as LinkedInStatus,
-                          })
-                        }
-                        className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white outline-none"
+                        onClick={stopRowClick}
+                        onMouseDown={stopRowClick}
+                        onChange={(e) => {
+                          stopRowClick(e);
+                          updateEntry(
+                            accountKey,
+                            {
+                              status: e.target.value as LinkedInStatus,
+                            },
+                            entry
+                          );
+                        }}
+                        className="w-full max-w-[140px] rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white outline-none"
                       >
                         {STATUS_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -480,15 +526,27 @@ export function LinkedInHelperTab({
                         ))}
                       </select>
                     </td>
-                    <td className="px-4 py-3">
+                    <td
+                      className="px-4 py-3 align-top"
+                      onClick={stopRowClick}
+                    >
                       <input
                         type="text"
                         value={entry.notes}
-                        onChange={(e) =>
-                          updateEntry(entry.username, { notes: e.target.value })
-                        }
+                        onClick={stopRowClick}
+                        onMouseDown={stopRowClick}
+                        onFocus={stopRowClick}
+                        onKeyDown={stopRowClick}
+                        onChange={(e) => {
+                          stopRowClick(e);
+                          updateEntry(
+                            accountKey,
+                            { notes: e.target.value },
+                            entry
+                          );
+                        }}
                         placeholder="Add note…"
-                        className="w-full min-w-[100px] rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-xs text-white placeholder:text-white/25 outline-none"
+                        className="w-full min-w-0 rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white placeholder:text-white/25 outline-none focus:border-[#DD2A7B]/40"
                       />
                     </td>
                   </tr>

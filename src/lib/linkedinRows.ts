@@ -78,16 +78,31 @@ function networkFields(
   };
 }
 
+function lookupStoredEntry(
+  progressKey: string,
+  legacyKeys: string[],
+  entryByKey: Map<string, LinkedInHelperEntry>
+): LinkedInHelperEntry | undefined {
+  const direct = entryByKey.get(progressKey);
+  if (direct) return direct;
+  for (const key of legacyKeys) {
+    if (!key || key === progressKey) continue;
+    const hit = entryByKey.get(key) ?? entryByKey.get(normalizeUsername(key));
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 function defaultEntry(
-  username: string,
+  progressKey: string,
   displayUsername: string,
   networkAccount?: InstagramAccount
 ): LinkedInHelperEntry {
   return {
-    username,
+    username: progressKey,
     displayUsername,
     instagramHref:
-      networkAccount?.href ?? instagramProfileUrl(username),
+      networkAccount?.href ?? instagramProfileUrl(progressKey),
     status: "not-reviewed",
     notes: "",
     category: networkAccount?.category,
@@ -95,18 +110,20 @@ function defaultEntry(
 }
 
 function mergeEntry(
-  username: string,
-  entryByUsername: Map<string, LinkedInHelperEntry>,
+  progressKey: string,
+  legacyKeys: string[],
+  entryByKey: Map<string, LinkedInHelperEntry>,
   networkAccount?: InstagramAccount,
   displayUsername?: string
 ): LinkedInHelperEntry {
-  return (
-    entryByUsername.get(username) ??
-    defaultEntry(
-      username,
-      displayUsername ?? networkAccount?.displayUsername ?? username,
-      networkAccount
-    )
+  const stored = lookupStoredEntry(progressKey, legacyKeys, entryByKey);
+  if (stored) {
+    return { ...stored, username: progressKey };
+  }
+  return defaultEntry(
+    progressKey,
+    displayUsername ?? networkAccount?.displayUsername ?? progressKey,
+    networkAccount
   );
 }
 
@@ -114,7 +131,7 @@ function buildDmRow(
   dmRecord: DirectDmRecord,
   canonical: CanonicalAccount | undefined,
   networkAccount: InstagramAccount | undefined,
-  entryByUsername: Map<string, LinkedInHelperEntry>
+  entryByKey: Map<string, LinkedInHelperEntry>
 ): BuiltLinkedInRow {
   const networkUsername =
     canonical?.username &&
@@ -124,7 +141,10 @@ function buildDmRow(
         ? normalizeUsername(dmRecord.username)
         : undefined;
 
-  const entryKey = networkUsername ?? dmRecord.accountKey;
+  const progressKey = dmRecord.accountKey;
+  const legacyKeys = [networkUsername, dmRecord.username].filter(
+    (k): k is string => Boolean(k)
+  );
   const net = networkFields(canonical, networkAccount);
   const displayName =
     dmRecord.displayName ??
@@ -135,15 +155,16 @@ function buildDmRow(
 
   const displayLabel = getDisplayLabel({
     displayName,
-    username: usernameForLabel ?? entryKey,
+    username: usernameForLabel ?? progressKey,
   });
   const secondaryLabel = usernameForLabel
     ? getSecondaryLabel({ username: usernameForLabel })
-    : canonical?.secondaryLabel ?? entryKey;
+    : canonical?.secondaryLabel ?? progressKey;
 
   const entry = mergeEntry(
-    entryKey,
-    entryByUsername,
+    progressKey,
+    legacyKeys,
+    entryByKey,
     networkAccount,
     displayName
   );
@@ -162,14 +183,14 @@ function buildDmRow(
     isSilentMutual: false,
     isUnknown:
       displayName === UNKNOWN_ACCOUNT_LABEL ||
-      entryKey.startsWith("unknown:"),
+      progressKey.startsWith("unknown:"),
   };
 }
 
 function buildNetworkOnlyRow(
   networkAccount: InstagramAccount,
   canonical: CanonicalAccount | undefined,
-  entryByUsername: Map<string, LinkedInHelperEntry>
+  entryByKey: Map<string, LinkedInHelperEntry>
 ): BuiltLinkedInRow {
   const net = networkFields(canonical, networkAccount);
   const displayLabel =
@@ -182,13 +203,16 @@ function buildNetworkOnlyRow(
     canonical?.secondaryLabel ??
     getSecondaryLabel({ username: networkAccount.username });
 
+  const progressKey = canonical?.key ?? networkAccount.username;
+
   return {
     entry: mergeEntry(
-      networkAccount.username,
-      entryByUsername,
+      progressKey,
+      [networkAccount.username],
+      entryByKey,
       networkAccount
     ),
-    accountKey: canonical?.key ?? networkAccount.username,
+    accountKey: progressKey,
     displayLabel,
     secondaryLabel,
     directDmCount: 0,
@@ -209,9 +233,9 @@ export function buildLinkedInHelperRows(params: {
   canonicalAccounts: CanonicalAccount[];
   sourceAccounts: InstagramAccount[];
   source: LinkedInSource;
-  entryByUsername: Map<string, LinkedInHelperEntry>;
+  entryByKey: Map<string, LinkedInHelperEntry>;
 }): BuiltLinkedInRow[] {
-  const { directDmIndex, canonicalAccounts, sourceAccounts, source, entryByUsername } =
+  const { directDmIndex, canonicalAccounts, sourceAccounts, source, entryByKey } =
     params;
 
   const canonicalIndex = indexFromCanonicalList(canonicalAccounts);
@@ -248,7 +272,7 @@ export function buildLinkedInHelperRows(params: {
       : undefined;
 
     rows.push(
-      buildDmRow(dmRecord, canonical, networkAccount, entryByUsername)
+      buildDmRow(dmRecord, canonical, networkAccount, entryByKey)
     );
 
     if (networkUsername) {
@@ -264,7 +288,7 @@ export function buildLinkedInHelperRows(params: {
       canonicalIndex.byUsername.get(networkAccount.username);
 
     rows.push(
-      buildNetworkOnlyRow(networkAccount, canonical, entryByUsername)
+      buildNetworkOnlyRow(networkAccount, canonical, entryByKey)
     );
   }
 
