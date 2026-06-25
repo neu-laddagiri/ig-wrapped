@@ -53,34 +53,25 @@ export function formatMonthLabel(monthKey: string): string {
   }
 }
 
+import {
+  buildLinkedInSearchQuery,
+  linkedInGoogleSearchUrl,
+  type LinkedInSearchContext,
+} from "@/lib/linkedinSearchQuery";
+
 export function linkedInSearchUrl(
   username: string,
   displayName?: string,
   context?: string
 ): string {
-  const cleanUser = username.trim().replace(/^@/, "").replace(/^dm:/, "");
-  const display = displayName?.trim();
-  const cleanedDisplay =
-    display && display.toLowerCase() !== cleanUser.toLowerCase()
-      ? display
-      : undefined;
-
-  let query: string;
-  if (cleanedDisplay && cleanedDisplay.length > 1) {
-    query = `"${cleanedDisplay}" LinkedIn`;
-  } else if (cleanUser && !/^\d{8,}$/.test(cleanUser)) {
-    query = `"${cleanUser}" Instagram LinkedIn`;
-  } else {
-    query = `"${cleanUser}" LinkedIn`;
-  }
-
-  const ctx = context?.trim();
-  if (ctx && !query.toLowerCase().includes(ctx.toLowerCase())) {
-    query += ` ${ctx}`;
-  }
-
-  return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
+  return linkedInGoogleSearchUrl(
+    { username, displayName },
+    context ? { school: context } : undefined
+  );
 }
+
+export { buildLinkedInSearchQuery, linkedInGoogleSearchUrl };
+export type { LinkedInSearchContext };
 
 export function instagramProfileUrl(username: string): string {
   return `https://www.instagram.com/${encodeURIComponent(username)}/`;

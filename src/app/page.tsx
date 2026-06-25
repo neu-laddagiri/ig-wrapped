@@ -42,6 +42,7 @@ import {
   buildDirectDmIndexFromMessages,
   indexFromDirectDmRecords,
 } from "@/lib/insights/directDmIndex";
+import { inferLinkedInSchoolContext } from "@/lib/linkedinSearchQuery";
 import {
   AccountDetailDrawer,
   useAccountDetail,
@@ -142,6 +143,17 @@ export default function Home() {
     }
     return map;
   }, [directDmIndex]);
+
+  const linkedInSchoolContext = useMemo(
+    () =>
+      inferLinkedInSchoolContext([
+        ...(insights?.searchWrapped?.topTerms?.map((t) => t.query) ?? []),
+        ...(insights?.searchWrapped?.topAccounts?.map((t) => t.query) ?? []),
+        ...(insights?.searchWrapped?.repeatedSearches?.map((t) => t.query) ??
+          []),
+      ]),
+    [insights?.searchWrapped]
+  );
 
   const selectedAccountKey = accountDetail.selection?.accountKey ?? null;
   const selectedThreadId = accountDetail.selection?.threadId;
@@ -715,6 +727,7 @@ export default function Home() {
                         entries={linkedinProgress}
                         onEntriesChange={setLinkedinProgress}
                         onOpenAccount={accountDetail.openAccount}
+                        schoolContext={linkedInSchoolContext}
                       />
                     )}
                     {activeTab === "compare" && (

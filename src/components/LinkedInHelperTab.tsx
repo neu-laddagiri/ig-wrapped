@@ -32,6 +32,11 @@ import {
   clearLinkedInProgress,
 } from "@/lib/linkedinStorage";
 import { exportLinkedInHelperCsv } from "@/lib/exportCsv";
+import {
+  buildLinkedInSearchQuery,
+  openLinkedInGoogleSearch,
+} from "@/lib/linkedinSearchQuery";
+import type { LinkedInSearchContext } from "@/lib/linkedinSearchQuery";
 import { TablePagination, paginate } from "@/components/TablePagination";
 
 interface LinkedInHelperTabProps {
@@ -42,6 +47,7 @@ interface LinkedInHelperTabProps {
   entries: LinkedInHelperEntry[];
   onEntriesChange: Dispatch<SetStateAction<LinkedInHelperEntry[]>>;
   onOpenAccount: (target: AccountReceiptTarget) => void;
+  schoolContext?: string;
 }
 
 type SortMode = LinkedInSortMode;
@@ -98,18 +104,6 @@ const INTERACTION_FILTERS: { value: InteractionFilter; label: string }[] = [
   { value: "has-notes", label: "Has notes" },
 ];
 
-function openLinkedInSearch(username: string, displayName: string) {
-  const query =
-    displayName && displayName !== username
-      ? `"${displayName}" LinkedIn`
-      : `"${username}" Instagram LinkedIn`;
-  window.open(
-    `https://www.google.com/search?q=${encodeURIComponent(query)}`,
-    "_blank",
-    "noopener,noreferrer"
-  );
-}
-
 function stopRowClick(e: React.SyntheticEvent) {
   e.stopPropagation();
 }
@@ -122,7 +116,12 @@ export function LinkedInHelperTab({
   entries,
   onEntriesChange,
   onOpenAccount,
+  schoolContext,
 }: LinkedInHelperTabProps) {
+  const linkedInSearchContext = useMemo((): LinkedInSearchContext | undefined => {
+    const school = schoolContext?.trim();
+    return school ? { school } : undefined;
+  }, [schoolContext]);
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [source, setSource] = useState<LinkedInSource>("all");
@@ -430,8 +429,8 @@ export function LinkedInHelperTab({
                 </td>
               </tr>
             ) : (
-              pagedRows.map(
-                ({
+              pagedRows.map((row) => {
+                const {
                   entry,
                   accountKey,
                   threadId,
@@ -439,7 +438,18 @@ export function LinkedInHelperTab({
                   secondaryLabel,
                   directDmCount,
                   reason,
-                }) => (
+                } = row;
+                const searchAccount = {
+                  username: entry.username,
+                  displayName: entry.displayUsername,
+                  displayLabel,
+                };
+                const searchQuery = buildLinkedInSearchQuery(
+                  searchAccount,
+                  linkedInSearchContext
+                );
+
+                return (
                   <tr
                     key={`${accountKey}:${threadId ?? "network"}`}
                     className="cursor-pointer border-b border-white/5 hover:bg-white/[0.03]"
@@ -489,9 +499,13 @@ export function LinkedInHelperTab({
                     >
                       <button
                         type="button"
+                        title={searchQuery}
                         onClick={(e) => {
                           stopRowClick(e);
-                          openLinkedInSearch(entry.username, displayLabel);
+                          openLinkedInGoogleSearch(
+                            searchAccount,
+                            linkedInSearchContext
+                          );
                         }}
                         className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
                       >
@@ -550,8 +564,8 @@ export function LinkedInHelperTab({
                       />
                     </td>
                   </tr>
-                )
-              )
+                );
+              })
             )}
           </tbody>
         </table>
