@@ -1,105 +1,66 @@
 import { formatMonthLabel } from "@/lib/formatters";
-import { computeMostActiveEra } from "@/lib/mostActiveEra";
-import type {
-  ActivityTypeKey,
-  MostActiveEraData,
-  ParsedExportData,
-  SecurityData,
-} from "@/types/instagram";
+import type { ParsedExportData, MostActiveEraData } from "@/types/instagram";
 import type { EraLabel, ErasTimeline } from "@/types/insights";
+import type { SearchWrappedResult } from "@/types/insights";
+import {
+  inferEraFromGroups,
+  monthConfidence,
+  monthTotal,
+  resolveMonthlyBreakdown,
+  topGroupsForMonth,
+} from "@/lib/monthlyActivityBreakdown";
 
-const ACTIVITY_LABELS: Record<string, string> = {
-  dms: "DMs",
-  likedPosts: "likes",
-  storiesViewed: "story views",
-  videosWatched: "videos",
-  postsViewed: "posts viewed",
-  following: "follows",
-  followers: "followers",
-  postComments: "comments",
-  savedPosts: "saves",
-};
+export const ERAS_TIMELINE_VERSION = 2;
 
-function inferEraLabel(
+function buildEraLabelForMonth(
   month: string,
-  topType: string | undefined,
   count: number,
-  securitySpike?: boolean
+  groups: Map<import("@/lib/monthlyActivityBreakdown").EraGroupKey, number>
 ): EraLabel {
-  const label = formatMonthLabel(month);
-  let eraName = "Active Era";
-  let caption = "A busy month on Instagram.";
+  const inferred = inferEraFromGroups(groups);
+  const topRanked = topGroupsForMonth(groups, 3);
+  const topDisplay = topRanked[0];
 
-  if (securitySpike) {
-    eraName = "Security Event Era";
-    caption = "Notable account security activity this month.";
-  } else if (topType === "dms") {
-    eraName = "DM Peak Era";
-    caption = "Your inbox was working overtime.";
-  } else if (topType === "storiesViewed") {
-    eraName = "Story Watcher Era";
-    caption = "Stories had your full attention.";
-  } else if (topType === "videosWatched" || topType === "postsViewed") {
-    eraName = "Doomscroll Era";
-    caption = "Feed and video consumption spiked.";
-  } else if (topType === "following" || topType === "followers") {
-    eraName = "Follow Spree Era";
-    caption = "Network growth was the main event.";
-  } else if (topType === "likedPosts") {
-    eraName = "Generous Liker Era";
-    caption = "You were handing out likes freely.";
-  } else if (count < 20) {
-    eraName = "Ghost Mode Era";
-    caption = "Light activity — quiet month.";
-  }
-
-  return { month, label: eraName, caption, count, topActivityType: topType };
-}
-
-function securityMonths(security: SecurityData | null): Set<string> {
-  const months = new Set<string>();
-  for (const e of security?.events ?? []) {
-    if (!e.timestamp) continue;
-    const d = new Date(e.timestamp * 1000);
-    months.add(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`);
-  }
-  return months;
+  return {
+    month,
+    monthLabel: formatMonthLabel(month),
+    label: inferred.eraName,
+    caption: inferred.caption,
+    dominanceLine: inferred.dominanceLine,
+    count,
+    topActivityType: topDisplay?.label ?? "Mixed activity",
+    topActivityCount: topDisplay?.count ?? 0,
+    breakdown: topRanked.map((r) => ({ label: r.label, count: r.count })),
+    confidence: monthConfidence(month),
+  };
 }
 
 export function buildErasTimeline(
   parsed: ParsedExportData,
-  mostActiveEra: MostActiveEraData | null
+  mostActiveEra: MostActiveEraData | null,
+  files?: Map<string, string>,
+  searchWrapped?: SearchWrappedResult | null
 ): ErasTimeline | null {
-  const era =
-    mostActiveEra ??
-    computeMostActiveEra({
-      files: parsed.filePaths.length
-        ? new Map(parsed.filePaths.map((p) => [p, ""]))
-        : undefined,
-      messages: parsed.messages,
-      network: parsed.network,
-      ads: parsed.ads,
-    });
+  const { groupMap, mostActiveEra: resolvedEra } = resolveMonthlyBreakdown(
+    parsed,
+    files,
+    searchWrapped
+  );
 
+  const era = resolvedEra ?? mostActiveEra;
   if (!era?.monthlyTotals.length) return null;
 
-  const secMonths = securityMonths(parsed.security);
-  const monthlyTotals = era.monthlyTotals;
-  const topMonths = era.topMonths;
+  const topMonths = era.topMonths.length
+    ? era.topMonths
+    : [...era.monthlyTotals].sort((a, b) => b.count - a.count).slice(0, 3);
 
   const eraLabels: EraLabel[] = topMonths.map((m) => {
-    const topType = era.topActivityTypes?.[0]
-      ?.toLowerCase()
-      .includes("dm")
-      ? "dms"
-      : undefined;
-    return inferEraLabel(
-      m.month,
-      topType,
-      m.count,
-      secMonths.has(m.month)
-    );
+    const groups = groupMap.get(m.month) ?? new Map();
+    const total = monthTotal(groups) || m.count;
+    return buildEraLabelForMonth(m.month, total, groups);
   });
+
+  const monthlyTotals = era.monthlyTotals;
 
   let trend: ErasTimeline["trend"] = "unknown";
   if (monthlyTotals.length >= 3) {
@@ -116,10 +77,19 @@ export function buildErasTimeline(
   }
 
   return {
+    version: ERAS_TIMELINE_VERSION,
     monthlyTotals,
     topMonths,
     peakMonth: topMonths[0],
     eraLabels,
     trend,
   };
+}
+
+/** True when saved insights lack per-month era breakdown (pre-fix saves). */
+export function erasNeedRefresh(eras: ErasTimeline | null | undefined): boolean {
+  if (!eras) return false;
+  if ((eras.version ?? 0) < ERAS_TIMELINE_VERSION) return true;
+  const first = eras.eraLabels[0];
+  return Boolean(first && !first.breakdown?.length && !first.monthLabel);
 }

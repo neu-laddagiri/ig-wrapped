@@ -12,7 +12,7 @@ import { computeFunStats, resolveFunStatValue } from "@/lib/funStats";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
-import type { DmAward } from "@/types/insights";
+import type { DmAward, ReplyPatternResult } from "@/types/insights";
 
 interface FunStatsTabProps {
   network: NetworkStats | null;
@@ -22,6 +22,7 @@ interface FunStatsTabProps {
   mostActiveEra: MostActiveEraData | null;
   showThreadNames: boolean;
   dmAwards?: DmAward[];
+  replyPatterns?: ReplyPatternResult | null;
 }
 
 export function FunStatsTab({
@@ -32,6 +33,7 @@ export function FunStatsTab({
   mostActiveEra,
   showThreadNames,
   dmAwards = [],
+  replyPatterns,
 }: FunStatsTabProps) {
   const cards = computeFunStats({
     network,
@@ -89,7 +91,7 @@ export function FunStatsTab({
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
           <h3 className="mb-3 font-semibold text-white">DM Awards</h3>
           <div className="grid gap-2 sm:grid-cols-2">
-            {dmAwards.map((award) => (
+            {dmAwards.slice(0, 6).map((award) => (
               <div
                 key={award.id}
                 className="rounded-xl border border-[#DD2A7B]/20 bg-[#DD2A7B]/5 px-3 py-2.5"
@@ -99,6 +101,43 @@ export function FunStatsTab({
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {replyPatterns?.available && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="mb-3 font-semibold text-white">Reply awards</h3>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {replyPatterns.fastestResponder && (
+              <div className="rounded-xl border border-[#DD2A7B]/20 bg-[#DD2A7B]/5 px-3 py-2.5">
+                <p className="text-sm font-medium text-white">Fastest Responder</p>
+                <p className="text-xs text-white/45">{replyPatterns.fastestResponder.label}</p>
+              </div>
+            )}
+            {replyPatterns.slowestResponder && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                <p className="text-sm font-medium text-white">Slowest Responder</p>
+                <p className="text-xs text-white/45">{replyPatterns.slowestResponder.label}</p>
+              </div>
+            )}
+            {replyPatterns.longestGhostGap && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 px-3 py-2.5">
+                <p className="text-sm font-medium text-white">Longest Ghost Gap</p>
+                <p className="text-xs text-white/45">
+                  {replyPatterns.longestGhostGap.label} · {replyPatterns.longestGhostGap.days} days
+                </p>
+              </div>
+            )}
+            {replyPatterns.topStarter && (
+              <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2.5">
+                <p className="text-sm font-medium text-white">Conversation Starter</p>
+                <p className="text-xs text-white/45">{replyPatterns.topStarter.label}</p>
+              </div>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-white/35">
+            Reply times are estimated from export timestamps.
+          </p>
         </div>
       )}
 

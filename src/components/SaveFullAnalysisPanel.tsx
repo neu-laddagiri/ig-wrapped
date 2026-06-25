@@ -34,6 +34,7 @@ interface SaveFullAnalysisPanelProps {
   dmAiSummaries: DmAiSummariesMap;
   overviewAiSummary: OverviewAiSummaryResult | null;
   currentSavedId: string | null;
+  isDemoMode?: boolean;
   onSignIn: () => void;
   onSaved: (id: string) => void;
   onDeleted: () => void;
@@ -53,6 +54,7 @@ export function SaveFullAnalysisPanel({
   dmAiSummaries,
   overviewAiSummary,
   currentSavedId,
+  isDemoMode = false,
   onSignIn,
   onSaved,
   onDeleted,
@@ -92,6 +94,13 @@ export function SaveFullAnalysisPanel({
       return;
     }
 
+    if (isDemoMode) {
+      const ok = confirm(
+        "Save this demo analysis to your account? It uses synthetic data only."
+      );
+      if (!ok) return;
+    }
+
     if (dmShowFirstMessagePreview) {
       const ok = confirm(
         "You have message previews enabled. Saving will include visible first-message previews in your cloud snapshot. Continue?"
@@ -113,6 +122,7 @@ export function SaveFullAnalysisPanel({
       expandedGroupThreads,
       dmAiSummaries,
       overviewAiSummary,
+      analysisMode: isDemoMode ? "demo" : "full",
     });
 
     const result = await saveFullAnalysisToCloud({
@@ -170,10 +180,9 @@ export function SaveFullAnalysisPanel({
               : "Create an optional account to save your full IG Wrapped analysis and LinkedIn Helper progress across devices."}
           </p>
           <p className="mt-2 text-xs text-white/35">
-            This saves your parsed analysis snapshot and app progress. It does
-            not upload your original ZIP or media files. Saved analyses include
-            limited, sanitized DM samples so AI summaries can work later. Raw
-            ZIPs, media files, and full message histories are not saved.
+            {isDemoMode
+              ? "Demo mode uses synthetic data. Cloud save is optional — use “Save full analysis” only if you want a demo snapshot on your account."
+              : "This saves your parsed analysis snapshot and app progress. It does not upload your original ZIP or media files. Saved analyses include limited, sanitized DM samples so AI summaries can work later. Raw ZIPs, media files, and full message histories are not saved."}
           </p>
         </div>
       </div>
@@ -200,7 +209,11 @@ export function SaveFullAnalysisPanel({
               ) : (
                 <CloudUpload className="h-4 w-4" />
               )}
-              {currentSavedId ? "Update saved analysis" : "Save full analysis"}
+              {currentSavedId
+                ? "Update saved analysis"
+                : isDemoMode
+                  ? "Save demo analysis"
+                  : "Save full analysis"}
             </button>
             <button
               type="button"

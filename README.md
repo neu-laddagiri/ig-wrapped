@@ -36,6 +36,24 @@ Optional accounts let you save your full parsed analysis and LinkedIn Helper pro
 - **Shareable Cards** — Public-safe, network, DM, and ads/privacy summary cards (names hidden by default)
 - **Optional AI Summaries** — User-triggered DM thread summaries via `/api/dm-summary` (Gemini/OpenAI-compatible)
 
+### Advanced features (v4 insights)
+
+- **Demo Mode** — Explore the full dashboard with synthetic fake data (`Try Demo Data` on upload). No real names or private info. Optional “Save demo analysis” to cloud.
+- **Story Mode** — Spotify Wrapped–style slideshow from Overview (`View Story Mode`). Keyboard navigation, public-safe name toggle.
+- **Presentation Mode** — Global toggle (top-right) hides sensitive names, DM previews, and search details across all tabs.
+- **Compare Exports** — Data tab: upload an older ZIP or pick a saved analysis; see follower/following/DM deltas.
+- **Since Last Save** — Overview card comparing current snapshot vs your previous cloud save.
+- **Action Plan** — Prioritized recommendations with jump-to-tab actions (dismissible locally).
+- **IG Health Scoreboard** — Social, network, privacy, DM energy, security, cleanup, and completeness scores with verdict.
+- **AI Data Analyst Chat** — `/api/analysis-chat` answers questions from aggregated metrics only (no raw ZIP).
+- **DM Heatmap** — Day × hour activity grid from export timestamps.
+- **Reply Pattern Analyzer** — Fastest/slowest responder, ghost gaps, conversation starters (Fun Stats awards).
+- **Network Clusters** — Social Graph groupings (DM friends, silent mutuals, cleanup candidates, etc.).
+- **Unfollow Impact Preview** — Cleanup tab planning tool with projected follow-back ratio + CSV export.
+- **Red / Green Flag Scanner** — Per-account signals in the account detail drawer.
+- **Explain + Confidence** — Score explanations and high/medium/low confidence pills on key insights.
+- **Share Cards** — Download PNG, copy stats, hide names globally via Presentation Mode or per-card toggle.
+
 ## Privacy-first, local-first
 
 IG Wrapped is designed with privacy as the core principle:
@@ -46,9 +64,10 @@ IG Wrapped is designed with privacy as the core principle:
 - **No media upload** — Photos and videos from your export are never sent to the cloud
 - **No scraping** — Does not access Instagram, LinkedIn, or any external API
 - **No LinkedIn automation** — LinkedIn Helper only opens manual Google search links
-- **DM privacy** — Message text is not shown in the UI by default; full raw DM history is not saved to Supabase
+- **DM privacy** — Message previews off by default; Presentation Mode hides names and sensitive details for sharing
 - **AI summaries are opt-in** — DM text is only sent to the AI provider when you click Generate AI Summary for a thread
-- **Search history is sensitive** — Search Wrapped is collapsed by default with a privacy warning
+- **AI chat uses summaries only** — `/api/analysis-chat` receives aggregated metrics, not your raw ZIP or full DM history
+- **Search history is sensitive** — Hidden in Presentation Mode; Search Wrapped requires explicit unlock
 
 ### What cloud save stores
 

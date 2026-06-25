@@ -72,7 +72,10 @@ function addTimestampsToMap(
   timestamps: number[]
 ): void {
   const monthCounts = new Map<string, number>();
+  const seen = new Set<number>();
   for (const ts of timestamps) {
+    if (seen.has(ts)) continue;
+    seen.add(ts);
     const month = formatMonthKey(ts);
     monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
   }

@@ -163,15 +163,27 @@ export interface GroupChatInsight {
   roles: GroupChatRole[];
 }
 
+export interface EraBreakdownLine {
+  label: string;
+  count: number;
+}
+
 export interface EraLabel {
   month: string;
+  monthLabel?: string;
   label: string;
   caption: string;
+  /** e.g. "Dominated by story views and DMs." */
+  dominanceLine?: string;
   count: number;
   topActivityType?: string;
+  topActivityCount?: number;
+  breakdown?: EraBreakdownLine[];
+  confidence?: "high" | "medium";
 }
 
 export interface ErasTimeline {
+  version?: number;
   monthlyTotals: { month: string; label: string; count: number }[];
   topMonths: { month: string; label: string; count: number }[];
   peakMonth?: { month: string; label: string; count: number };
@@ -313,6 +325,81 @@ export interface DataExplorerMeta {
   dmThreadDebug?: DmThreadDebugEntry[];
 }
 
+export type ConfidenceLevel = "high" | "medium" | "low";
+
+export interface DmHeatmapCell {
+  day: number;
+  hour: number;
+  count: number;
+}
+
+export interface DmHeatmapResult {
+  cells: DmHeatmapCell[];
+  mostActiveDay: string;
+  mostActiveHour: string;
+  peakWeek?: string;
+  lateNightStreak: number;
+  longestDroughtDays: number;
+  totalTimestamped: number;
+  available: boolean;
+}
+
+export interface ThreadReplyPattern {
+  threadId: string;
+  threadName: string;
+  partnerLabel: string;
+  avgReplyMsYou?: number;
+  avgReplyMsThem?: number;
+  medianReplyMsYou?: number;
+  medianReplyMsThem?: number;
+  longestGhostGapDays: number;
+  conversationStartsYou: number;
+  conversationStartsThem: number;
+  lastMessagesYou: number;
+  lastMessagesThem: number;
+  responseBalanceScore: number;
+  messageCount: number;
+}
+
+export interface ReplyPatternResult {
+  threads: ThreadReplyPattern[];
+  fastestResponder?: { label: string; avgMs: number };
+  slowestResponder?: { label: string; avgMs: number };
+  longestGhostGap?: { label: string; days: number };
+  topStarter?: { label: string; count: number };
+  topEnder?: { label: string; count: number };
+  available: boolean;
+}
+
+export interface NetworkCluster {
+  id: string;
+  title: string;
+  description: string;
+  count: number;
+  usernames: string[];
+  confidence: ConfidenceLevel;
+}
+
+export interface ScoreboardEntry {
+  id: string;
+  label: string;
+  score: number;
+  maxScore: number;
+  confidence: ConfidenceLevel;
+}
+
+export interface WrappedScoreboard {
+  entries: ScoreboardEntry[];
+  overallHealth: number;
+  verdict: string;
+}
+
+export interface AccountFlag {
+  id: string;
+  label: string;
+  tone: "green" | "red";
+}
+
 export interface InsightsBundle {
   version: number;
   accounts: UnifiedAccount[];
@@ -332,4 +419,8 @@ export interface InsightsBundle {
   shareCards: ShareCardData[];
   exportCompleteness: ExportCompletenessResult;
   dataExplorer: DataExplorerMeta;
+  dmHeatmap?: DmHeatmapResult | null;
+  replyPatterns?: ReplyPatternResult | null;
+  networkClusters?: NetworkCluster[];
+  wrappedScoreboard?: WrappedScoreboard | null;
 }

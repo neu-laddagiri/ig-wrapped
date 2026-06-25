@@ -25,8 +25,9 @@ import { computeExportCompleteness } from "@/lib/exportCompleteness";
 import { buildShareCards } from "@/lib/shareCard";
 import { parseConnectedApps } from "@/lib/parsers/appsParser";
 import type { LinkedInHelperEntry } from "@/types/instagram";
+import { enrichInsightsBundle } from "@/lib/advancedInsights";
 
-export const INSIGHTS_BUNDLE_VERSION = 3;
+export const INSIGHTS_BUNDLE_VERSION = 5;
 
 function computePersonality(
   parsed: ParsedExportData,
@@ -165,7 +166,6 @@ export function computeInsightsBundle(
   const { insights: dmRelationshipInsights, awards: dmAwards } =
     computeDmRelationshipInsights(parsed.messages);
   const groupChats = computeGroupChatInsights(parsed.messages);
-  const eras = buildErasTimeline(parsed, parsed.mostActiveEra);
   const contentDiet = computeContentDiet({
     wrapped: parsed.wrapped,
     messages: parsed.messages,
@@ -176,12 +176,21 @@ export function computeInsightsBundle(
   const adsInsights = computeAdsPrivacyInsights(parsed.ads);
   const connectedApps = files ? parseConnectedApps(files) : [];
   const securityAudit = computeSecurityAudit(parsed.security, connectedApps);
-  const searchWrapped = files ? parseSearchHistory(files) : null;
+  const searchWrapped = files
+    ? parseSearchHistory(files)
+    : (parsed.insights?.searchWrapped ?? null);
   const personality = computePersonality(parsed, contentDiet);
   const exportCompleteness = computeExportCompleteness(parsed.coverage, {
     hasSearch: Boolean(searchWrapped),
     hasApps: connectedApps.length > 0,
   });
+
+  const eras = buildErasTimeline(
+    parsed,
+    parsed.mostActiveEra,
+    files,
+    searchWrapped
+  );
 
   const partialInsights = {
     accounts,
@@ -204,26 +213,29 @@ export function computeInsightsBundle(
     dmThreadDebug: threadDebug.slice(0, 200),
   };
 
-  return {
-    version: INSIGHTS_BUNDLE_VERSION,
-    accounts,
-    cleanup,
-    realOnes,
-    silentMutuals,
-    dmRelationshipInsights,
-    dmAwards,
-    groupChats,
-    eras,
-    contentDiet,
-    leaderboards,
-    adsInsights,
-    securityAudit,
-    searchWrapped,
-    personality,
-    shareCards,
-    exportCompleteness,
-    dataExplorer,
-  };
+  return enrichInsightsBundle(
+    {
+      version: INSIGHTS_BUNDLE_VERSION,
+      accounts,
+      cleanup,
+      realOnes,
+      silentMutuals,
+      dmRelationshipInsights,
+      dmAwards,
+      groupChats,
+      eras,
+      contentDiet,
+      leaderboards,
+      adsInsights,
+      securityAudit,
+      searchWrapped,
+      personality,
+      shareCards,
+      exportCompleteness,
+      dataExplorer,
+    },
+    parsed
+  );
 }
 
 export function resolveInsightsBundle(
@@ -235,10 +247,16 @@ export function resolveInsightsBundle(
     existing &&
     (existing.version ?? 0) >= INSIGHTS_BUNDLE_VERSION
   ) {
-    return {
-      ...existing,
-      silentMutuals: existing.silentMutuals ?? [],
-    };
+    return enrichInsightsBundle(
+      {
+        ...existing,
+        silentMutuals: existing.silentMutuals ?? [],
+      },
+      parsed
+    );
   }
-  return computeInsightsBundle(parsed, undefined, linkedinProgress);
+  return enrichInsightsBundle(
+    computeInsightsBundle(parsed, undefined, linkedinProgress),
+    parsed
+  );
 }

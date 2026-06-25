@@ -40,6 +40,8 @@ import {
 import { DmThreadPagination } from "@/components/DmThreadPagination";
 import { DmAiSummarySection } from "@/components/DmAiSummarySection";
 import type { DmAiSummariesMap, DmAiSummarySaved } from "@/types/dmAiSummary";
+import type { DmHeatmapResult, ReplyPatternResult } from "@/types/insights";
+import { DmHeatmapSection } from "@/components/DmHeatmapSection";
 
 interface DmsTabProps {
   messages: DmAnalytics | null;
@@ -50,6 +52,8 @@ interface DmsTabProps {
   dmAiSummaries?: DmAiSummariesMap;
   onDmAiSummariesChange?: (summaries: DmAiSummariesMap) => void;
   isLoadedFromCloud?: boolean;
+  dmHeatmap?: DmHeatmapResult | null;
+  replyPatterns?: ReplyPatternResult | null;
 }
 
 import { formatAccountDisplayName, isInstagramPlaceholderName } from "@/lib/accountNameFilter";
@@ -397,6 +401,8 @@ export function DmsTab({
   dmAiSummaries = {},
   onDmAiSummariesChange,
   isLoadedFromCloud = false,
+  dmHeatmap,
+  replyPatterns,
 }: DmsTabProps) {
   const [internalShow, setInternalShow] = useState(true);
   const [internalPreview, setInternalPreview] = useState(false);
@@ -757,6 +763,38 @@ export function DmsTab({
           />
         )}
       </div>
+
+      <DmHeatmapSection heatmap={dmHeatmap} />
+
+      {replyPatterns?.available && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="font-semibold text-white">Reply patterns</h3>
+          <p className="mt-1 text-xs text-white/40">
+            Reply times are estimated from export timestamps. Gaps over 7 days
+            are excluded from averages.
+          </p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            {replyPatterns.fastestResponder && (
+              <MiniStat
+                label="Fastest responder"
+                value={`${replyPatterns.fastestResponder.label} (~${Math.round(replyPatterns.fastestResponder.avgMs / 60000)}m)`}
+              />
+            )}
+            {replyPatterns.slowestResponder && (
+              <MiniStat
+                label="Slowest responder"
+                value={`${replyPatterns.slowestResponder.label} (~${Math.round(replyPatterns.slowestResponder.avgMs / 60000)}m)`}
+              />
+            )}
+            {replyPatterns.longestGhostGap && (
+              <MiniStat
+                label="Longest ghost gap"
+                value={`${replyPatterns.longestGhostGap.label} (${replyPatterns.longestGhostGap.days}d)`}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

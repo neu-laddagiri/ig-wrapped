@@ -6,11 +6,23 @@ import type { InsightsBundle } from "@/types/insights";
 
 interface SearchWrappedTabProps {
   insights: InsightsBundle | null;
+  hidden?: boolean;
 }
 
-export function SearchWrappedTab({ insights }: SearchWrappedTabProps) {
+export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabProps) {
   const [unlocked, setUnlocked] = useState(false);
   const search = insights?.searchWrapped;
+
+  if (hidden) {
+    return (
+      <div className="rounded-2xl border border-[#515BD4]/25 bg-[#515BD4]/10 px-6 py-12 text-center">
+        <p className="text-sm text-white/55">
+          Search history is hidden in Presentation Mode. Turn off Presentation
+          Mode to view search details.
+        </p>
+      </div>
+    );
+  }
 
   if (!search) {
     return (

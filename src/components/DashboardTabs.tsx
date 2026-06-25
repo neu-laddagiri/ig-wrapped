@@ -24,6 +24,9 @@ import {
   Heart,
   ChevronDown,
   Menu,
+  ListChecks,
+  GitCompare,
+  Bot,
 } from "lucide-react";
 
 export type DashboardTabId =
@@ -44,7 +47,9 @@ export type DashboardTabId =
   | "linkedin"
   | "explorer"
   | "export"
-  | "saved";
+  | "saved"
+  | "compare"
+  | "actionplan";
 
 type NavGroupId = "dashboard" | "people" | "messages" | "privacy" | "data";
 
@@ -66,6 +71,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Dashboard",
     tabs: [
       { id: "overview", label: "Overview", icon: LayoutDashboard },
+      { id: "actionplan", label: "Action Plan", icon: ListChecks },
       { id: "wrapped", label: "Wrapped", icon: Sparkles },
       { id: "funstats", label: "Fun Stats", icon: BarChart3 },
       { id: "eras", label: "Eras", icon: Calendar },
@@ -105,6 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Data",
     tabs: [
       { id: "explorer", label: "Explorer", icon: Database },
+      { id: "compare", label: "Compare", icon: GitCompare },
       { id: "export", label: "Export", icon: Download },
       { id: "saved", label: "Saved", icon: Cloud },
     ],

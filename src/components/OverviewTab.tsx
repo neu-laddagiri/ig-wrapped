@@ -20,6 +20,9 @@ import { formatNumber, formatPercent } from "@/lib/formatters";
 import { resolveInsightsBundle, INSIGHTS_BUNDLE_VERSION } from "@/lib/insightsEngine";
 import { ShareWrappedCard } from "@/components/ShareWrappedCard";
 import { OverviewAiSection } from "@/components/OverviewAiSection";
+import { WrappedScoreboardCard } from "@/components/WrappedScoreboardCard";
+import { SinceLastSaveCard } from "@/components/SinceLastSaveCard";
+import { Play, Bot } from "lucide-react";
 
 interface OverviewTabProps {
   data: ParsedExportData;
@@ -27,6 +30,10 @@ interface OverviewTabProps {
   linkedinProgress: LinkedInHelperEntry[];
   overviewAiSummary: OverviewAiSummaryResult | null;
   onOverviewAiSummaryChange: (summary: OverviewAiSummaryResult | null) => void;
+  currentSavedId?: string | null;
+  onOpenStory?: () => void;
+  onOpenChat?: () => void;
+  hideShareNames?: boolean;
 }
 
 export function OverviewTab({
@@ -35,8 +42,13 @@ export function OverviewTab({
   linkedinProgress,
   overviewAiSummary,
   onOverviewAiSummaryChange,
+  currentSavedId = null,
+  onOpenStory,
+  onOpenChat,
+  hideShareNames: hideShareNamesProp = false,
 }: OverviewTabProps) {
-  const [hideShareNames, setHideShareNames] = useState(false);
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const hideShareNames = hideShareNamesProp || hideShareNamesLocal;
   const network = data.network;
   const insights = resolveInsightsBundle(data, linkedinProgress);
   const completeness = insights.exportCompleteness;
@@ -68,7 +80,7 @@ export function OverviewTab({
         <div className="flex items-start gap-3 rounded-2xl border border-amber-500/25 bg-amber-500/10 px-4 py-3">
           <AlertCircle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
           <p className="text-sm text-amber-100/90">
-            Re-upload and save again to unlock corrected account and DM scoring.
+            Re-upload and save again to unlock newer insights.
           </p>
         </div>
       )}
@@ -77,15 +89,39 @@ export function OverviewTab({
         <div>
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <h3 className="font-semibold text-white">Your IG Wrapped</h3>
-            <label className="flex items-center gap-2 text-xs text-white/50">
-              <input
-                type="checkbox"
-                checked={hideShareNames}
-                onChange={(e) => setHideShareNames(e.target.checked)}
-                className="accent-[#DD2A7B]"
-              />
-              Hide names for public sharing
-            </label>
+            <div className="flex flex-wrap items-center gap-2">
+              {onOpenStory && (
+                <button
+                  type="button"
+                  onClick={onOpenStory}
+                  className="inline-flex items-center gap-1.5 rounded-full animated-gradient-bg px-3 py-1.5 text-xs font-semibold text-white"
+                >
+                  <Play className="h-3.5 w-3.5" />
+                  View Story Mode
+                </button>
+              )}
+              {onOpenChat && (
+                <button
+                  type="button"
+                  onClick={onOpenChat}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-3 py-1.5 text-xs font-medium text-white/70 hover:bg-white/5"
+                >
+                  <Bot className="h-3.5 w-3.5" />
+                  AI Analyst
+                </button>
+              )}
+              {!hideShareNamesProp && (
+                <label className="flex items-center gap-2 text-xs text-white/50">
+                  <input
+                    type="checkbox"
+                    checked={hideShareNamesLocal}
+                    onChange={(e) => setHideShareNamesLocal(e.target.checked)}
+                    className="accent-[#DD2A7B]"
+                  />
+                  Hide names for public sharing
+                </label>
+              )}
+            </div>
           </div>
           <ShareWrappedCard
             card={overallCard}
@@ -95,6 +131,10 @@ export function OverviewTab({
           />
         </div>
       )}
+
+      <SinceLastSaveCard current={data} currentSavedId={currentSavedId ?? null} />
+
+      <WrappedScoreboardCard scoreboard={insights.wrappedScoreboard} />
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard

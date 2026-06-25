@@ -6,24 +6,32 @@ import type { InsightsBundle } from "@/types/insights";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import { formatNumber } from "@/lib/formatters";
+import type { NetworkStats } from "@/types/instagram";
+import { UnfollowImpactPanel } from "@/components/UnfollowImpactPanel";
+import { ConfidencePill } from "@/components/ConfidencePill";
 
 interface SocialGraphTabProps {
   insights: InsightsBundle | null;
+  network?: NetworkStats | null;
   onOpenAccount?: (username: string) => void;
   defaultSubTab?: SubTab;
   showSubNav?: boolean;
+  showUnfollowImpact?: boolean;
 }
 
 type SubTab = "cleanup" | "realones" | "leaderboards";
 
 export function SocialGraphTab({
   insights,
+  network = null,
   onOpenAccount,
   defaultSubTab = "leaderboards",
   showSubNav = true,
+  showUnfollowImpact = false,
 }: SocialGraphTabProps) {
   const [subTab, setSubTab] = useState<SubTab>(defaultSubTab);
   const [query, setQuery] = useState("");
+  const [clusterFilter, setClusterFilter] = useState<string | null>(null);
 
   const filteredCleanup = useMemo(() => {
     if (!insights) return [];
@@ -96,6 +104,41 @@ export function SocialGraphTab({
           </button>
         ))}
       </div>
+      )}
+
+      {showUnfollowImpact && insights && (
+        <UnfollowImpactPanel network={network} cleanup={insights.cleanup} />
+      )}
+
+      {(insights.networkClusters?.length ?? 0) > 0 && subTab === "leaderboards" && (
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+          <h3 className="mb-3 font-semibold text-white">Network clusters</h3>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {insights.networkClusters!.map((cluster) => (
+              <button
+                key={cluster.id}
+                type="button"
+                onClick={() =>
+                  setClusterFilter(
+                    clusterFilter === cluster.id ? null : cluster.id
+                  )
+                }
+                className={`rounded-xl border p-3 text-left transition ${
+                  clusterFilter === cluster.id
+                    ? "border-[#DD2A7B]/40 bg-[#DD2A7B]/10"
+                    : "border-white/10 bg-white/[0.03] hover:border-white/15"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-sm font-medium text-white">{cluster.title}</p>
+                  <ConfidencePill level={cluster.confidence} />
+                </div>
+                <p className="mt-1 text-2xl font-bold text-white">{cluster.count}</p>
+                <p className="mt-1 text-xs text-white/40">{cluster.description}</p>
+              </button>
+            ))}
+          </div>
+        </div>
       )}
 
       {(subTab === "cleanup" || subTab === "realones") && (

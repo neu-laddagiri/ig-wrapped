@@ -40,6 +40,15 @@ import { PersonalityTab } from "@/components/PersonalityTab";
 import { DataExplorerTab } from "@/components/DataExplorerTab";
 import { SearchWrappedTab } from "@/components/SearchWrappedTab";
 import { GroupChatsTab } from "@/components/GroupChatsTab";
+import { DemoModeBanner } from "@/components/DemoModeBanner";
+import { PresentationModeBanner } from "@/components/PresentationModeBanner";
+import { PresentationToggle } from "@/components/PresentationToggle";
+import { StoryModeModal } from "@/components/StoryModeModal";
+import { AnalysisChatPanel } from "@/components/AnalysisChatPanel";
+import { CompareTab } from "@/components/CompareTab";
+import { ActionPlanTab } from "@/components/ActionPlanTab";
+import { generateDemoData, DEMO_FILE_FINGERPRINT } from "@/lib/demoData";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 import {
   computeFileFingerprint,
   saveLinkedInProgress,
@@ -93,6 +102,11 @@ export default function Home() {
     visible: boolean;
     mode: "upload" | "saved";
   }>({ visible: false, mode: "upload" });
+  const [isDemoMode, setIsDemoMode] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [storyHideNames, setStoryHideNames] = useState(true);
+  const [chatOpen, setChatOpen] = useState(false);
+  const { presentationMode } = usePresentationMode();
 
   const dashboardRef = useRef<HTMLDivElement>(null);
   const dashboardContentRef = useRef<HTMLDivElement>(null);
@@ -156,6 +170,7 @@ export default function Home() {
         setLoadingText(progress.stage);
       });
       setParsedData(data);
+      setIsDemoMode(false);
       setLinkedinProgress([]);
       setDmShowThreadNames(true);
       setDmShowFirstMessagePreview(false);
@@ -180,7 +195,29 @@ export default function Home() {
     }
   }, []);
 
+  const handleTryDemo = useCallback(() => {
+    setError(null);
+    setParsedData(generateDemoData());
+    setFileName("demo-synthetic-export.zip");
+    setFileFingerprint(DEMO_FILE_FINGERPRINT);
+    setIsDemoMode(true);
+    setIsLoadedFromCloud(false);
+    setCurrentSavedId(null);
+    setLinkedinProgress([]);
+    setDmShowThreadNames(true);
+    setDmShowFirstMessagePreview(false);
+    setExpandedGroupThreads([]);
+    setDmAiSummaries({});
+    setOverviewAiSummary(null);
+    setActiveTab("overview");
+    setExportGuideExpanded(false);
+    setDataCoverageExpanded(false);
+    pendingScrollRef.current = true;
+    setDashboardBanner({ visible: true, mode: "upload" });
+  }, []);
+
   const handleLoadSavedAnalysis = useCallback((row: SavedAnalysisRow) => {
+    setIsDemoMode(false);
     const snapshot = row.full_analysis_json;
     setParsedData(restoreParsedFromSnapshot(snapshot.parsed));
     setFileName(row.export_name ?? snapshot.exportName);
@@ -218,6 +255,7 @@ export default function Home() {
       return;
     }
     setParsedData(null);
+    setIsDemoMode(false);
     setFileName(null);
     setFileFingerprint("");
     setLinkedinProgress([]);
@@ -246,8 +284,8 @@ export default function Home() {
         </div>
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
-          <div className="mb-8 flex items-start justify-between gap-4">
-            <div className="flex-1" />
+          <div className="mb-8 flex items-start justify-end gap-3">
+            <PresentationToggle />
             <AccountMenu
               onSignIn={() => setAuthOpen(true)}
               onNavigateTab={setActiveTab}
@@ -261,6 +299,7 @@ export default function Home() {
 
             <UploadCard
               onFileSelect={handleFileSelect}
+              onTryDemo={handleTryDemo}
               isLoading={isLoading}
               loadingText={loadingText}
               error={error}
@@ -288,7 +327,12 @@ export default function Home() {
                 transition={{ duration: 0.5 }}
                 className="mt-12 space-y-8"
               >
-                {isLoadedFromCloud && (
+                {isDemoMode && (
+                  <DemoModeBanner onClear={handleClearLocalSession} />
+                )}
+                <PresentationModeBanner />
+
+                {isLoadedFromCloud && !isDemoMode && (
                   <div className="flex items-center gap-3 rounded-2xl border border-[#515BD4]/25 bg-[#515BD4]/10 px-4 py-3">
                     <Cloud className="h-5 w-5 text-[#818cf8]" />
                     <p className="text-sm text-white/70">
@@ -315,6 +359,7 @@ export default function Home() {
                   dmAiSummaries={dmAiSummaries}
                   overviewAiSummary={overviewAiSummary}
                   currentSavedId={currentSavedId}
+                  isDemoMode={isDemoMode}
                   onSignIn={() => setAuthOpen(true)}
                   onSaved={(id) => {
                     setCurrentSavedId(id);
@@ -362,6 +407,10 @@ export default function Home() {
                         parsedData,
                         linkedinProgress
                       );
+                      const effectiveShowThreadNames =
+                        dmShowThreadNames && !presentationMode;
+                      const effectiveShowFirstMessagePreview =
+                        dmShowFirstMessagePreview && !presentationMode;
                       const linkedinForAccount = linkedinProgress.find(
                         (e) => e.username === accountDetail.selectedUsername
                       );
@@ -378,6 +427,20 @@ export default function Home() {
                         linkedinProgress={linkedinProgress}
                         overviewAiSummary={overviewAiSummary}
                         onOverviewAiSummaryChange={setOverviewAiSummary}
+                        currentSavedId={currentSavedId}
+                        onOpenStory={() => setStoryOpen(true)}
+                        onOpenChat={() => setChatOpen(true)}
+                        hideShareNames={
+                          presentationMode || !effectiveShowThreadNames
+                        }
+                      />
+                    )}
+                    {activeTab === "actionplan" && (
+                      <ActionPlanTab
+                        parsed={parsedData}
+                        insights={insights}
+                        isDemoMode={isDemoMode}
+                        onNavigate={handleTabChange}
                       />
                     )}
                     {activeTab === "network" && (
@@ -390,6 +453,7 @@ export default function Home() {
                     {activeTab === "social" && (
                       <SocialGraphTab
                         insights={insights}
+                        network={parsedData.network}
                         onOpenAccount={accountDetail.openAccount}
                         defaultSubTab="leaderboards"
                       />
@@ -397,14 +461,17 @@ export default function Home() {
                     {activeTab === "cleanup" && (
                       <SocialGraphTab
                         insights={insights}
+                        network={parsedData.network}
                         onOpenAccount={accountDetail.openAccount}
                         defaultSubTab="cleanup"
                         showSubNav={false}
+                        showUnfollowImpact
                       />
                     )}
                     {activeTab === "realones" && (
                       <SocialGraphTab
                         insights={insights}
+                        network={parsedData.network}
                         onOpenAccount={accountDetail.openAccount}
                         defaultSubTab="realones"
                         showSubNav={false}
@@ -426,8 +493,9 @@ export default function Home() {
                         messages={parsedData.messages}
                         ads={parsedData.ads}
                         mostActiveEra={resolveMostActiveEra(parsedData)}
-                        showThreadNames={dmShowThreadNames}
+                        showThreadNames={effectiveShowThreadNames}
                         dmAwards={insights.dmAwards}
+                        replyPatterns={insights.replyPatterns}
                       />
                     )}
                     {activeTab === "eras" && (
@@ -442,15 +510,17 @@ export default function Home() {
                     {activeTab === "dms" && (
                       <DmsTab
                         messages={parsedData.messages}
-                        showThreadNames={dmShowThreadNames}
+                        showThreadNames={effectiveShowThreadNames}
                         onShowThreadNamesChange={setDmShowThreadNames}
-                        showFirstMessagePreview={dmShowFirstMessagePreview}
+                        showFirstMessagePreview={effectiveShowFirstMessagePreview}
                         onShowFirstMessagePreviewChange={
                           setDmShowFirstMessagePreview
                         }
                         dmAiSummaries={dmAiSummaries}
                         onDmAiSummariesChange={setDmAiSummaries}
                         isLoadedFromCloud={isLoadedFromCloud}
+                        dmHeatmap={insights.dmHeatmap}
+                        replyPatterns={insights.replyPatterns}
                       />
                     )}
                     {activeTab === "groups" && (
@@ -469,7 +539,10 @@ export default function Home() {
                       />
                     )}
                     {activeTab === "search" && (
-                      <SearchWrappedTab insights={insights} />
+                      <SearchWrappedTab
+                        insights={insights}
+                        hidden={presentationMode}
+                      />
                     )}
                     {activeTab === "explorer" && (
                       <DataExplorerTab insights={insights} />
@@ -482,6 +555,9 @@ export default function Home() {
                         entries={linkedinProgress}
                         onEntriesChange={setLinkedinProgress}
                       />
+                    )}
+                    {activeTab === "compare" && (
+                      <CompareTab current={parsedData} />
                     )}
                     {activeTab === "export" && (
                       <ExportDataTab
@@ -502,6 +578,7 @@ export default function Home() {
                       network={parsedData.network}
                       linkedinEntry={linkedinForAccount}
                       unifiedAccount={unifiedAccount}
+                      insights={insights}
                     />
                         </>
                       );
@@ -546,6 +623,25 @@ export default function Home() {
         onClose={() => setAuthOpen(false)}
         onSuccess={() => setAuthOpen(false)}
       />
+
+      {parsedData && (
+        <AnalysisChatPanel
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+          parsed={parsedData}
+          linkedinProgress={linkedinProgress}
+        />
+      )}
+      {parsedData && (
+        <StoryModeModal
+          open={storyOpen}
+          onClose={() => setStoryOpen(false)}
+          data={parsedData}
+          insights={resolveInsightsBundle(parsedData, linkedinProgress)}
+          hideNames={storyHideNames}
+          onHideNamesChange={setStoryHideNames}
+        />
+      )}
 
       <ExportSuccessBanner
         visible={dashboardBanner.visible && Boolean(parsedData)}

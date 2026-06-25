@@ -6,6 +6,7 @@ import { Upload, FileArchive, Loader2, AlertCircle } from "lucide-react";
 
 interface UploadCardProps {
   onFileSelect: (file: File) => void;
+  onTryDemo?: () => void;
   isLoading?: boolean;
   loadingText?: string;
   error?: string | null;
@@ -16,6 +17,7 @@ interface UploadCardProps {
 
 export function UploadCard({
   onFileSelect,
+  onTryDemo,
   isLoading,
   loadingText,
   error,
@@ -149,6 +151,15 @@ export function UploadCard({
             >
               {fileName ? "Upload a different file" : "Choose ZIP file"}
             </button>
+            {!fileName && onTryDemo && (
+              <button
+                type="button"
+                onClick={onTryDemo}
+                className="mt-3 rounded-full border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/10"
+              >
+                Try Demo Data
+              </button>
+            )}
           </>
         )}
       </div>

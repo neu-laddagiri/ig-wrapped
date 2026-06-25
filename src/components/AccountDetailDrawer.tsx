@@ -9,6 +9,8 @@ import type {
   NetworkStats,
 } from "@/types/instagram";
 import type { UnifiedAccount } from "@/types/insights";
+import type { InsightsBundle } from "@/types/insights";
+import { computeAccountFlags } from "@/lib/accountInsights";
 import { buildAccountNetworkDetail } from "@/lib/networkAccountDetail";
 import {
   formatTimestamp,
@@ -23,6 +25,7 @@ interface AccountDetailDrawerProps {
   network: NetworkStats | null;
   linkedinEntry?: LinkedInHelperEntry;
   unifiedAccount?: UnifiedAccount;
+  insights?: InsightsBundle | null;
 }
 
 function DetailRow({
@@ -55,6 +58,7 @@ export function AccountDetailDrawer({
   network,
   linkedinEntry,
   unifiedAccount,
+  insights,
 }: AccountDetailDrawerProps) {
   const [copied, setCopied] = useState(false);
 
@@ -79,6 +83,7 @@ export function AccountDetailDrawer({
   };
 
   const u = unifiedAccount;
+  const flags = u ? computeAccountFlags(u, insights) : { green: [], red: [] };
 
   return (
     <AnimatePresence>
@@ -138,6 +143,40 @@ export function AccountDetailDrawer({
                   account. This may be a deleted, deactivated, renamed, or
                   unavailable account.
                 </p>
+              )}
+
+              {(flags.green.length > 0 || flags.red.length > 0) && (
+                <>
+                  <SectionTitle>Account flags</SectionTitle>
+                  {flags.green.length > 0 && (
+                    <div className="mb-3 rounded-lg border border-emerald-500/20 bg-emerald-500/8 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase text-emerald-300/80">
+                        Green flags
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {flags.green.map((f) => (
+                          <li key={f.id} className="text-xs text-emerald-100/90">
+                            + {f.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {flags.red.length > 0 && (
+                    <div className="mb-3 rounded-lg border border-red-500/20 bg-red-500/8 px-3 py-2">
+                      <p className="text-[10px] font-semibold uppercase text-red-300/80">
+                        Red flags
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        {flags.red.map((f) => (
+                          <li key={f.id} className="text-xs text-red-100/90">
+                            − {f.label}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </>
               )}
 
               <SectionTitle>Follow relationship</SectionTitle>
