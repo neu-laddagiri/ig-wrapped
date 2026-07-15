@@ -26,7 +26,6 @@ import {
   normalizeDmThreadList,
   type NormalizedDmThread,
 } from "@/lib/dmThreads";
-import { normalizeUsername } from "@/lib/formatters";
 import type { DmAnalytics, NetworkStats } from "@/types/instagram";
 import type { NameConfidence } from "@/types/insights";
 

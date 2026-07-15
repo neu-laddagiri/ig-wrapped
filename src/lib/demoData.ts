@@ -77,7 +77,7 @@ function buildNetwork(): NetworkStats {
   };
 }
 
-function buildMessages(network: NetworkStats): DmAnalytics {
+function buildMessages(): DmAnalytics {
   const now = Date.now();
   const day = 86400000;
 
@@ -264,7 +264,7 @@ export function generateDemoData(): ParsedExportData {
     videosWatched: 520,
     postsViewed: 1890,
   };
-  const messages = buildMessages(network);
+  const messages = buildMessages();
   const ads: AdsPrivacyData = {
     adsViewed: 312,
     adsClicked: 8,

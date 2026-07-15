@@ -5,7 +5,7 @@ export function computeWrappedScoreboard(
   parsed: ParsedExportData,
   insights: InsightsBundle
 ): WrappedScoreboard {
-  const { network, messages, wrapped, ads, security } = parsed;
+  const { network, messages, wrapped, ads } = parsed;
   const mutualRatio =
     network && network.totalFollowing > 0
       ? network.mutuals.length / network.totalFollowing

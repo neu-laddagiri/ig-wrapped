@@ -17,33 +17,55 @@ export function SinceLastSaveCard({
   currentSavedId,
 }: SinceLastSaveCardProps) {
   const { user } = useAuth();
-  const [before, setBefore] = useState<ParsedExportData | null>(null);
-  const [beforeLabel, setBeforeLabel] = useState("");
+  const loadKey =
+    user && isSupabaseConfigured() && currentSavedId
+      ? `${user.id}:${currentSavedId}`
+      : null;
+  const [previousSave, setPreviousSave] = useState<{
+    key: string;
+    before: ParsedExportData | null;
+    label: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured() || !currentSavedId) {
-      setBefore(null);
-      return;
-    }
+    if (!loadKey || !currentSavedId) return;
+    let cancelled = false;
     void (async () => {
       const { data: summaries } = await loadSavedAnalyses();
       const prevSummary = summaries.find((s) => s.id !== currentSavedId);
       if (!prevSummary) {
-        setBefore(null);
+        if (!cancelled) {
+          setPreviousSave({ key: loadKey, before: null, label: "" });
+        }
         return;
       }
       const { data: row } = await loadSavedAnalysisById(prevSummary.id);
       const snap = row?.full_analysis_json?.parsed;
-      if (!snap) return;
-      setBefore({
-        ...snap,
-        filePaths: [],
-        mostActiveEra: snap.mostActiveEra ?? null,
-        insights: snap.insights ?? null,
+      if (cancelled) return;
+      setPreviousSave({
+        key: loadKey,
+        before: snap
+          ? {
+              ...snap,
+              filePaths: [],
+              mostActiveEra: snap.mostActiveEra ?? null,
+              insights: snap.insights ?? null,
+            }
+          : null,
+        label:
+          snap && (prevSummary.title ?? prevSummary.exportName)
+            ? (prevSummary.title ?? prevSummary.exportName ?? "Previous save")
+            : "",
       });
-      setBeforeLabel(prevSummary.title ?? prevSummary.exportName ?? "Previous save");
     })();
-  }, [user, currentSavedId, current]);
+    return () => {
+      cancelled = true;
+    };
+  }, [loadKey, currentSavedId]);
+
+  const resolvedPrevious = previousSave?.key === loadKey ? previousSave : null;
+  const before = resolvedPrevious?.before ?? null;
+  const beforeLabel = resolvedPrevious?.label ?? "";
 
   const comparison = useMemo(() => {
     if (!before) return null;

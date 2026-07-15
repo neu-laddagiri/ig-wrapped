@@ -80,11 +80,12 @@ Environment variables are loaded at startup. Restart after changing `.env.local`
 |-------|-----------|
 | Parsed network lists | Original ZIP file |
 | Wrapped insight counts | Media files (photos/videos) |
-| DM analytics (counts only) | Raw DM message text |
+| DM analytics and derived insights | Full raw DM message history |
 | Ads/privacy parsed data | Instagram login credentials |
 | Security activity counts | |
 | LinkedIn Helper statuses & notes | |
 | Active tab & DM privacy toggle | |
+| Optional limited masked DM excerpts (explicit opt-in) | Raw search terms and archive paths |
 
 ## Troubleshooting
 

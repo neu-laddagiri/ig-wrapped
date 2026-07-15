@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import {
   ChevronLeft,
   ChevronRight,
@@ -15,6 +15,7 @@ import {
 import type { ParsedExportData } from "@/types/instagram";
 import type { InsightsBundle } from "@/types/insights";
 import { formatNumber } from "@/lib/formatters";
+import { useAccessibleDialog } from "@/components/useAccessibleDialog";
 
 interface StorySlide {
   id: string;
@@ -42,6 +43,19 @@ export function StoryModeModal({
   onHideNamesChange,
 }: StoryModeModalProps) {
   const [index, setIndex] = useState(0);
+  const titleId = useId();
+  const counterId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  const handleClose = useCallback(() => {
+    setIndex(0);
+    onClose();
+  }, [onClose]);
+  const dialogRef = useAccessibleDialog<HTMLDivElement>({
+    open,
+    onClose: handleClose,
+    initialFocusRef: closeButtonRef,
+  });
 
   const slides = useMemo((): StorySlide[] => {
     const { network, messages, ads, wrapped } = data;
@@ -175,25 +189,34 @@ export function StoryModeModal({
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
+      if (
+        e.target instanceof HTMLElement &&
+        e.target.matches("input, select, textarea")
+      ) {
+        return;
+      }
       if (e.key === "ArrowRight") go(1);
       if (e.key === "ArrowLeft") go(-1);
-      if (e.key === "Escape") onClose();
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, go, onClose]);
-
-  useEffect(() => {
-    if (open) setIndex(0);
-  }, [open]);
+  }, [open, go]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-      <div className="relative flex h-full max-h-[640px] w-full max-w-lg flex-col overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        aria-describedby={counterId}
+        tabIndex={-1}
+        className="relative flex h-[calc(100dvh-2rem)] max-h-[640px] w-full max-w-lg flex-col overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12]"
+      >
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <label className="flex items-center gap-2 text-xs text-white/50">
+          <label className="flex min-h-11 items-center gap-2 text-xs text-white/70">
             <input
               type="checkbox"
               checked={!hideNames}
@@ -203,31 +226,45 @@ export function StoryModeModal({
             Show names
           </label>
           <button
+            ref={closeButtonRef}
             type="button"
-            onClick={onClose}
-            className="rounded-lg p-2 text-white/40 hover:bg-white/10"
+            onClick={handleClose}
+            aria-label="Close Story Mode"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white/60 hover:bg-white/10 hover:text-white"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center px-8 py-10 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center overflow-y-auto px-6 py-8 text-center sm:px-8 sm:py-10">
           <AnimatePresence mode="wait">
             <motion.div
               key={slide.id}
-              initial={{ opacity: 0, x: 24 }}
+              role="group"
+              aria-roledescription="slide"
+              aria-label={`${index + 1} of ${total}`}
+              aria-live="polite"
+              aria-atomic="true"
+              initial={
+                prefersReducedMotion ? false : { opacity: 0, x: 24 }
+              }
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -24 }}
-              transition={{ duration: 0.35 }}
+              transition={{ duration: prefersReducedMotion ? 0 : 0.35 }}
               className="w-full"
             >
-              <Icon className="mx-auto h-10 w-10 text-[#DD2A7B]" />
+              <Icon
+                className="mx-auto h-10 w-10 text-[#DD2A7B]"
+                aria-hidden="true"
+              />
               {slide.subtitle && (
                 <p className="mt-4 text-xs font-semibold uppercase tracking-[0.2em] text-white/35">
                   {slide.subtitle}
                 </p>
               )}
-              <h2 className="mt-2 text-3xl font-bold text-white">{slide.title}</h2>
+              <h2 id={titleId} className="mt-2 text-3xl font-bold text-white">
+                {slide.title}
+              </h2>
               <ul className="mt-8 space-y-3">
                 {slide.lines.map((line) => (
                   <li key={line} className="text-lg text-white/75">
@@ -240,42 +277,50 @@ export function StoryModeModal({
         </div>
 
         <div className="border-t border-white/10 px-4 py-4">
-          <div className="mb-4 flex justify-center gap-1.5">
-            {slides.map((s, i) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => setIndex(i)}
-                className={`h-1.5 rounded-full transition-all ${
-                  i === index
-                    ? "w-6 animated-gradient-bg"
-                    : "w-1.5 bg-white/20"
-                }`}
-                aria-label={`Slide ${i + 1}`}
-              />
-            ))}
+          <div className="-mx-2 mb-2 overflow-x-auto px-2 pb-1">
+            <div className="mx-auto flex w-max gap-1">
+              {slides.map((s, i) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => setIndex(i)}
+                  className="inline-flex h-11 w-11 items-center justify-center rounded-lg"
+                  aria-label={`Go to slide ${i + 1}: ${s.title}`}
+                  aria-current={i === index ? "step" : undefined}
+                >
+                  <span
+                    aria-hidden="true"
+                    className={`h-1.5 rounded-full transition-all ${
+                      i === index
+                        ? "w-6 animated-gradient-bg"
+                        : "w-1.5 bg-white/30"
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
           </div>
           <div className="flex items-center justify-between gap-3">
             <button
               type="button"
               disabled={index === 0}
               onClick={() => go(-1)}
-              className="inline-flex items-center gap-1 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 disabled:opacity-30"
+              className="inline-flex min-h-11 items-center gap-1 rounded-xl border border-white/10 px-4 py-2 text-sm text-white/70 disabled:opacity-30"
             >
-              <ChevronLeft className="h-4 w-4" />
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
               Back
             </button>
-            <span className="text-xs text-white/35">
+            <span id={counterId} className="text-xs text-white/60">
               {index + 1} / {total}
             </span>
             <button
               type="button"
               disabled={index === total - 1}
               onClick={() => go(1)}
-              className="inline-flex items-center gap-1 rounded-xl animated-gradient-bg px-4 py-2 text-sm font-medium text-white disabled:opacity-30"
+              className="inline-flex min-h-11 items-center gap-1 rounded-xl animated-gradient-bg px-4 py-2 text-sm font-medium text-white disabled:opacity-30"
             >
               Next
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
           </div>
         </div>

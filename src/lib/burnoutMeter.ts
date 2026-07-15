@@ -1,6 +1,5 @@
 import type { ParsedExportData } from "@/types/instagram";
 import type { ContentDietResult, BurnoutMeterResult } from "@/types/insights";
-import type { ConfidenceLevel } from "@/types/insights";
 
 export type { BurnoutMeterResult };
 

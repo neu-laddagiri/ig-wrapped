@@ -35,6 +35,25 @@ interface AccountTableProps {
   enablePagination?: boolean;
 }
 
+function SortIcon({
+  field,
+  sortField,
+  sortDir,
+}: {
+  field: SortField;
+  sortField: SortField;
+  sortDir: SortDirection;
+}) {
+  if (sortField !== field) {
+    return <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />;
+  }
+  return sortDir === "asc" ? (
+    <ArrowUp className="h-3.5 w-3.5" />
+  ) : (
+    <ArrowDown className="h-3.5 w-3.5" />
+  );
+}
+
 export function AccountTable({
   accounts,
   title,
@@ -99,16 +118,6 @@ export function AccountTable({
     }
   };
 
-  const SortIcon = ({ field }: { field: SortField }) => {
-    if (sortField !== field)
-      return <ArrowUpDown className="h-3.5 w-3.5 opacity-40" />;
-    return sortDir === "asc" ? (
-      <ArrowUp className="h-3.5 w-3.5" />
-    ) : (
-      <ArrowDown className="h-3.5 w-3.5" />
-    );
-  };
-
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden">
       <div className="flex flex-col gap-3 border-b border-white/10 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -161,7 +170,12 @@ export function AccountTable({
                     onClick={() => toggleSort("username")}
                     className="inline-flex items-center gap-1 hover:text-white/70"
                   >
-                    Username <SortIcon field="username" />
+                    Username{" "}
+                    <SortIcon
+                      field="username"
+                      sortField={sortField}
+                      sortDir={sortDir}
+                    />
                   </button>
                 </th>
                 {showCategory && <th className="px-4 py-3">Category</th>}
@@ -171,7 +185,12 @@ export function AccountTable({
                     onClick={() => toggleSort("timestamp")}
                     className="inline-flex items-center gap-1 hover:text-white/70"
                   >
-                    Follow date <SortIcon field="timestamp" />
+                    Follow date{" "}
+                    <SortIcon
+                      field="timestamp"
+                      sortField={sortField}
+                      sortDir={sortDir}
+                    />
                   </button>
                 </th>
                 <th className="px-4 py-3 text-right">Actions</th>

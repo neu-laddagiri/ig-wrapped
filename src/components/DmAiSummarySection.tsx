@@ -215,7 +215,7 @@ export function DmAiSummarySection({
 }: DmAiSummarySectionProps) {
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [tone, setTone] = useState<DmAiSummaryTone>(saved?.tone ?? "wrapped");
-  const [useRealNames, setUseRealNames] = useState(showThreadNames);
+  const [allowRealNames, setAllowRealNames] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -226,11 +226,7 @@ export function DmAiSummarySection({
 
   const hasSample = threadHasAiSample(thread);
   const missingCloudSample = isLoadedFromCloud && !hasSample;
-
-  useEffect(() => {
-    if (!showThreadNames) setUseRealNames(false);
-    else setUseRealNames(true);
-  }, [showThreadNames]);
+  const useRealNames = showThreadNames && allowRealNames;
 
   useEffect(() => {
     let cancelled = false;
@@ -248,7 +244,7 @@ export function DmAiSummarySection({
   }, []);
 
   const buildPayload = useCallback(() => {
-    const realNames = showThreadNames && useRealNames;
+    const realNames = useRealNames;
     const selectedMessages = resolveAiReadyMessages(thread, realNames);
     return {
       threadTitle: thread.title,
@@ -278,7 +274,7 @@ export function DmAiSummarySection({
       },
       selectedMessages,
     };
-  }, [thread, tone, showThreadNames, useRealNames]);
+  }, [thread, tone, useRealNames]);
 
   const generate = async () => {
     setError(null);
@@ -467,7 +463,7 @@ export function DmAiSummarySection({
                       <input
                         type="checkbox"
                         checked={useRealNames}
-                        onChange={(e) => setUseRealNames(e.target.checked)}
+                        onChange={(e) => setAllowRealNames(e.target.checked)}
                         className="accent-[#DD2A7B]"
                       />
                       Use real names in AI summary

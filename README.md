@@ -40,7 +40,7 @@ Optional accounts let you save your full parsed analysis and LinkedIn Helper pro
 
 - **Demo Mode** — Explore the full dashboard with synthetic fake data (`Try Demo Data` on upload). No real names or private info. Optional “Save demo analysis” to cloud.
 - **Story Mode** — Spotify Wrapped–style slideshow from Overview (`View Story Mode`). Keyboard navigation, public-safe name toggle.
-- **Presentation Mode** — Global toggle (top-right) hides sensitive names, DM previews, and search details across all tabs.
+- **Presentation Mode** — Fail-closed screen-sharing mode: audited aggregate/share-safe tabs remain available, while identity, DM, search, security, notes, saved-data, export, and raw-data views are blocked.
 - **Compare Exports** — Data tab: upload an older ZIP or pick a saved analysis; see follower/following/DM deltas.
 - **Since Last Save** — Overview card comparing current snapshot vs your previous cloud save.
 - **Action Plan** — Prioritized recommendations with jump-to-tab actions (dismissible locally).
@@ -52,7 +52,7 @@ Optional accounts let you save your full parsed analysis and LinkedIn Helper pro
 - **Unfollow Impact Preview** — Cleanup tab planning tool with projected follow-back ratio + CSV export.
 - **Red / Green Flag Scanner** — Per-account signals in the account detail drawer.
 - **Explain + Confidence** — Score explanations and high/medium/low confidence pills on key insights.
-- **Share Cards** — Download PNG, copy stats, hide names globally via Presentation Mode or per-card toggle.
+- **Share Cards** — Download PNG or copy stats with names hidden by default; Presentation Mode also blocks non-share-safe views.
 
 ## Privacy-first, local-first
 
@@ -62,9 +62,9 @@ IG Wrapped is designed with privacy as the core principle:
 - **ZIP parsed locally** — JSZip parses JSON in your browser; the raw ZIP is never uploaded automatically
 - **Optional cloud save** — Sign in only if you want to save your parsed analysis snapshot
 - **No media upload** — Photos and videos from your export are never sent to the cloud
-- **No scraping** — Does not access Instagram, LinkedIn, or any external API
+- **No Instagram or LinkedIn scraping** — Optional AI actions call only the server-side provider you configure; LinkedIn Helper opens manual Google searches
 - **No LinkedIn automation** — LinkedIn Helper only opens manual Google search links
-- **DM privacy** — Message previews off by default; Presentation Mode hides names and sensitive details for sharing
+- **DM privacy** — Message previews are off by default; Presentation Mode blocks the full DM view while screen sharing
 - **AI summaries are opt-in** — DM text is only sent to the AI provider when you click Generate AI Summary for a thread
 - **AI chat uses summaries only** — `/api/analysis-chat` receives aggregated metrics, not your raw ZIP or full DM history
 - **Search history is sensitive** — Hidden in Presentation Mode; Search Wrapped requires explicit unlock
@@ -77,13 +77,14 @@ When you click **Save full analysis**, IG Wrapped stores:
 - Computed insights bundle (unified accounts, cleanup/real ones scores, DM awards, eras, content diet, personality, export completeness)
 - LinkedIn Helper statuses and notes
 - Generated AI summaries (if you created them)
+- Limited masked DM excerpts only when you explicitly enable that opt-in at save time
 - Export metadata and progress
 
 It does **not** store:
 
 - Your original ZIP or media files
 - Full raw message history
-- Raw search history (only sanitized summaries when applicable)
+- Raw search terms and archive file paths (only aggregate search counts/timeline remain)
 - API keys
 
 Older saved analyses without the insights bundle will still load; re-upload and save again to unlock newer insights.
@@ -99,7 +100,7 @@ Older saved analyses without the insights bundle will still load; re-upload and 
 - [Recharts](https://recharts.org/) — Charts
 - [Lucide React](https://lucide.dev/) — Icons
 - [date-fns](https://date-fns.org/) — Date formatting
-- [Vercel Analytics](https://vercel.com/analytics) — Deployment analytics
+- [Vercel Analytics](https://vercel.com/analytics) — Optional deployment analytics, disabled by default
 
 ## Getting started
 
@@ -112,6 +113,8 @@ Open [http://localhost:3000](http://localhost:3000) and upload your Instagram ex
 
 ```bash
 npm run build   # Production build
+npm test        # Regression suite
+npm run lint    # Static checks
 npm start       # Run production server
 ```
 
@@ -149,10 +152,13 @@ See **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** for the full step-by-step guide
 - Account leaderboards depend on Instagram including account names/URLs in activity JSON
 - DM reply-time and hour/day analytics require local message text (stripped from cloud saves)
 - Large exports may take a moment to process in the browser
+- ZIPs over 512 MB and unusually large decompressed JSON payloads are rejected for browser safety
 - Cloud save stores parsed snapshots, not the original ZIP
 - Personality and privacy scores are illustrative, based on Instagram's export — not scientific
 - LinkedIn Helper requires manual review — it does not find profiles automatically
 - Ads and privacy insights use phrasing like "Instagram's export suggests…" to avoid overclaiming
+
+For a public production deployment, add a distributed rate limiter or provider budget in front of the optional paid AI routes. The built-in validation, timeouts, response caps, same-origin checks, and per-instance limits are defense-in-depth, not a substitute for account-level quotas.
 
 ## Disclaimer
 

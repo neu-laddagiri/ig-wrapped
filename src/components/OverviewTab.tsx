@@ -52,7 +52,7 @@ export function OverviewTab({
   onNavigateTab,
   onScrollToSave,
 }: OverviewTabProps) {
-  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(true);
   const hideShareNames = hideShareNamesProp || hideShareNamesLocal;
   const network = data.network;
   const insights = resolveInsightsBundle(data, linkedinProgress);
@@ -267,9 +267,9 @@ export function OverviewTab({
             <h3 className="font-semibold text-white">Privacy statement</h3>
             <p className="mt-2 text-sm leading-relaxed text-white/50">
               Your Instagram export is parsed entirely in your browser. The raw
-              ZIP is not uploaded. Optional cloud save stores only your parsed
-              analysis snapshot when you choose to save — never media files or
-              full message history.
+              ZIP is not uploaded. Optional cloud save strips raw search terms,
+              archive paths, media, and full message history. Limited masked DM
+              excerpts are saved only when you explicitly opt in.
             </p>
           </div>
         </div>

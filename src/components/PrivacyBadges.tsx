@@ -12,7 +12,7 @@ const badges = [
   {
     icon: HardDrive,
     label: "ZIP parsed locally",
-    description: "Your export never leaves your browser",
+    description: "Your ZIP stays in your browser while parsing",
   },
   {
     icon: Cloud,

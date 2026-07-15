@@ -14,7 +14,7 @@ export function PresentationModeBanner() {
         <p className="text-sm text-white/80">
           <span className="font-semibold text-white">Presentation Mode on</span>
           {" — "}
-          sensitive details hidden across all tabs.
+          identity, message, search, security, and raw-data views are blocked.
         </p>
       </div>
       <button

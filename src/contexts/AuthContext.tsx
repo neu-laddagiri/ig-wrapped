@@ -44,12 +44,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
-    refreshUser();
-
     if (!isSupabaseConfigured()) return;
 
     const supabase = createClient();
     if (!supabase) return;
+    let cancelled = false;
+
+    void supabase.auth.getUser().then(({ data }) => {
+      if (cancelled) return;
+      setUser(data.user ?? null);
+      setLoading(false);
+    });
 
     const {
       data: { subscription },
@@ -58,8 +63,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, [refreshUser]);
+    return () => {
+      cancelled = true;
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const signOut = useCallback(async () => {
     const supabase = createClient();

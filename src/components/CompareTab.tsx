@@ -5,7 +5,6 @@ import { GitCompare, Upload } from "lucide-react";
 import type { ParsedExportData } from "@/types/instagram";
 import { compareParsedExports } from "@/lib/accountInsights";
 import { parseInstagramZip } from "@/lib/zipParser";
-import type { SavedAnalysisRow } from "@/types/analysis";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import { loadSavedAnalyses, loadSavedAnalysisById } from "@/lib/cloudSave";
 

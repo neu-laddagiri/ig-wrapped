@@ -26,11 +26,21 @@ function hashString(input: string): string {
   return `dm-${(h >>> 0).toString(36)}`;
 }
 
-function isDmMessageFile(path: string): boolean {
+function dmMessagePart(path: string): number | null {
   const lower = path.toLowerCase().replace(/\\/g, "/");
-  if (!lower.endsWith("message_1.json")) return false;
-  if (!lower.includes("messages/")) return false;
-  return lower.includes("/inbox/") || lower.includes("/message_requests/");
+  if (!lower.includes("messages/")) return null;
+  if (!lower.includes("/inbox/") && !lower.includes("/message_requests/")) {
+    return null;
+  }
+  const match = lower.match(/\/message_(\d+)\.json$/);
+  if (!match) return null;
+  const part = Number(match[1]);
+  return Number.isSafeInteger(part) && part > 0 ? part : null;
+}
+
+function threadDirectory(path: string): string {
+  const normalized = path.replace(/\\/g, "/");
+  return normalized.slice(0, normalized.lastIndexOf("/")).toLowerCase();
 }
 
 function getFolder(path: string): DmThreadAnalytics["folder"] {
@@ -90,13 +100,6 @@ function countUrlsInText(text: string): number {
   return (text.match(URL_REGEX) ?? []).length;
 }
 
-function countReelOrPostInText(text: string): number {
-  if (!text.trim()) return 0;
-  const reels = text.match(REEL_PATTERN)?.length ?? 0;
-  const posts = text.match(POST_PATTERN)?.length ?? 0;
-  return reels + posts;
-}
-
 function collectLinkableText(msg: JsonRecord): string[] {
   const parts: string[] = [];
   if (typeof msg.content === "string" && msg.content.trim()) {
@@ -129,10 +132,16 @@ function countMessageLinks(msg: JsonRecord): number {
   return count;
 }
 
-function countMessageReelOrPost(msg: JsonRecord): number {
+function countInstagramLinkTypes(msg: JsonRecord): {
+  reels: number;
+  posts: number;
+} {
   return collectLinkableText(msg).reduce(
-    (sum, text) => sum + countReelOrPostInText(text),
-    0
+    (counts, text) => ({
+      reels: counts.reels + (text.match(REEL_PATTERN)?.length ?? 0),
+      posts: counts.posts + (text.match(POST_PATTERN)?.length ?? 0),
+    }),
+    { reels: 0, posts: 0 }
   );
 }
 
@@ -245,6 +254,8 @@ function parseThread(
 
   let linkCount = 0;
   let reelOrPostCount = 0;
+  let reelCount = 0;
+  let postCount = 0;
   let photoCount = 0;
   let videoCount = 0;
   let audioCount = 0;
@@ -280,11 +291,18 @@ function parseThread(
     }
 
     linkCount += countMessageLinks(raw);
-    const reelPost = countMessageReelOrPost(raw);
+    const instagramLinks = countInstagramLinkTypes(raw);
+    const reelPost = instagramLinks.reels + instagramLinks.posts;
     reelOrPostCount += reelPost;
-    if (reelPost > 0) {
+    reelCount += instagramLinks.reels;
+    postCount += instagramLinks.posts;
+    if (instagramLinks.reels > 0) {
       reelsLinksBySender[sender] =
-        (reelsLinksBySender[sender] ?? 0) + reelPost;
+        (reelsLinksBySender[sender] ?? 0) + instagramLinks.reels;
+    }
+    if (instagramLinks.posts > 0) {
+      postLinksBySender[sender] =
+        (postLinksBySender[sender] ?? 0) + instagramLinks.posts;
     }
 
     if (Array.isArray(raw.photos)) photoCount += raw.photos.length;
@@ -321,7 +339,7 @@ function parseThread(
   const senderCount = Object.keys(messagesBySender).length;
   const isGroupChat = participantCount > 2 || senderCount > 2;
   const mediaCount = photoCount + videoCount + audioCount;
-  const instagramReelLinks = reelOrPostCount;
+  const instagramReelLinks = reelCount;
 
   return {
     id,
@@ -349,7 +367,7 @@ function parseThread(
     emojiCount: 0,
     linkCount,
     instagramReelLinks,
-    instagramPostLinks: 0,
+    instagramPostLinks: postCount,
     instagramStoryLinks: 0,
     estimatedInstagramLinks: reelOrPostCount,
     reelOrPostCount,
@@ -376,15 +394,31 @@ function parseThread(
 }
 
 export function parseMessages(files: Map<string, string>): DmAnalytics | null {
-  const messageFiles: { path: string; content: string }[] = [];
+  const groupedFiles = new Map<
+    string,
+    { path: string; part: number; data: JsonRecord }[]
+  >();
 
   for (const [path, content] of files) {
-    if (isDmMessageFile(path)) {
-      messageFiles.push({ path, content });
+    const part = dmMessagePart(path);
+    if (part === null) continue;
+    try {
+      const data = JSON.parse(content);
+      if (!isRecord(data) || !Array.isArray(data.messages)) continue;
+      const exportedThreadPath =
+        typeof data.thread_path === "string" && data.thread_path.trim()
+          ? data.thread_path.trim().replace(/\\/g, "/").toLowerCase()
+          : null;
+      const key = exportedThreadPath ?? threadDirectory(path);
+      const group = groupedFiles.get(key) ?? [];
+      group.push({ path, part, data });
+      groupedFiles.set(key, group);
+    } catch {
+      // skip malformed thread files
     }
   }
 
-  if (messageFiles.length === 0) return null;
+  if (groupedFiles.size === 0) return null;
 
   const threads: DmThreadAnalytics[] = [];
   const globalMonthCounts = new Map<string, number>();
@@ -394,28 +428,37 @@ export function parseMessages(files: Map<string, string>): DmAnalytics | null {
   let groupChatCount = 0;
   let oneOnOneCount = 0;
 
-  messageFiles.forEach(({ path, content }, index) => {
-    try {
-      const data = JSON.parse(content);
-      if (!isRecord(data)) return;
-
-      const thread = parseThread(path, data, index);
-      if (!thread) return;
-
-      totalMessages += thread.messageCount;
-      if (thread.folder === "inbox") inboxThreads++;
-      if (thread.folder === "message_requests") messageRequestThreads++;
-      if (thread.isGroupChat) groupChatCount++;
-      else oneOnOneCount++;
-
-      for (const { month, count } of thread.messagesByMonth) {
-        globalMonthCounts.set(month, (globalMonthCounts.get(month) ?? 0) + count);
-      }
-
-      threads.push(thread);
-    } catch {
-      // skip malformed thread files
+  [...groupedFiles.values()].forEach((parts, index) => {
+    parts.sort((a, b) => a.part - b.part || a.path.localeCompare(b.path));
+    const primary = parts[0];
+    const participantNames = new Set<string>();
+    const messages: unknown[] = [];
+    for (const part of parts) {
+      extractParticipants(part.data).forEach((name) =>
+        participantNames.add(name)
+      );
+      messages.push(...(part.data.messages as unknown[]));
     }
+    const mergedData: JsonRecord = {
+      ...primary.data,
+      messages,
+      participants: [...participantNames].map((name) => ({ name })),
+    };
+
+    const thread = parseThread(primary.path, mergedData, index);
+    if (!thread) return;
+
+    totalMessages += thread.messageCount;
+    if (thread.folder === "inbox") inboxThreads++;
+    if (thread.folder === "message_requests") messageRequestThreads++;
+    if (thread.isGroupChat) groupChatCount++;
+    else oneOnOneCount++;
+
+    for (const { month, count } of thread.messagesByMonth) {
+      globalMonthCounts.set(month, (globalMonthCounts.get(month) ?? 0) + count);
+    }
+
+    threads.push(thread);
   });
 
   if (threads.length === 0) return null;

@@ -76,7 +76,6 @@ export function computeReplyPatterns(
       thread.threadName;
     const partnerLabel = formatAccountDisplayName(partner);
     const youCount = thread.messagesBySender["You"] ?? 0;
-    const themCount = thread.messageCount - youCount;
     const balance =
       thread.messageCount > 0
         ? 100 - Math.abs(50 - (youCount / thread.messageCount) * 100) * 2

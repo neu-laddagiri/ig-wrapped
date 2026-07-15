@@ -55,7 +55,6 @@ const listConfig: {
 
 export function NetworkManagerTab({
   network,
-  linkedinProgress = [],
   onOpenAccount,
 }: NetworkManagerTabProps) {
   const [activeList, setActiveList] = useState<NetworkListKey>("dontFollowMeBack");

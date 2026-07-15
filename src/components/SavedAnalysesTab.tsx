@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
   Cloud,
@@ -33,24 +33,26 @@ export function SavedAnalysesTab({
 }: SavedAnalysesTabProps) {
   const { user } = useAuth();
   const [items, setItems] = useState<SavedAnalysisSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadedUserId, setLoadedUserId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchList = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
-    const result = await loadSavedAnalyses();
-    setItems(result.data);
-    if (result.error) setError(result.error);
-    setLoading(false);
-  }, [user]);
+  const loading = Boolean(user && loadedUserId !== user.id);
 
   useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+    if (!user) return;
+    let cancelled = false;
+    void loadSavedAnalyses().then((result) => {
+      if (cancelled) return;
+      setItems(result.data);
+      setError(result.error ?? null);
+      setLoadedUserId(user.id);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [user]);
 
   if (!isSupabaseConfigured()) {
     return (

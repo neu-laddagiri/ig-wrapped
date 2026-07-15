@@ -44,10 +44,9 @@ function accountFromStringListEntry(
     ? normalizeUsername(formatAccountUsername(raw))
     : normalizeUsername(raw);
 
-  const href =
-    typeof entry.href === "string"
-      ? entry.href
-      : instagramProfileUrl(username);
+  // Archive content is untrusted. Always derive profile links ourselves so a
+  // crafted export cannot turn account rows into arbitrary outbound links.
+  const href = instagramProfileUrl(username);
   const timestamp = parseTimestamp(entry.timestamp);
 
   return {
@@ -99,10 +98,7 @@ function accountFromItem(
     return {
       username,
       displayUsername: formatAccountDisplayName(raw),
-      href:
-        typeof item.href === "string"
-          ? item.href
-          : instagramProfileUrl(username),
+      href: instagramProfileUrl(username),
       timestamp: parseTimestamp(item.timestamp),
       category,
     };
@@ -171,6 +167,38 @@ function findFileContent(
   return null;
 }
 
+function findNumberedNetworkFiles(
+  files: Map<string, string>,
+  baseName: "followers" | "following"
+): { content: string; path: string; part: number }[] {
+  const pattern = new RegExp(`/${baseName}(?:_(\\d+))?\\.json$`);
+  const matches: { content: string; path: string; part: number }[] = [];
+  for (const [path, content] of files) {
+    const normalized = `/${path.toLowerCase().replace(/\\/g, "/")}`;
+    const match = normalized.match(pattern);
+    if (!match) continue;
+    const part = match[1] ? Number(match[1]) : 1;
+    if (!Number.isSafeInteger(part) || part < 1) continue;
+    matches.push({ content, path, part });
+  }
+  return matches.sort(
+    (a, b) => a.part - b.part || a.path.localeCompare(b.path)
+  );
+}
+
+function mergeAccountLists(lists: InstagramAccount[][]): InstagramAccount[] {
+  const byUsername = new Map<string, InstagramAccount>();
+  for (const list of lists) {
+    for (const account of list) {
+      const existing = byUsername.get(account.username);
+      if (!existing || (account.timestamp ?? 0) > (existing.timestamp ?? 0)) {
+        byUsername.set(account.username, account);
+      }
+    }
+  }
+  return [...byUsername.values()];
+}
+
 function findNetworkListFile(
   files: Map<string, string>,
   fragments: string[]
@@ -190,6 +218,23 @@ function safeParseJson(content: string): unknown {
   } catch {
     return null;
   }
+}
+
+function parseNumberedNetworkLists(
+  files: { content: string }[],
+  category: "follower" | "following"
+): { accounts: InstagramAccount[]; unreadableCount: number } {
+  const lists: InstagramAccount[][] = [];
+  let unreadableCount = 0;
+  for (const file of files) {
+    const parsed = safeParseJson(file.content);
+    if (parsed === null) {
+      unreadableCount += 1;
+      continue;
+    }
+    lists.push(parseAccountList(parsed, category));
+  }
+  return { accounts: mergeAccountLists(lists), unreadableCount };
 }
 
 function computeNetworkSets(
@@ -226,18 +271,8 @@ export function parseFollowersFollowing(
 } {
   const errors: string[] = [];
 
-  const followersContent = findFileContent(files, [
-    "connections/followers_and_following/followers_1.json",
-    "followers_and_following/followers_1.json",
-    "followers_1.json",
-    "followers.json",
-  ]);
-
-  const followingContent = findFileContent(files, [
-    "connections/followers_and_following/following.json",
-    "followers_and_following/following.json",
-    "following.json",
-  ]);
+  const followerFiles = findNumberedNetworkFiles(files, "followers");
+  const followingFiles = findNumberedNetworkFiles(files, "following");
 
   const pendingContent = findFileContent(files, [
     "pending_follow_requests.json",
@@ -263,21 +298,34 @@ export function parseFollowersFollowing(
     "relationships_restricted",
   ]);
 
-  if (!followersContent && !followingContent) {
+  if (followerFiles.length === 0 && followingFiles.length === 0) {
     return { network: null, errors };
   }
 
-  const followers = followersContent
-    ? parseAccountList(safeParseJson(followersContent.content), "follower")
-    : [];
-  const following = followingContent
-    ? parseAccountList(safeParseJson(followingContent.content), "following")
-    : [];
+  const followerResult = parseNumberedNetworkLists(followerFiles, "follower");
+  const followingResult = parseNumberedNetworkLists(followingFiles, "following");
+  const followers = followerResult.accounts;
+  const following = followingResult.accounts;
 
-  if (followersContent && followers.length === 0) {
+  if (followerResult.unreadableCount > 0) {
+    errors.push(
+      `Skipped ${followerResult.unreadableCount} unreadable follower file${
+        followerResult.unreadableCount === 1 ? "" : "s"
+      }; totals may be incomplete.`
+    );
+  }
+  if (followingResult.unreadableCount > 0) {
+    errors.push(
+      `Skipped ${followingResult.unreadableCount} unreadable following file${
+        followingResult.unreadableCount === 1 ? "" : "s"
+      }; totals may be incomplete.`
+    );
+  }
+
+  if (followerFiles.length > 0 && followers.length === 0) {
     errors.push("Could not parse followers file — format may differ.");
   }
-  if (followingContent && following.length === 0) {
+  if (followingFiles.length > 0 && following.length === 0) {
     errors.push("Could not parse following file — format may differ.");
   }
 

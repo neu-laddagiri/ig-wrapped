@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Copy, Download, AlertTriangle } from "lucide-react";
 import type { CleanupAccount } from "@/types/insights";
 import type { NetworkStats } from "@/types/instagram";
+import { escapeCsvCell } from "@/lib/exportCsv";
 import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 
 type Preset =
@@ -71,9 +72,10 @@ export function UnfollowImpactPanel({
       "username,displayName,cleanupScore",
       ...candidates
         .filter((c) => effectiveSelected.has(c.username))
-        .map(
-          (c) =>
-            `${c.username},"${c.displayName.replace(/"/g, '""')}",${c.cleanupPriorityScore}`
+        .map((c) =>
+          [c.username, c.displayName, c.cleanupPriorityScore]
+            .map(escapeCsvCell)
+            .join(",")
         ),
     ];
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });

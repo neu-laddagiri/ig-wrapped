@@ -125,15 +125,14 @@ export function LinkedInHelperTab({
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [source, setSource] = useState<LinkedInSource>("all");
-  const [statusFilter, setStatusFilter] = useState<LinkedInStatus | "all">(
-    "all"
-  );
+  const [statusFilter] = useState<LinkedInStatus | "all">("all");
   const [sortMode, setSortMode] = useState<SortMode>("most-interacted");
   const [interactionFilter, setInteractionFilter] =
     useState<InteractionFilter>("hide-unknown");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(25);
-  const [progressLoaded, setProgressLoaded] = useState(false);
+  const loadedFingerprintRef = useRef<string | null>(null);
+  const skipSaveOnceRef = useRef(false);
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -156,14 +155,19 @@ export function LinkedInHelperTab({
   }, [network, source]);
 
   useEffect(() => {
-    if (!fingerprint || progressLoaded) return;
+    if (!fingerprint || loadedFingerprintRef.current === fingerprint) return;
     const stored = loadLinkedInProgress(fingerprint);
+    loadedFingerprintRef.current = fingerprint;
+    skipSaveOnceRef.current = true;
     if (stored?.length) onEntriesChange(stored);
-    setProgressLoaded(true);
-  }, [fingerprint, progressLoaded, onEntriesChange]);
+  }, [fingerprint, onEntriesChange]);
 
   useEffect(() => {
-    if (!fingerprint || !progressLoaded) return;
+    if (!fingerprint || loadedFingerprintRef.current !== fingerprint) return;
+    if (skipSaveOnceRef.current) {
+      skipSaveOnceRef.current = false;
+      return;
+    }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
       saveLinkedInProgress(fingerprint, entries);
@@ -171,11 +175,7 @@ export function LinkedInHelperTab({
     return () => {
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     };
-  }, [entries, fingerprint, progressLoaded]);
-
-  useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, source, statusFilter, sortMode, interactionFilter]);
+  }, [entries, fingerprint]);
 
   const baseRows = useMemo(
     () =>
@@ -355,14 +355,20 @@ export function LinkedInHelperTab({
           <input
             type="search"
             value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setPage(1);
+            }}
             placeholder="Search username or name…"
             className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40"
           />
         </div>
         <select
           value={source}
-          onChange={(e) => setSource(e.target.value as LinkedInSource)}
+          onChange={(e) => {
+            setSource(e.target.value as LinkedInSource);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {SOURCE_OPTIONS.map((opt) => (
@@ -373,7 +379,10 @@ export function LinkedInHelperTab({
         </select>
         <select
           value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          onChange={(e) => {
+            setSortMode(e.target.value as SortMode);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {SORT_OPTIONS.map((opt) => (
@@ -384,9 +393,10 @@ export function LinkedInHelperTab({
         </select>
         <select
           value={interactionFilter}
-          onChange={(e) =>
-            setInteractionFilter(e.target.value as InteractionFilter)
-          }
+          onChange={(e) => {
+            setInteractionFilter(e.target.value as InteractionFilter);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {INTERACTION_FILTERS.map((opt) => (

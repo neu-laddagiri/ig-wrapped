@@ -1,8 +1,8 @@
 "use client";
 
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
 import { X, ExternalLink, Briefcase, Copy, Check, ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useId, useRef, useState } from "react";
 import type {
   AccountNetworkDetail,
   LinkedInHelperEntry,
@@ -20,6 +20,7 @@ import {
   formatTimestamp,
   linkedInSearchUrl,
 } from "@/lib/formatters";
+import { useAccessibleDialog } from "@/components/useAccessibleDialog";
 
 interface AccountDetailDrawerProps {
   open: boolean;
@@ -77,30 +78,43 @@ export function AccountDetailDrawer({
 }: AccountDetailDrawerProps) {
   const [copied, setCopied] = useState(false);
   const [sourcesOpen, setSourcesOpen] = useState(false);
+  const titleId = useId();
+  const descriptionId = useId();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const prefersReducedMotion = useReducedMotion();
+  const resolvedUsername = username ?? "";
 
-  if (!username) return null;
-
-  const detail: AccountNetworkDetail | null = network
-    ? buildAccountNetworkDetail(network, username, linkedinEntry)
+  const detail: AccountNetworkDetail | null = network && resolvedUsername
+    ? buildAccountNetworkDetail(network, resolvedUsername, linkedinEntry)
     : null;
 
   const receipt =
     receiptProp ??
-    (network
+    (network && resolvedUsername
       ? buildAccountReceipt({
-          username,
+          username: resolvedUsername,
           network,
           unified: unifiedAccount,
-          dmSlice: insights?.dmReceiptByUsername?.[username],
+          dmSlice: insights?.dmReceiptByUsername?.[resolvedUsername],
           linkedinEntry,
         })
       : null);
 
-  if (!detail && !receipt && !unifiedAccount) return null;
+  const hasContent = Boolean(
+    resolvedUsername && (detail || receipt || unifiedAccount)
+  );
+  const dialogRef = useAccessibleDialog<HTMLElement>({
+    open: open && hasContent,
+    onClose,
+    initialFocusRef: closeButtonRef,
+  });
+
+  if (!hasContent) return null;
 
   const displayUsername =
-    detail?.displayUsername ?? receipt?.displayName ?? username;
-  const profileUsername = detail?.username ?? receipt?.username ?? username;
+    detail?.displayUsername ?? receipt?.displayName ?? resolvedUsername;
+  const profileUsername =
+    detail?.username ?? receipt?.username ?? resolvedUsername;
   const profileHref =
     detail?.href ??
     (profileUsername.startsWith("thread:") ||
@@ -131,32 +145,48 @@ export function AccountDetailDrawer({
       {open && (
         <>
           <motion.div
-            initial={{ opacity: 0 }}
+            initial={prefersReducedMotion ? false : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
+            transition={prefersReducedMotion ? { duration: 0 } : undefined}
             className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm"
             onClick={onClose}
+            aria-hidden="true"
           />
           <motion.aside
-            initial={{ x: "100%" }}
+            ref={dialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby={titleId}
+            aria-describedby={descriptionId}
+            tabIndex={-1}
+            initial={prefersReducedMotion ? false : { x: "100%" }}
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
-            transition={{ type: "spring", damping: 28, stiffness: 320 }}
-            className="fixed right-0 top-0 z-50 flex h-full w-full max-w-md flex-col border-l border-white/10 bg-[#0a0a10]/98 shadow-2xl backdrop-blur-xl"
+            transition={
+              prefersReducedMotion
+                ? { duration: 0 }
+                : { type: "spring", damping: 28, stiffness: 320 }
+            }
+            className="fixed right-0 top-0 z-50 flex h-dvh w-full max-w-md flex-col border-l border-white/10 bg-[#0a0a10]/98 shadow-2xl backdrop-blur-xl"
           >
             <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-white">
+                <h2 id={titleId} className="text-lg font-semibold text-white">
                   {getSecondaryLabel({ username: profileUsername })}
                 </h2>
-                <p className="text-xs text-white/40">Friendship receipt</p>
+                <p id={descriptionId} className="text-xs text-white/60">
+                  Friendship receipt
+                </p>
               </div>
               <button
+                ref={closeButtonRef}
                 type="button"
                 onClick={onClose}
-                className="rounded-lg p-2 text-white/40 hover:bg-white/10 hover:text-white"
+                aria-label="Close account details"
+                className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white/60 hover:bg-white/10 hover:text-white"
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5" aria-hidden="true" />
               </button>
             </div>
 
@@ -254,6 +284,7 @@ export function AccountDetailDrawer({
                   <button
                     type="button"
                     onClick={() => setSourcesOpen((o) => !o)}
+                    aria-expanded={sourcesOpen}
                     className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs font-medium text-white/60"
                   >
                     Why this says this
@@ -318,15 +349,21 @@ export function AccountDetailDrawer({
             </div>
 
             <div className="flex flex-wrap gap-2 border-t border-white/10 p-5">
+              <span className="sr-only" role="status" aria-live="polite">
+                {copied ? "Username copied" : ""}
+              </span>
               <button
                 type="button"
                 onClick={copyUsername}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/80 hover:bg-white/10"
               >
                 {copied ? (
-                  <Check className="h-3.5 w-3.5 text-emerald-400" />
+                  <Check
+                    className="h-3.5 w-3.5 text-emerald-400"
+                    aria-hidden="true"
+                  />
                 ) : (
-                  <Copy className="h-3.5 w-3.5" />
+                  <Copy className="h-3.5 w-3.5" aria-hidden="true" />
                 )}
                 Copy username
               </button>
@@ -336,7 +373,8 @@ export function AccountDetailDrawer({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#DD2A7B]/30 bg-[#DD2A7B]/10 px-3 py-2 text-xs text-[#DD2A7B] hover:bg-[#DD2A7B]/20"
               >
-                Instagram <ExternalLink className="h-3.5 w-3.5" />
+                Instagram
+                <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
               </a>
               <a
                 href={linkedInSearchUrl(profileUsername, displayUsername)}
@@ -344,7 +382,7 @@ export function AccountDetailDrawer({
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-xl border border-[#515BD4]/30 bg-[#515BD4]/10 px-3 py-2 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
               >
-                <Briefcase className="h-3.5 w-3.5" />
+                <Briefcase className="h-3.5 w-3.5" aria-hidden="true" />
                 Search LinkedIn
               </a>
             </div>
