@@ -2,7 +2,6 @@ import { instagramProfileUrl } from "@/lib/formatters";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import {
   buildIdentityGraph,
-  normalizeIdentityKey,
   toSourceBreakdownFromPerson,
   type IdentityGraph,
 } from "@/lib/identityResolver";

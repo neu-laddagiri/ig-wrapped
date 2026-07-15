@@ -9,7 +9,6 @@ import type {
   WrappedInsights,
 } from "@/types/instagram";
 import { computeFunStats, resolveFunStatValue } from "@/lib/funStats";
-import { normalizeDmThreads } from "@/lib/dmThreads";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
 
 import type { DmAward, ReplyPatternResult, InsightsBundle } from "@/types/insights";
@@ -54,7 +53,6 @@ export function FunStatsTab({
     ads,
     mostActiveEra,
   });
-  const threads = normalizeDmThreads(messages);
   const available = cards.filter((c) => c.available);
 
   if (available.length === 0) {
@@ -182,7 +180,7 @@ export function FunStatsTab({
                 {card.title}
               </p>
               <p className="mt-2 text-2xl font-bold tracking-tight text-white">
-                {resolveFunStatValue(card, showNames, threads)}
+                {resolveFunStatValue(card, showNames)}
               </p>
               <p className="mt-2 text-xs leading-relaxed text-white/40">
                 {card.description}

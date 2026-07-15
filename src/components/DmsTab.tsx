@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   MessageCircle,
   Inbox,
@@ -443,19 +443,10 @@ export function DmsTab({
     () => paginateDmThreads(sorted, page, pageSize),
     [sorted, page, pageSize]
   );
-
-  useEffect(() => {
-    setPage(1);
-  }, [search, sortBy, pageSize, showThreadNames]);
-
-  useEffect(() => {
-    if (
-      expandedThreadId &&
-      !baseThreads.some((t) => t.id === expandedThreadId)
-    ) {
-      setExpandedThreadId(null);
-    }
-  }, [baseThreads, expandedThreadId]);
+  const visibleExpandedThreadId =
+    expandedThreadId && baseThreads.some((thread) => thread.id === expandedThreadId)
+      ? expandedThreadId
+      : null;
 
   const hasMessageData =
     messages &&
@@ -643,7 +634,10 @@ export function DmsTab({
                 <input
                   type="text"
                   value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
                   placeholder={
                     showThreadNames ? "Search threads…" : "Search by folder…"
                   }
@@ -652,7 +646,10 @@ export function DmsTab({
               </div>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as DmSortKey)}
+                onChange={(e) => {
+                  setSortBy(e.target.value as DmSortKey);
+                  setPage(1);
+                }}
                 className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none"
               >
                 <option value="messages">Most messages</option>
@@ -669,7 +666,10 @@ export function DmsTab({
               <input
                 type="checkbox"
                 checked={showThreadNames}
-                onChange={(e) => setShowThreadNames(e.target.checked)}
+                onChange={(e) => {
+                  setShowThreadNames(e.target.checked);
+                  setPage(1);
+                }}
                 className="accent-[#DD2A7B]"
               />
               Show thread names
@@ -693,7 +693,7 @@ export function DmsTab({
             </div>
           ) : (
             paged.map((thread) => {
-              const isOpen = expandedThreadId === thread.id;
+              const isOpen = visibleExpandedThreadId === thread.id;
               const accountKey = dmAccountKeyByThreadId?.get(thread.id);
               const canOpenAccount =
                 Boolean(onOpenAccount) &&

@@ -3,12 +3,15 @@
 import { useCallback, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, FileArchive, Loader2, AlertCircle } from "lucide-react";
+import { MAX_ZIP_BYTES } from "@/lib/zipParser";
 
 interface UploadCardProps {
   onFileSelect: (file: File) => void;
   onTryDemo?: () => void;
   isLoading?: boolean;
   loadingText?: string;
+  loadingProgress?: number;
+  onCancel?: () => void;
   error?: string | null;
   fileName?: string | null;
   /** Compact layout after a successful upload */
@@ -20,19 +23,36 @@ export function UploadCard({
   onTryDemo,
   isLoading,
   loadingText,
+  loadingProgress,
+  onCancel,
   error,
   fileName,
   compact = false,
 }: UploadCardProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const visibleError = validationError ?? error;
+  const progress = Math.max(0, Math.min(100, loadingProgress ?? 0));
 
   const handleFile = useCallback(
     (file: File | undefined) => {
       if (!file) return;
       if (!file.name.toLowerCase().endsWith(".zip")) {
+        setValidationError("Choose the .zip file downloaded from Instagram.");
         return;
       }
+      if (file.size === 0) {
+        setValidationError("This ZIP is empty. Choose your Instagram export.");
+        return;
+      }
+      if (file.size > MAX_ZIP_BYTES) {
+        setValidationError(
+          "This ZIP is over 512 MB. Export Instagram data as JSON without media and try again."
+        );
+        return;
+      }
+      setValidationError(null);
       onFileSelect(file);
     },
     [onFileSelect]
@@ -59,7 +79,10 @@ export function UploadCard({
           type="file"
           accept=".zip,application/zip"
           className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0])}
+          onChange={(e) => {
+            handleFile(e.target.files?.[0]);
+            e.currentTarget.value = "";
+          }}
         />
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex min-w-0 items-center gap-3">
@@ -81,10 +104,13 @@ export function UploadCard({
             Upload different file
           </button>
         </div>
-        {error && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+        {visibleError && (
+          <div
+            role="alert"
+            className="mt-3 flex items-start gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+          >
             <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            <span>{error}</span>
+            <span>{visibleError}</span>
           </div>
         )}
       </motion.div>
@@ -99,6 +125,7 @@ export function UploadCard({
       className="rounded-3xl border border-white/10 bg-white/[0.06] p-6 backdrop-blur-xl sm:p-8"
     >
       <div
+        aria-busy={isLoading || undefined}
         onDragOver={(e) => {
           e.preventDefault();
           setIsDragging(true);
@@ -116,13 +143,47 @@ export function UploadCard({
           type="file"
           accept=".zip,application/zip"
           className="hidden"
-          onChange={(e) => handleFile(e.target.files?.[0])}
+          onChange={(e) => {
+            handleFile(e.target.files?.[0]);
+            e.currentTarget.value = "";
+          }}
         />
 
         {isLoading ? (
-          <div className="flex flex-col items-center gap-4 text-center">
+          <div
+            role="status"
+            aria-live="polite"
+            className="flex w-full max-w-sm flex-col items-center gap-4 text-center"
+          >
             <Loader2 className="h-10 w-10 animate-spin text-[#DD2A7B]" />
             <p className="text-sm text-white/70">{loadingText ?? "Parsing…"}</p>
+            <div className="w-full">
+              <div
+                role="progressbar"
+                aria-label="Instagram export parsing progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+                className="h-2 overflow-hidden rounded-full bg-white/10"
+              >
+                <div
+                  className="h-full rounded-full animated-gradient-bg transition-[width]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs tabular-nums text-white/50">
+                {progress}% complete
+              </p>
+            </div>
+            {onCancel && (
+              <button
+                type="button"
+                onClick={onCancel}
+                className="min-h-11 rounded-full border border-white/15 px-5 py-2 text-sm font-medium text-white/70 hover:bg-white/5"
+              >
+                Cancel
+              </button>
+            )}
           </div>
         ) : (
           <>
@@ -154,7 +215,10 @@ export function UploadCard({
             {!fileName && onTryDemo && (
               <button
                 type="button"
-                onClick={onTryDemo}
+                onClick={() => {
+                  setValidationError(null);
+                  onTryDemo();
+                }}
                 className="mt-3 rounded-full border border-white/15 bg-white/5 px-6 py-2.5 text-sm font-medium text-white/70 transition hover:bg-white/10"
               >
                 Try Demo Data
@@ -164,10 +228,13 @@ export function UploadCard({
         )}
       </div>
 
-      {error && (
-        <div className="mt-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+      {visibleError && (
+        <div
+          role="alert"
+          className="mt-4 flex items-start gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300"
+        >
           <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
-          <span>{error}</span>
+          <span>{visibleError}</span>
         </div>
       )}
 

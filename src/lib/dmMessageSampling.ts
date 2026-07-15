@@ -9,7 +9,6 @@ export interface SelectedMessageForApi {
 
 export interface SamplingOptions {
   mostActiveMonth?: string;
-  isGroup: boolean;
   useRealNames: boolean;
 }
 
@@ -61,7 +60,7 @@ export function prepareSelectedMessages(
   textMessages: DmMessageSample[],
   options: SamplingOptions
 ): SelectedMessageForApi[] {
-  const { mostActiveMonth, isGroup: _isGroup, useRealNames } = options;
+  const { mostActiveMonth, useRealNames } = options;
   if (!textMessages.length) return [];
 
   const withText: TextMessage[] = textMessages
@@ -147,6 +146,7 @@ export function anonymizeSenderStats(
   messagesBySender: Record<string, number>,
   _isGroup: boolean
 ): Record<string, number> {
+  void _isGroup;
   return formatSenderStats(messagesBySender, false);
 }
 
@@ -165,14 +165,12 @@ export function buildAiSummarySampleForCloud(
 ): DmAiSummarySample | undefined {
   const anonymized = prepareSelectedMessages(textMessages, {
     mostActiveMonth: opts.mostActiveMonth,
-    isGroup: opts.isGroup,
     useRealNames: false,
   });
   if (!anonymized.length) return undefined;
 
   const withRealNames = prepareSelectedMessages(textMessages, {
     mostActiveMonth: opts.mostActiveMonth,
-    isGroup: opts.isGroup,
     useRealNames: true,
   });
   const realByKey = new Map(
@@ -211,7 +209,6 @@ export function resolveAiReadyMessages(
   if (thread.textMessages?.length) {
     return prepareSelectedMessages(thread.textMessages, {
       mostActiveMonth: thread.mostActiveMonth,
-      isGroup: thread.isGroup,
       useRealNames,
     });
   }

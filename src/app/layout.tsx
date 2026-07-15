@@ -15,6 +15,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const analyticsEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_ANALYTICS?.trim().toLowerCase() === "true";
+
 export const metadata: Metadata = {
   title: "IG Wrapped — Your Instagram data, decoded",
   description:
@@ -35,7 +38,7 @@ export default function RootLayout({
         <AuthProvider>
           <PresentationProvider>{children}</PresentationProvider>
         </AuthProvider>
-        <Analytics />
+        {analyticsEnabled && <Analytics />}
       </body>
     </html>
   );

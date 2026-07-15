@@ -7,7 +7,6 @@ import {
   getCanonicalAccountKey,
   isLikelyInstagramUsername,
   normalizeUsername as identityNormalizeUsername,
-  usernamesMatch,
 } from "@/lib/accountIdentity";
 
 /** Canonical account record used across every tab. */

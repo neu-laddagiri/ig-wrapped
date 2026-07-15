@@ -1,11 +1,13 @@
 import type { InstagramAccount, LinkedInHelperEntry } from "@/types/instagram";
 import { formatTimestamp } from "@/lib/formatters";
 
-function escapeCsvCell(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
-    return `"${value.replace(/"/g, '""')}"`;
+export function escapeCsvCell(value: string | number): string {
+  const raw = String(value);
+  const safe = /^[\t\r]|^\s*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return value;
+  return safe;
 }
 
 function downloadBlob(content: string, filename: string, mimeType: string) {

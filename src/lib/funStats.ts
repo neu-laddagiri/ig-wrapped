@@ -46,7 +46,6 @@ export function computeFunStats(params: {
 }): FunStatCard[] {
   const { network, wrapped, messages, ads, mostActiveEra } = params;
   const normalized = normalizeDmThreadList(messages);
-  const threads = normalized.map(normalizedThreadToAnalytics);
   const directThreads = normalized.filter(isDirectDmThread).map(normalizedThreadToAnalytics);
 
   const biggestYapper = directThreads.length
@@ -151,8 +150,6 @@ export function computeFunStats(params: {
     else if (messages && messages.totalMessages > 5000)
       personality = "DM Power User";
   }
-
-  const hiddenName = "Hidden for sharing";
 
   const threadLabel = (thread: DmThreadAnalytics | null | undefined) =>
     thread
@@ -300,8 +297,7 @@ export function computeFunStats(params: {
 
 export function resolveFunStatValue(
   card: FunStatCard,
-  showNames: boolean,
-  _threads: DmThreadAnalytics[] = []
+  showNames: boolean
 ): string {
   const nameCards = [
     "biggest-yapper",

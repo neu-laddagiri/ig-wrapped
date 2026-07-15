@@ -50,12 +50,14 @@ export async function getCurrentUser(): Promise<User | null> {
 function stripFilePaths(
   parsed: CreateSnapshotInput["parsedData"],
   includeMessagePreviews: boolean,
-  showThreadNames: boolean
+  showThreadNames: boolean,
+  includeAiMessageSamples: boolean
 ) {
   return sanitizeParsedForCloudSave(
     parsed,
     includeMessagePreviews,
-    showThreadNames
+    showThreadNames,
+    includeAiMessageSamples
   );
 }
 
@@ -79,7 +81,8 @@ export function createAnalysisSnapshot(
   const parsed = stripFilePaths(
     input.parsedData,
     input.dmShowFirstMessagePreview,
-    input.dmShowThreadNames
+    input.dmShowThreadNames,
+    input.includeAiMessageSamples ?? false
   );
   return {
     version: ANALYSIS_SNAPSHOT_VERSION,
@@ -90,6 +93,7 @@ export function createAnalysisSnapshot(
     activeTab: input.activeTab,
     dmShowThreadNames: input.dmShowThreadNames,
     dmShowFirstMessagePreview: input.dmShowFirstMessagePreview,
+    includeAiMessageSamples: input.includeAiMessageSamples ?? false,
     expandedGroupThreads: input.expandedGroupThreads,
     dmAiSummaries: input.dmAiSummaries ?? {},
     overviewAiSummary: input.overviewAiSummary ?? null,

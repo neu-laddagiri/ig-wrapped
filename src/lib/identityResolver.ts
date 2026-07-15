@@ -2,9 +2,7 @@ import { normalizeUsername } from "@/lib/formatters";
 import {
   isInstagramPlaceholderName,
   pickBestDisplayName,
-  cleanRawDisplayName,
   formatAccountDisplayName,
-  formatAccountUsername,
   UNKNOWN_ACCOUNT_LABEL,
 } from "@/lib/accountNameFilter";
 import {
@@ -127,28 +125,6 @@ export interface IdentityGraph {
   debug: IdentityResolutionDebug;
   coreAnalytics?: import("@/lib/insights/coreAnalytics").CoreAnalytics;
 }
-
-const COMMON_FIRST_NAMES = new Set([
-  "alex",
-  "chris",
-  "jordan",
-  "sam",
-  "taylor",
-  "morgan",
-  "casey",
-  "jamie",
-  "riley",
-  "avery",
-  "john",
-  "mike",
-  "david",
-  "sarah",
-  "emma",
-  "james",
-  "michael",
-  "daniel",
-  "maria",
-]);
 
 export function normalizeIdentityKey(name: string): string {
   return repairMojibake(name)
@@ -601,22 +577,6 @@ function collectDirectThreadCandidates(
   return out;
 }
 
-function countSentByOther(
-  thread: DmThreadAnalytics,
-  owner: ExportOwnerIdentity
-): { me: number; them: number; splitAvailable: boolean } {
-  if (owner.confidence === "low" || owner.keys.size === 0) {
-    return { me: 0, them: 0, splitAvailable: false };
-  }
-  let me = 0;
-  let them = 0;
-  for (const [sender, count] of Object.entries(thread.messagesBySender ?? {})) {
-    if (isOwnerName(sender, owner)) me += count;
-    else them += count;
-  }
-  return { me, them, splitAvailable: true };
-}
-
 export interface BuildIdentityGraphParams {
   network: NetworkStats | null;
   messages: DmAnalytics | null;
@@ -688,8 +648,6 @@ export function buildIdentityGraph(
       registerAlias(aliasToCanonical, alias, username);
     }
   }
-
-  const owner = inferAccountOwnerKeys(network, messages, files);
 
   const core =
     coreAnalyticsInput ??

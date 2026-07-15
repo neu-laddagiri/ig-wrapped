@@ -138,6 +138,8 @@ export function compareParsedExports(
   newMutuals: string[];
   lostMutuals: string[];
 } {
+  void beforeLabel;
+  void afterLabel;
   const bNet = before.network;
   const aNet = after.network;
   const bFollowers = new Set(bNet?.followers.map((f) => f.username) ?? []);

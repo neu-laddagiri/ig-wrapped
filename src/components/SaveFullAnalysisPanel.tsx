@@ -15,7 +15,6 @@ import {
   createAnalysisSnapshot,
   saveFullAnalysisToCloud,
   deleteSavedAnalysis,
-  isSupabaseConfigured,
 } from "@/lib/cloudSave";
 import type { DashboardTabId } from "@/components/DashboardTabs";
 import type { ParsedExportData, LinkedInHelperEntry } from "@/types/instagram";
@@ -64,6 +63,7 @@ export function SaveFullAnalysisPanel({
   const { user, isConfigured } = useAuth();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [includeAiMessageSamples, setIncludeAiMessageSamples] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -108,6 +108,13 @@ export function SaveFullAnalysisPanel({
       if (!ok) return;
     }
 
+    if (includeAiMessageSamples) {
+      const ok = confirm(
+        "You opted in to saving limited, masked DM excerpts so new AI summaries can be generated after loading this cloud save. Message text is private and will leave this device. Continue?"
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -119,6 +126,7 @@ export function SaveFullAnalysisPanel({
       activeTab,
       dmShowThreadNames,
       dmShowFirstMessagePreview,
+      includeAiMessageSamples,
       expandedGroupThreads,
       dmAiSummaries,
       overviewAiSummary,
@@ -182,10 +190,36 @@ export function SaveFullAnalysisPanel({
           <p className="mt-2 text-xs text-white/35">
             {isDemoMode
               ? "Demo mode uses synthetic data. Cloud save is optional — use “Save full analysis” only if you want a demo snapshot on your account."
-              : "This saves your parsed analysis snapshot and app progress. It does not upload your original ZIP or media files. Saved analyses include limited, sanitized DM samples so AI summaries can work later. Raw ZIPs, media files, and full message histories are not saved."}
+              : "This saves your parsed analysis snapshot and app progress. It does not upload your original ZIP, media files, raw search terms, archive paths, or DM message text unless you explicitly opt in below."}
           </p>
         </div>
       </div>
+
+      {!isDemoMode && (
+        <label
+          htmlFor="include-ai-message-samples"
+          className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/15 p-3 text-sm text-white/65"
+        >
+          <input
+            id="include-ai-message-samples"
+            type="checkbox"
+            checked={includeAiMessageSamples}
+            onChange={(event) =>
+              setIncludeAiMessageSamples(event.target.checked)
+            }
+            className="mt-0.5 h-4 w-4 accent-[#DD2A7B]"
+          />
+          <span>
+            <span className="block font-medium text-white/85">
+              Save limited DM excerpts for future AI summaries
+            </span>
+            <span className="mt-0.5 block text-xs text-white/50">
+              Off by default. When enabled, masked excerpts and optional sender
+              names are stored with your cloud snapshot.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {!user ? (

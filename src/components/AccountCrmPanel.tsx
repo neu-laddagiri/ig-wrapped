@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
   loadAccountCrm,
   saveAccountCrmEntry,
@@ -13,20 +13,15 @@ interface AccountCrmPanelProps {
   username: string;
 }
 
-export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps) {
-  const [note, setNote] = useState("");
-  const [status, setStatus] = useState<AccountCrmStatus>("not-reviewed");
-
-  useEffect(() => {
+function AccountCrmFields({ fingerprint, username }: AccountCrmPanelProps) {
+  const [draft, setDraft] = useState(() => {
     const entry = loadAccountCrm(fingerprint)[username];
-    if (entry) {
-      setNote(entry.note ?? "");
-      setStatus(entry.status);
-    } else {
-      setNote("");
-      setStatus("not-reviewed");
-    }
-  }, [fingerprint, username]);
+    return {
+      note: entry?.note ?? "",
+      status: entry?.status ?? ("not-reviewed" as AccountCrmStatus),
+    };
+  });
+  const { note, status } = draft;
 
   const persist = (nextNote: string, nextStatus: AccountCrmStatus) => {
     saveAccountCrmEntry(fingerprint, {
@@ -46,7 +41,7 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
       <textarea
         value={note}
         onChange={(e) => {
-          setNote(e.target.value);
+          setDraft((current) => ({ ...current, note: e.target.value }));
           persist(e.target.value, status);
         }}
         rows={2}
@@ -58,7 +53,7 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
         value={status}
         onChange={(e) => {
           const v = e.target.value as AccountCrmStatus;
-          setStatus(v);
+          setDraft((current) => ({ ...current, status: v }));
           persist(note, v);
         }}
         className="mt-1 w-full rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white"
@@ -74,5 +69,14 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
         sync is enabled in a future update.
       </p>
     </div>
+  );
+}
+
+export function AccountCrmPanel(props: AccountCrmPanelProps) {
+  return (
+    <AccountCrmFields
+      key={`${props.fingerprint}:${props.username}`}
+      {...props}
+    />
   );
 }

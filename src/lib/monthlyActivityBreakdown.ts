@@ -79,6 +79,7 @@ function addGroupCount(
     map.set(month, groups);
   }
   groups.set(group, (groups.get(group) ?? 0) + count);
+  markSource(month, source);
 }
 
 const monthSources = new Map<string, MonthSources>();
@@ -101,7 +102,6 @@ function mergeActivityTypes(
     if (!group || !monthMap) continue;
     for (const [month, count] of monthMap) {
       addGroupCount(map, month, group, count, "export_files");
-      markSource(month, "export_files");
     }
   }
 }
@@ -110,7 +110,6 @@ function addDmMonths(map: MonthlyGroupMap, messages: DmAnalytics | null): void {
   if (!messages?.messagesByMonth?.length) return;
   for (const { month, count } of messages.messagesByMonth) {
     addGroupCount(map, month, "dms", count, "dm_parser");
-    markSource(month, "dm_parser");
   }
 }
 
@@ -120,13 +119,11 @@ function addNetworkMonths(map: MonthlyGroupMap, network: NetworkStats | null): v
     if (!account.timestamp) continue;
     const month = formatMonthKey(account.timestamp);
     addGroupCount(map, month, "follows", 1, "network");
-    markSource(month, "network");
   }
   for (const account of network.followers) {
     if (!account.timestamp) continue;
     const month = formatMonthKey(account.timestamp);
     addGroupCount(map, month, "follows", 1, "network");
-    markSource(month, "network");
   }
 }
 
@@ -139,7 +136,6 @@ function addSecurityMonths(map: MonthlyGroupMap, security: SecurityData | null):
     seen.add(dedupeKey);
     const month = formatMonthKey(e.timestamp);
     addGroupCount(map, month, "accountEvents", 1, "security");
-    markSource(month, "security");
   }
 }
 
@@ -149,7 +145,6 @@ function addSearchMonths(
 ): void {
   for (const { month, count } of search?.searchTimeline ?? []) {
     addGroupCount(map, month, "searches", count, "search");
-    markSource(month, "search");
   }
 }
 
@@ -164,7 +159,6 @@ function addAdsFromFiles(map: MonthlyGroupMap, files?: Map<string, string>): voi
       for (const ts of timestamps) {
         const month = formatMonthKey(ts);
         addGroupCount(map, month, "ads", 1, "export_files");
-        markSource(month, "export_files");
       }
     } catch {
       continue;

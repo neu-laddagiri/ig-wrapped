@@ -8,6 +8,18 @@ function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+function isSearchQuery(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const query = value.trim();
+  return (
+    query.length > 1 &&
+    query.length < 120 &&
+    !query.startsWith("http") &&
+    !isGenericSearchLabel(query) &&
+    (isValidAccountName(query) || query.includes(" ") || query.startsWith("@"))
+  );
+}
+
 function isSearchPath(path: string): boolean {
   const lower = path.toLowerCase().replace(/\\/g, "/");
   if (
@@ -36,49 +48,32 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
     }
     if (!isRecord(node)) return;
 
+    const nestedStringList = Array.isArray(node.string_list_data)
+      ? node.string_list_data
+      : [];
+    const hasNestedQuery = nestedStringList.some(
+      (entry) =>
+        isRecord(entry) &&
+        [entry.query, entry.search_query, entry.text, entry.title, entry.value].some(
+          isSearchQuery
+        )
+    );
     const queryFields = [
       node.query,
       node.search_query,
       node.text,
-      node.title,
-      node.label,
+      ...(hasNestedQuery ? [] : [node.title, node.label]),
       node.value,
     ];
     const ts = parseTimestamp(
       node.timestamp ?? node.timestamp_ms ?? node.creation_timestamp
     );
 
+    const nodeQueries = new Set<string>();
     for (const field of queryFields) {
-      if (typeof field === "string") {
-        const q = field.trim();
-        if (
-          q.length > 1 &&
-          q.length < 120 &&
-          !q.startsWith("http") &&
-          !isGenericSearchLabel(q)
-        ) {
-          if (isValidAccountName(q) || q.includes(" ") || q.startsWith("@")) {
-            results.push({ query: q, ts });
-          }
-        }
-      }
+      if (isSearchQuery(field)) nodeQueries.add(field.trim());
     }
-
-    if (Array.isArray(node.entries)) {
-      walk(node.entries);
-    }
-
-    if (Array.isArray(node.string_list_data)) {
-      for (const entry of node.string_list_data) {
-        if (!isRecord(entry)) continue;
-        const v =
-          typeof entry.value === "string" ? entry.value.trim() : undefined;
-        const t = parseTimestamp(entry.timestamp ?? entry.timestamp_ms);
-        if (v && v.length > 1 && v.length < 120 && !v.startsWith("http") && !isGenericSearchLabel(v)) {
-          results.push({ query: v, ts: t });
-        }
-      }
-    }
+    nodeQueries.forEach((query) => results.push({ query, ts }));
 
     for (const val of Object.values(node)) {
       if (Array.isArray(val) || isRecord(val)) walk(val);
@@ -86,7 +81,18 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
   }
 
   walk(data);
-  return results;
+
+  // Some export shapes repeat the same event in a parent record and nested
+  // string_list_data. Collapse only timestamped duplicates; untimed repeated
+  // searches remain meaningful separate events.
+  const seenTimestamped = new Set<string>();
+  return results.filter(({ query, ts }) => {
+    if (ts === undefined) return true;
+    const key = `${query.toLowerCase()}\u0000${ts}`;
+    if (seenTimestamped.has(key)) return false;
+    seenTimestamped.add(key);
+    return true;
+  });
 }
 
 function monthKey(ts?: number): string | undefined {

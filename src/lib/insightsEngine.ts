@@ -24,7 +24,6 @@ import {
 } from "@/lib/dmAccountIndex";
 import {
   buildDirectDmIndexFromMessages,
-  indexFromDirectDmRecords,
   topDirectDmThreadsFromIndex,
   validateDirectDmParity,
   type DirectDmRecord,

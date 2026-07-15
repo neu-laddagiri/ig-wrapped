@@ -1,4 +1,4 @@
-import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
+import { parseTimestamp } from "@/lib/formatters";
 import type { DmThreadAnalytics } from "@/types/instagram";
 import type { DmAward, DmRelationshipInsight } from "@/types/insights";
 import { normalizeDmThreadList, isDirectDmThread, normalizedThreadToAnalytics } from "@/lib/dmThreads";
