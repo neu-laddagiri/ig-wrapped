@@ -240,10 +240,25 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  html:focus-within {
+    scroll-behavior: auto !important;
+  }
+
   .animated-gradient-text,
   .animated-gradient-bg,
   .animated-gradient-border::before,
-  .animated-gradient-bar {
+  .animated-gradient-bar,
+  .tab-selected-gradient {
     animation: none !important;
   }
 
@@ -307,6 +322,33 @@ body {
     "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+:where(
+  a,
+  button,
+  input,
+  select,
+  textarea,
+  summary,
+  [tabindex]:not([tabindex="-1"])
+):focus-visible {
+  outline: 3px solid #f9a8d4;
+  outline-offset: 3px;
+}
+
+@media (forced-colors: active) {
+  :where(
+    a,
+    button,
+    input,
+    select,
+    textarea,
+    summary,
+    [tabindex]:not([tabindex="-1"])
+  ):focus-visible {
+    outline-color: Highlight;
+  }
 }
 
 ::selection {

@@ -65,6 +65,7 @@ import { AnalysisChatPanel } from "@/components/AnalysisChatPanel";
 import { CompareTab } from "@/components/CompareTab";
 import { ActionPlanTab } from "@/components/ActionPlanTab";
 import { TabErrorBoundary } from "@/components/TabErrorBoundary";
+import { PresentationPrivacyGuard } from "@/components/PresentationPrivacyGuard";
 import { generateDemoData, DEMO_FILE_FINGERPRINT } from "@/lib/demoData";
 import { repairMojibakeDeep } from "@/lib/instagramText";
 import { usePresentationMode } from "@/contexts/PresentationContext";
@@ -78,6 +79,18 @@ import type { SavedAnalysisRow } from "@/types/analysis";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
 import type { LinkedInHelperEntry, ParsedExportData } from "@/types/instagram";
+
+/**
+ * Tabs that are mostly raw data or lists of people with private notes stay
+ * fully hidden while presenting; every other tab masks identities in place.
+ */
+const PRESENTATION_GUARDED_TABS = new Set<DashboardTabId>([
+  "linkedin",
+  "explorer",
+  "export",
+  "saved",
+  "compare",
+]);
 
 function restoreParsedFromSnapshot(
   parsed: SavedAnalysisRow["full_analysis_json"]["parsed"]
@@ -114,6 +127,7 @@ export default function Home() {
   const [isLoadedFromCloud, setIsLoadedFromCloud] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingText, setLoadingText] = useState("");
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(false);
   const accountDetail = useAccountDetail();
@@ -228,8 +242,12 @@ export default function Home() {
   const { presentationMode } = usePresentationMode();
   const { user } = useAuth();
   const closeAccountDetail = accountDetail.closeAccount;
-  /** Bumped by every load/clear so a slower, older upload can't overwrite it. */
-  const loadRequestRef = useRef(0);
+  /** The in-flight parse; any new load, clear or Cancel aborts it so it can't overwrite newer state. */
+  const parseAbortRef = useRef<AbortController | null>(null);
+  const abortActiveParse = useCallback(() => {
+    parseAbortRef.current?.abort();
+    parseAbortRef.current = null;
+  }, []);
 
   // Saved-analysis ids belong to the account that was signed in; a cloud
   // snapshot shouldn't stay on screen after that account signs out.
@@ -360,17 +378,28 @@ export default function Home() {
   }, [parsedData, fileName, scrollToDashboard]);
 
   const handleFileSelect = useCallback(async (file: File) => {
-    const request = ++loadRequestRef.current;
+    parseAbortRef.current?.abort();
+    const controller = new AbortController();
+    parseAbortRef.current = controller;
     setError(null);
     setIsLoading(true);
+    setLoadingProgress(0);
     setLoadingText("Reading ZIP file…");
 
     try {
-      const fingerprint = await computeFileFingerprint(file);
-      const data = await parseInstagramZip(file, (progress) => {
-        if (loadRequestRef.current === request) setLoadingText(progress.stage);
-      });
-      if (loadRequestRef.current !== request) return;
+      const [fingerprint, data] = await Promise.all([
+        computeFileFingerprint(file),
+        parseInstagramZip(
+          file,
+          (progress) => {
+            if (parseAbortRef.current !== controller) return;
+            setLoadingText(progress.stage);
+            setLoadingProgress(progress.percent);
+          },
+          controller.signal
+        ),
+      ]);
+      if (parseAbortRef.current !== controller) return;
 
       // Name, fingerprint and data change together, only once parsing succeeded.
       closeAccountDetail();
@@ -393,22 +422,37 @@ export default function Home() {
       pendingScrollRef.current = true;
       setDashboardBanner({ visible: true, mode: "upload" });
     } catch (err) {
-      if (loadRequestRef.current !== request) return;
+      if (parseAbortRef.current !== controller) return;
       // Keep whatever was already loaded; just explain what went wrong.
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Something went wrong while parsing your export."
-      );
+      if (controller.signal.aborted) {
+        setError(null);
+      } else {
+        controller.abort();
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Something went wrong while parsing your export."
+        );
+      }
     } finally {
-      if (loadRequestRef.current === request) setIsLoading(false);
+      if (parseAbortRef.current === controller) {
+        parseAbortRef.current = null;
+        setIsLoading(false);
+        setLoadingProgress(0);
+      }
     }
   }, [closeAccountDetail]);
 
+  const handleCancelParsing = useCallback(() => {
+    parseAbortRef.current?.abort();
+    setLoadingText("Canceling…");
+  }, []);
+
   const handleTryDemo = useCallback(() => {
-    loadRequestRef.current += 1;
+    abortActiveParse();
     closeAccountDetail();
     setIsLoading(false);
+    setLoadingProgress(0);
     setError(null);
     setOpenedFromCloud(false);
     setParsedData(generateDemoData());
@@ -428,14 +472,14 @@ export default function Home() {
     setDataCoverageExpanded(false);
     pendingScrollRef.current = true;
     setDashboardBanner({ visible: true, mode: "upload" });
-  }, [closeAccountDetail]);
+  }, [abortActiveParse, closeAccountDetail]);
 
   const handleLoadSavedAnalysis = useCallback((row: SavedAnalysisRow) => {
     if (!row.full_analysis_json?.parsed) {
       setError("This saved analysis is incomplete and can't be opened.");
       return;
     }
-    loadRequestRef.current += 1;
+    abortActiveParse();
     closeAccountDetail();
     setIsLoading(false);
     setIsDemoMode(false);
@@ -471,7 +515,7 @@ export default function Home() {
     if (fp && linkedinProgressFromCloud.length) {
       saveLinkedInProgress(fp, linkedinProgressFromCloud);
     }
-  }, [closeAccountDetail]);
+  }, [abortActiveParse, closeAccountDetail]);
 
   // Deleting the snapshot this session saved to means the next save is a new row.
   const handleSavedAnalysisDeleted = useCallback((id: string) => {
@@ -486,7 +530,7 @@ export default function Home() {
     ) {
       return;
     }
-    loadRequestRef.current += 1;
+    abortActiveParse();
     closeAccountDetail();
     setIsLoading(false);
     setOpenedFromCloud(false);
@@ -507,7 +551,7 @@ export default function Home() {
     setExportGuideExpanded(true);
     setDataCoverageExpanded(false);
     setDashboardBanner({ visible: false, mode: "upload" });
-  }, [closeAccountDetail]);
+  }, [abortActiveParse, closeAccountDetail]);
 
   return (
     <>
@@ -521,31 +565,38 @@ export default function Home() {
 
         <div className="relative z-10 mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8 lg:py-16">
           <div className="mb-8 flex items-start justify-end gap-3">
-            <PresentationToggle />
-            <AccountMenu
-              onSignIn={() => setAuthOpen(true)}
-              onNavigateToSavedAnalyses={navigateToSavedAnalyses}
-            />
+            {parsedData && <PresentationToggle />}
+            {!presentationMode && (
+              <AccountMenu
+                onSignIn={() => setAuthOpen(true)}
+                onNavigateToSavedAnalyses={navigateToSavedAnalyses}
+              />
+            )}
           </div>
 
           <Hero />
 
-          <BetaBuildBanner />
-
-          <div className="mt-10 space-y-6">
-            <AccountStatusCard />
-
-            <UploadCard
-              onFileSelect={handleFileSelect}
-              onTryDemo={handleTryDemo}
-              isLoading={isLoading}
-              loadingText={loadingText}
-              error={error}
-              fileName={fileName}
-              compact={Boolean(parsedData && !isLoading)}
-            />
+          <div className="mt-8 space-y-6">
+            {!presentationMode && (
+              <UploadCard
+                onFileSelect={handleFileSelect}
+                onTryDemo={handleTryDemo}
+                isLoading={isLoading}
+                loadingText={loadingText}
+                loadingProgress={loadingProgress}
+                onCancel={handleCancelParsing}
+                error={error}
+                fileName={fileName}
+                compact={Boolean(parsedData && !isLoading)}
+              />
+            )}
 
             {!parsedData && <PrivacyBadges />}
+          </div>
+
+          <div className="mt-8 space-y-4">
+            <BetaBuildBanner />
+            <AccountStatusCard />
           </div>
 
           <div className="mt-10">
@@ -570,7 +621,7 @@ export default function Home() {
                 )}
                 <PresentationModeBanner />
 
-                {isLoadedFromCloud && !isDemoMode && (
+                {isLoadedFromCloud && !isDemoMode && !presentationMode && (
                   <div className="flex items-center gap-3 rounded-2xl border border-[#515BD4]/25 bg-[#515BD4]/10 px-4 py-3">
                     <Cloud className="h-5 w-5 text-[#818cf8]" />
                     <p className="text-sm text-white/70">
@@ -585,30 +636,32 @@ export default function Home() {
                   </div>
                 )}
 
-                <div ref={savePanelRef}>
-                <SaveFullAnalysisPanel
-                  parsedData={parsedData}
-                  fileName={fileName ?? "export.zip"}
-                  fileFingerprint={fileFingerprint}
-                  linkedinProgress={linkedinProgress}
-                  activeTab={activeTab}
-                  dmShowThreadNames={dmShowThreadNames}
-                  dmShowFirstMessagePreview={dmShowFirstMessagePreview}
-                  expandedGroupThreads={expandedGroupThreads}
-                  dmAiSummaries={dmAiSummaries}
-                  overviewAiSummary={overviewAiSummary}
-                  currentSavedId={currentSavedId}
-                  isDemoMode={isDemoMode}
-                  onSignIn={() => setAuthOpen(true)}
-                  onSaved={(id) => {
-                    setCurrentSavedId(id);
-                    setIsLoadedFromCloud(true);
-                  }}
-                  onDeleted={() => setCurrentSavedId(null)}
-                  onLoadSaved={navigateToSavedAnalyses}
-                  onClearLocal={handleClearLocalSession}
-                />
-                </div>
+                {!presentationMode && (
+                  <div ref={savePanelRef}>
+                  <SaveFullAnalysisPanel
+                    parsedData={parsedData}
+                    fileName={fileName ?? "export.zip"}
+                    fileFingerprint={fileFingerprint}
+                    linkedinProgress={linkedinProgress}
+                    activeTab={activeTab}
+                    dmShowThreadNames={dmShowThreadNames}
+                    dmShowFirstMessagePreview={dmShowFirstMessagePreview}
+                    expandedGroupThreads={expandedGroupThreads}
+                    dmAiSummaries={dmAiSummaries}
+                    overviewAiSummary={overviewAiSummary}
+                    currentSavedId={currentSavedId}
+                    isDemoMode={isDemoMode}
+                    onSignIn={() => setAuthOpen(true)}
+                    onSaved={(id) => {
+                      setCurrentSavedId(id);
+                      setIsLoadedFromCloud(true);
+                    }}
+                    onDeleted={() => setCurrentSavedId(null)}
+                    onLoadSaved={navigateToSavedAnalyses}
+                    onClearLocal={handleClearLocalSession}
+                  />
+                  </div>
+                )}
 
                 <DataCoverage
                   items={parsedData.coverage}
@@ -641,6 +694,12 @@ export default function Home() {
                   >
                     {(() => {
                       if (!parsedData || !insights) return null;
+                      if (
+                        presentationMode &&
+                        PRESENTATION_GUARDED_TABS.has(activeTab)
+                      ) {
+                        return <PresentationPrivacyGuard />;
+                      }
                       const showAccountNames = !presentationMode;
                       const effectiveShowThreadNames =
                         dmShowThreadNames && !presentationMode;
@@ -654,21 +713,27 @@ export default function Home() {
                       <OverviewTab
                         data={parsedData}
                         insights={insights}
-                        fileName={fileName}
+                        fileName={presentationMode ? null : fileName}
                         linkedinProgress={linkedinProgress}
                         overviewAiSummary={overviewAiSummary}
                         onOverviewAiSummaryChange={setOverviewAiSummary}
-                        currentSavedId={currentSavedId}
+                        currentSavedId={presentationMode ? null : currentSavedId}
                         onOpenStory={() => setStoryOpen(true)}
-                        onOpenChat={() => setChatOpen(true)}
+                        onOpenChat={
+                          presentationMode ? undefined : () => setChatOpen(true)
+                        }
                         hideShareNames={presentationMode}
                         onNavigateTab={handleTabChange}
-                        onScrollToSave={() => {
-                          savePanelRef.current?.scrollIntoView({
-                            behavior: "smooth",
-                            block: "center",
-                          });
-                        }}
+                        onScrollToSave={
+                          presentationMode
+                            ? undefined
+                            : () => {
+                                savePanelRef.current?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "center",
+                                });
+                              }
+                        }
                       />
                     )}
                     {activeTab === "actionplan" && (
@@ -885,7 +950,7 @@ export default function Home() {
         onSuccess={() => setAuthOpen(false)}
       />
 
-      {parsedData && (
+      {parsedData && !presentationMode && (
         <AnalysisChatPanel
           open={chatOpen}
           onClose={() => setChatOpen(false)}

@@ -3,12 +3,17 @@
 import { useCallback, useId, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { Upload, FileArchive, Loader2, AlertCircle, Info } from "lucide-react";
+import { MAX_ZIP_BYTES } from "@/lib/zipParser";
 
 interface UploadCardProps {
   onFileSelect: (file: File) => void;
   onTryDemo?: () => void;
   isLoading?: boolean;
   loadingText?: string;
+  /** 0–100 while parsing. */
+  loadingProgress?: number;
+  /** Stops the in-flight parse. */
+  onCancel?: () => void;
   error?: string | null;
   fileName?: string | null;
   /** Compact layout after a successful upload */
@@ -20,10 +25,13 @@ export function UploadCard({
   onTryDemo,
   isLoading,
   loadingText,
+  loadingProgress,
+  onCancel,
   error,
   fileName,
   compact = false,
 }: UploadCardProps) {
+  const progress = Math.max(0, Math.min(100, loadingProgress ?? 0));
   const inputRef = useRef<HTMLInputElement>(null);
   const dragDepth = useRef(0);
   const [isDragging, setIsDragging] = useState(false);
@@ -46,6 +54,16 @@ export function UploadCard({
           list.length > 1
             ? "None of those files is a .zip. Upload the ZIP export Instagram sent you."
             : `“${list[0].name}” isn't a .zip file. Upload the ZIP export Instagram sent you.`
+        );
+        return;
+      }
+      // Fail fast here instead of after reading a huge file into memory.
+      if (zip.size === 0 || zip.size > MAX_ZIP_BYTES) {
+        setNotice(null);
+        setLocalError(
+          zip.size === 0
+            ? "This ZIP is empty. Choose your Instagram export."
+            : "This ZIP is over 512 MB. Export Instagram data as JSON without media and try again."
         );
         return;
       }
@@ -189,9 +207,27 @@ export function UploadCard({
         }`}
       >
         {isLoading ? (
-          <div className="flex flex-col items-center gap-4 text-center">
+          <div className="flex w-full max-w-sm flex-col items-center gap-4 text-center">
             <Loader2 className="h-10 w-10 animate-spin text-[#DD2A7B]" />
             <p className="text-sm text-white/70">{loadingText ?? "Parsing…"}</p>
+            <div className="w-full">
+              <div
+                className="h-2 overflow-hidden rounded-full bg-white/10"
+                role="progressbar"
+                aria-label="Export parsing progress"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={progress}
+              >
+                <div
+                  className="h-full rounded-full animated-gradient-bg transition-[width]"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="mt-2 text-xs tabular-nums text-white/50">
+                {progress}% complete
+              </p>
+            </div>
           </div>
         ) : (
           <>
@@ -219,6 +255,18 @@ export function UploadCard({
           </>
         )}
       </div>
+
+      {isLoading && onCancel && (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="min-h-11 rounded-full border border-white/15 px-5 py-2 text-sm font-medium text-white/70 hover:bg-white/5"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
 
       {!showLoaded && !isLoading && onTryDemo && (
         <div className="mt-3 flex justify-center">

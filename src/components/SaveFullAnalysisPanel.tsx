@@ -64,6 +64,7 @@ export function SaveFullAnalysisPanel({
   const { user, isConfigured } = useAuth();
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [includeAiMessageSamples, setIncludeAiMessageSamples] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
     text: string;
@@ -108,6 +109,13 @@ export function SaveFullAnalysisPanel({
       if (!ok) return;
     }
 
+    if (includeAiMessageSamples) {
+      const ok = confirm(
+        "You opted in to saving limited, masked DM excerpts so new AI summaries can be generated after loading this cloud save. Message text is private and will leave this device. Continue?"
+      );
+      if (!ok) return;
+    }
+
     setSaving(true);
     setMessage(null);
 
@@ -120,6 +128,7 @@ export function SaveFullAnalysisPanel({
         activeTab,
         dmShowThreadNames,
         dmShowFirstMessagePreview,
+        includeAiMessageSamples,
         expandedGroupThreads,
         dmAiSummaries,
         overviewAiSummary,
@@ -188,10 +197,36 @@ export function SaveFullAnalysisPanel({
           <p className="mt-2 text-xs text-white/35">
             {isDemoMode
               ? "Demo mode uses synthetic data. Cloud save is optional — use “Save full analysis” only if you want a demo snapshot on your account."
-              : `Saves your parsed dashboard: follower/following lists, DM thread names and participants with message counts, up to ${MAX_AI_SAMPLE_MESSAGES} sampled messages per thread (emails and phone numbers masked; short threads may be saved in full) so AI summaries work later, your top search terms, ad interests and advertisers, security event types and dates, LinkedIn Helper notes, and any AI summaries. Not saved: your ZIP, media files, full message histories, or login IP addresses, locations and devices.`}
+              : `Saves your parsed dashboard: follower/following lists, activity counts and insights, DM thread stats (names only while “Show thread names” is on), ad interests and advertisers, security event types and dates, LinkedIn Helper notes, and any AI summaries. Not saved: your ZIP, media files, raw search terms, archive paths, login IP addresses or devices, or DM message text — unless you opt in below to up to ${MAX_AI_SAMPLE_MESSAGES} masked messages per thread for later AI summaries.`}
           </p>
         </div>
       </div>
+
+      {!isDemoMode && (
+        <label
+          htmlFor="include-ai-message-samples"
+          className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/15 p-3 text-sm text-white/65"
+        >
+          <input
+            id="include-ai-message-samples"
+            type="checkbox"
+            checked={includeAiMessageSamples}
+            onChange={(event) =>
+              setIncludeAiMessageSamples(event.target.checked)
+            }
+            className="mt-0.5 h-4 w-4 accent-[#DD2A7B]"
+          />
+          <span>
+            <span className="block font-medium text-white/85">
+              Save limited DM excerpts for future AI summaries
+            </span>
+            <span className="mt-0.5 block text-xs text-white/50">
+              Off by default. When enabled, masked excerpts and optional sender
+              names are stored with your cloud snapshot.
+            </span>
+          </span>
+        </label>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
         {!user ? (

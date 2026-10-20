@@ -217,7 +217,7 @@ export function DmAiSummarySection({
   const { presentationMode } = usePresentationMode();
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [tone, setTone] = useState<DmAiSummaryTone>(saved?.tone ?? "wrapped");
-  const [useRealNames, setUseRealNames] = useState(showThreadNames);
+  const [allowRealNames, setAllowRealNames] = useState(true);
   const [showConfirm, setShowConfirm] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -228,13 +228,7 @@ export function DmAiSummarySection({
 
   const hasSample = threadHasAiSample(thread);
   const missingCloudSample = isLoadedFromCloud && !hasSample;
-
-  // Follow the thread-name toggle whenever it changes.
-  const [lastShowThreadNames, setLastShowThreadNames] = useState(showThreadNames);
-  if (showThreadNames !== lastShowThreadNames) {
-    setLastShowThreadNames(showThreadNames);
-    setUseRealNames(showThreadNames);
-  }
+  const useRealNames = showThreadNames && allowRealNames;
 
   useEffect(() => {
     let cancelled = false;
@@ -251,7 +245,7 @@ export function DmAiSummarySection({
     };
   }, []);
 
-  const sendRealNames = showThreadNames && useRealNames && !presentationMode;
+  const sendRealNames = useRealNames && !presentationMode;
 
   const buildPayload = useCallback(() => {
     const realNames = sendRealNames;
@@ -486,7 +480,7 @@ export function DmAiSummarySection({
                       <input
                         type="checkbox"
                         checked={useRealNames}
-                        onChange={(e) => setUseRealNames(e.target.checked)}
+                        onChange={(e) => setAllowRealNames(e.target.checked)}
                         className="accent-[#DD2A7B]"
                       />
                       Use real names in AI summary

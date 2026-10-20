@@ -51,10 +51,27 @@ function accountFromHandle(
   return {
     username,
     displayUsername: raw,
-    href: nonEmptyString(source.href) ?? instagramProfileUrl(username),
+    // Never trust the export's href (a crafted ZIP could carry javascript:);
+    // the profile URL is fully determined by the handle.
+    href: instagramProfileUrl(username),
     timestamp: parseTimestamp(source.timestamp),
     category,
   };
+}
+
+/** One record per username — a duplicate (e.g. across shards) keeps the newest timestamp. */
+function addNewest(
+  accounts: InstagramAccount[],
+  indexByUsername: Map<string, number>,
+  account: InstagramAccount
+): void {
+  const existing = indexByUsername.get(account.username);
+  if (existing === undefined) {
+    indexByUsername.set(account.username, accounts.length);
+    accounts.push(account);
+  } else if ((account.timestamp ?? 0) > (accounts[existing].timestamp ?? 0)) {
+    accounts[existing] = account;
+  }
 }
 
 function accountFromStringListEntry(
@@ -95,14 +112,11 @@ function accountFromItem(
 
 function parseAccountList(data: unknown, category?: string): InstagramAccount[] {
   const accounts: InstagramAccount[] = [];
-  const seen = new Set<string>();
+  const indexByUsername = new Map<string, number>();
 
   const add = (item: unknown) => {
     const account = accountFromItem(item, category);
-    if (account && !seen.has(account.username)) {
-      seen.add(account.username);
-      accounts.push(account);
-    }
+    if (account) addNewest(accounts, indexByUsername, account);
   };
 
   if (Array.isArray(data)) {
@@ -203,7 +217,7 @@ function parseAccountFiles(
   category: string
 ): { accounts: InstagramAccount[]; unreadable: boolean } {
   const accounts: InstagramAccount[] = [];
-  const seen = new Set<string>();
+  const indexByUsername = new Map<string, number>();
   let unreadable = false;
   for (const { content } of parts) {
     const data = safeParseJson(content);
@@ -212,9 +226,7 @@ function parseAccountFiles(
       unreadable = true;
     }
     for (const account of parsed) {
-      if (seen.has(account.username)) continue;
-      seen.add(account.username);
-      accounts.push(account);
+      addNewest(accounts, indexByUsername, account);
     }
   }
   return { accounts, unreadable };

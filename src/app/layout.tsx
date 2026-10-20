@@ -19,6 +19,10 @@ const TITLE = "IG Wrapped — Your Instagram data, decoded";
 const DESCRIPTION =
   "A privacy-first Instagram data export analyzer. Parse locally in your browser — optional account save for cross-device progress.";
 
+// Vercel Analytics is opt-in: set NEXT_PUBLIC_ENABLE_ANALYTICS=true to enable.
+const analyticsEnabled =
+  process.env.NEXT_PUBLIC_ENABLE_ANALYTICS?.trim().toLowerCase() === "true";
+
 export const metadata: Metadata = {
   title: TITLE,
   description: DESCRIPTION,
@@ -45,7 +49,7 @@ export default function RootLayout({
         <AuthProvider>
           <PresentationProvider>{children}</PresentationProvider>
         </AuthProvider>
-        <PrivacyAnalytics />
+        {analyticsEnabled && <PrivacyAnalytics />}
       </body>
     </html>
   );

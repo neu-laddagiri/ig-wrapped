@@ -12,7 +12,7 @@ export function buildShareCards(
   parsed: ParsedExportData,
   personality: PersonalityResult | null,
   contentDiet: ContentDietResult | null,
-  hideNames = false,
+  hideNames = true,
   insights?: Pick<
     InsightsBundle,
     "accounts" | "cleanup" | "realOnes" | "dmAwards" | "adsInsights" | "exportCompleteness"

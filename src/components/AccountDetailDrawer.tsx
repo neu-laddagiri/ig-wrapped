@@ -191,8 +191,12 @@ function DrawerPanel({
 
   useEffect(() => {
     const opener = document.activeElement;
+    // Keep the page behind the drawer from scrolling while it's open.
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
     closeButtonRef.current?.focus();
     return () => {
+      document.body.style.overflow = previousOverflow;
       if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
     };
   }, []);

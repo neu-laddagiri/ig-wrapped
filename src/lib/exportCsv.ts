@@ -8,20 +8,23 @@ import {
 /** Excel reads a BOM-less CSV as the system code page and garbles non-ASCII. */
 const UTF8_BOM = "﻿";
 
-function escapeCsvCell(value: string | undefined | null): string {
-  let cell = value ?? "";
-  // Neutralize formulas: names and notes can come from other people's profiles.
-  if (/^[=+\-@\t\r]/.test(cell)) cell = `'${cell}`;
-  if (/[",\r\n]/.test(cell)) {
-    return `"${cell.replace(/"/g, '""')}"`;
+/**
+ * RFC 4180 quoting, plus formula neutralizing (names and notes can come from
+ * other people's profiles) — including formulas padded with leading spaces.
+ */
+export function escapeCsvCell(value: string | number | undefined | null): string {
+  const raw = value == null ? "" : String(value);
+  const safe = /^[\t\r]|^\s*[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  if (/[",\r\n]/.test(safe)) {
+    return `"${safe.replace(/"/g, '""')}"`;
   }
-  return cell;
+  return safe;
 }
 
 function toCsv(headers: string[], rows: (string | undefined | null)[][]): string {
   return (
     UTF8_BOM +
-    [headers, ...rows].map((row) => row.map(escapeCsvCell).join(",")).join("\r\n")
+    [headers, ...rows].map((row) => row.map((cell) => escapeCsvCell(cell)).join(",")).join("\r\n")
   );
 }
 

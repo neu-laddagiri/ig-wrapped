@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Copy, Download, AlertTriangle, Check } from "lucide-react";
 import type { CleanupAccount } from "@/types/insights";
 import type { NetworkStats } from "@/types/instagram";
+import { escapeCsvCell } from "@/lib/exportCsv";
 import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 import { redactNameLabel } from "@/lib/dmDisplayLabels";
 import { usePresentationMode } from "@/contexts/PresentationContext";
@@ -20,12 +21,6 @@ interface UnfollowImpactPanelProps {
 }
 
 const VISIBLE_LIMIT = 100;
-
-/** Quote a CSV cell and neutralize spreadsheet formulas. */
-function csvCell(value: string): string {
-  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
-  return `"${safe.replace(/"/g, '""')}"`;
-}
 
 export function UnfollowImpactPanel({
   network,
@@ -107,9 +102,10 @@ export function UnfollowImpactPanel({
       "username,displayName,cleanupScore",
       ...candidates
         .filter((c) => selected.has(c.username))
-        .map(
-          (c) =>
-            `${csvCell(c.username)},${csvCell(c.displayName)},${c.cleanupPriorityScore}`
+        .map((c) =>
+          [c.username, c.displayName, c.cleanupPriorityScore]
+            .map((cell) => escapeCsvCell(cell))
+            .join(",")
         ),
     ];
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
