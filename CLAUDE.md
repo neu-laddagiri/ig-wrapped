@@ -12,11 +12,14 @@ snapshot, and AI summaries/chat via server route handlers.
 - `npm run dev` — Turbopack dev server on :3000. If it loops with a Turbopack panic
   `Next.js package not found`, delete `.next/dev/cache/turbopack` and restart
   (`npx next dev --webpack` is a fallback).
-- `npm run lint` (ESLint 9 + React Compiler rules), `npx tsc --noEmit -p .`, `npm run build`.
-- There is no test suite. Verify parser/insights changes by running the real TS
-  modules under Node with the project's `jiti` against synthetic exports, and UI
-  changes in the browser via **Try Demo Data** or a synthetic ZIP. Never put a
+- `npm test` (Vitest, `src/**/*.test.ts`: parsers, upload limits, CSV, cloud-save
+  sanitizer), `npm run lint` (ESLint 9 + React Compiler rules), `npx tsc --noEmit -p .`,
+  `npm run build`. Run all four before pushing.
+- Beyond the tests, verify parser/insights changes against synthetic exports and
+  UI changes in the browser via **Try Demo Data** or a synthetic ZIP. Never put a
   real export in the repo (`*.zip` and `/private-data` are gitignored).
+- `git fetch` first: GitHub `main` has received work from other tools before.
+  Vercel deploys production from every push to `main`.
 
 ## Data flow
 
@@ -69,7 +72,9 @@ snapshot, and AI summaries/chat via server route handlers.
 - **Presentation Mode** (`usePresentationMode()`) must hide every person name,
   handle, profile link, note, DM preview, search term, IP/device/location shown
   anywhere. Mask names with `redactNameLabel(label, !presentationMode)` from
-  `src/lib/dmDisplayLabels.ts`. Share cards and Story Mode hide names by default.
+  `src/lib/dmDisplayLabels.ts`. Raw-data tabs (`PRESENTATION_GUARDED_TABS` in
+  `page.tsx`) are replaced by `PresentationPrivacyGuard` instead. Share cards and
+  Story Mode hide names by default.
 - **Overlays** (`fixed` drawers/modals) render through `createPortal` to
   `document.body`: the tab panel has `backdrop-blur`, which makes it the containing
   block for fixed children.
@@ -86,8 +91,13 @@ snapshot, and AI summaries/chat via server route handlers.
   `AI_MODEL`, `AI_BASE_URL` (server-only; OpenAI-compatible chat completions),
   `NEXT_PUBLIC_LINKEDIN_SCHOOL_CONTEXT`.
 - `src/app/api/{dm-summary,overview-summary,analysis-chat}/route.ts` call the AI
-  provider. Supabase is used from the browser (`src/lib/supabase/client.ts`,
-  `src/lib/cloudSave.ts`); RLS in `supabase/schema.sql` scopes rows to the user.
+  provider through `src/lib/server/aiRequestSecurity.ts` (bounded bodies and
+  responses, same-origin check, per-IP rate limits, redaction, timeouts). They are
+  intentionally open to signed-out users. Supabase is used from the browser
+  (`src/lib/supabase/client.ts`, `src/lib/cloudSave.ts`); RLS in
+  `supabase/schema.sql` scopes rows to the user. DM message samples are saved only
+  when the user opts in at save time.
+- `NEXT_PUBLIC_ENABLE_ANALYTICS=true` turns on Vercel Analytics (off by default).
 - Next 16 conventions: request interception lives in `src/proxy.ts`
   (`middleware` is deprecated); `error.tsx` receives `error` + `reset`/`unstable_retry`.
 
