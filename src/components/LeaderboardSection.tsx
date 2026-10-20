@@ -5,8 +5,9 @@ import { ChevronDown } from "lucide-react";
 import type { AccountLeaderboard, AccountLeaderboardEntry } from "@/types/insights";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
 import { ConfidencePill } from "@/components/ConfidencePill";
-import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
 import { formatNumber } from "@/lib/formatters";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 const PREVIEW_COUNT = 3;
 const EXPANDED_BATCH = 25;
@@ -70,6 +71,8 @@ export function LeaderboardSection({
   board,
   onOpenAccount,
 }: LeaderboardSectionProps) {
+  const { presentationMode } = usePresentationMode();
+  const showNames = !presentationMode;
   const [expanded, setExpanded] = useState(false);
   const [visibleCount, setVisibleCount] = useState(EXPANDED_BATCH);
 
@@ -151,7 +154,7 @@ export function LeaderboardSection({
                     isPodium ? "text-sm font-semibold text-white" : "text-sm text-white/80"
                   }`}
                 >
-                  {formatAccountDisplayName(entry.displayName)}
+                  {redactNameLabel(entry.displayName, showNames)}
                   {hint && (
                     <span className="ml-1.5 text-xs font-normal text-white/40">
                       · {hint}
@@ -186,10 +189,12 @@ export function LeaderboardSection({
                 setExpanded(true);
               }
             }}
+            aria-expanded={expanded}
             className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-white/55 transition hover:bg-white/[0.06] hover:text-white/75"
           >
             <ChevronDown
               className={`h-3.5 w-3.5 transition ${expanded ? "rotate-180" : ""}`}
+              aria-hidden
             />
             {expanded ? "Collapse leaderboard" : "Show full leaderboard"}
           </button>

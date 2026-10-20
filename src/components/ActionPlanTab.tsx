@@ -17,6 +17,8 @@ interface ActionPlanTabProps {
   insights: InsightsBundle | null;
   isDemoMode: boolean;
   onNavigate: (tab: DashboardTabId) => void;
+  /** Scopes dismissals to one export (the file fingerprint). */
+  storageKey?: string;
 }
 
 const PRIORITY_STYLE = {
@@ -30,8 +32,17 @@ export function ActionPlanTab({
   insights,
   isDemoMode,
   onNavigate,
+  storageKey,
 }: ActionPlanTabProps) {
-  const [dismissed, setDismissed] = useState(() => getDismissedActions());
+  const [dismissedState, setDismissedState] = useState(() => ({
+    key: storageKey,
+    ids: getDismissedActions(storageKey),
+  }));
+  // Switching exports while mounted: reload that export's dismissals.
+  if (dismissedState.key !== storageKey) {
+    setDismissedState({ key: storageKey, ids: getDismissedActions(storageKey) });
+  }
+  const dismissed = dismissedState.ids;
   const items = useMemo(
     () =>
       buildActionPlan(parsed, insights, isDemoMode).filter(
@@ -41,8 +52,11 @@ export function ActionPlanTab({
   );
 
   const handleDismiss = (id: string) => {
-    dismissAction(id);
-    setDismissed(getDismissedActions());
+    dismissAction(id, storageKey);
+    setDismissedState((prev) => ({
+      key: prev.key,
+      ids: new Set(prev.ids).add(id),
+    }));
   };
 
   return (

@@ -111,7 +111,7 @@ function applyDmLookupToAccount(
     return account;
   }
 
-  const note = `DM source of truth: ${entry.directDmCount.toLocaleString()} direct messages (${entry.matchMethod.replace(/-/g, " ")})`;
+  const note = `DM source of truth: ${entry.directDmCount.toLocaleString()} direct message${entry.directDmCount === 1 ? "" : "s"} (${entry.matchMethod.replace(/-/g, " ")})`;
 
   return {
     ...account,

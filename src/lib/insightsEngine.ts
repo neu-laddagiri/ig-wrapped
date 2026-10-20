@@ -24,7 +24,6 @@ import {
 } from "@/lib/dmAccountIndex";
 import {
   buildDirectDmIndexFromMessages,
-  indexFromDirectDmRecords,
   topDirectDmThreadsFromIndex,
   validateDirectDmParity,
   type DirectDmRecord,
@@ -50,8 +49,10 @@ import {
   getDisplayLabel,
   getSecondaryLabel,
   isLikelyInstagramUsername,
+  normalizeUsername as identityNormalizeUsername,
   validateIdentityIndex,
 } from "@/lib/accountIdentity";
+import { computeNetworkClusters } from "@/lib/networkClusters";
 import { computeLinkedInInteractionScore } from "@/lib/linkedinInteractionScore";
 
 export const INSIGHTS_BUNDLE_VERSION = 18;
@@ -85,8 +86,14 @@ function computePersonality(
     title = "The Generous Liker";
     reasons.push(`${likes.toLocaleString()} liked posts in your export.`);
   } else if (passive > 0.75) {
-    title = "The Ad-Resistant Scroller";
-    reasons.push("Mostly passive consumption with low click rates.");
+    const rarelyClicksAds =
+      Boolean(ads && ads.adsViewed > 0) && ads!.adsClicked / ads!.adsViewed < 0.1;
+    title = rarelyClicksAds ? "The Ad-Resistant Scroller" : "The Passive Scroller";
+    reasons.push(
+      rarelyClicksAds
+        ? "Mostly passive consumption with low ad click rates."
+        : "Mostly passive consumption — more watching than engaging."
+    );
   } else if (messages && messages.groupChatCount > messages.oneOnOneCount) {
     title = "The Group Chat Chaos Agent";
     reasons.push("Group chats outweigh 1:1 threads.");
@@ -219,6 +226,7 @@ export function computeInsightsBundle(
   const directDmIndex = buildDirectDmIndexFromMessages(parsed.messages, {
     network: parsed.network,
     files,
+    owner: coreAnalytics.ownerIdentity,
   });
   const directDmThreadRecords: DirectDmRecord[] = [
     ...directDmIndex.byThreadId.values(),
@@ -280,6 +288,7 @@ export function computeInsightsBundle(
     dmAwards,
     adsInsights,
     exportCompleteness,
+    eras,
   };
   const shareCards = buildShareCards(
     parsed,
@@ -389,29 +398,92 @@ export function computeInsightsBundle(
       exportCompleteness,
       dataExplorer,
     },
-    parsed
+    parsed,
+    { owner: coreAnalytics.ownerIdentity }
   );
 }
 
+/**
+ * Overlay LinkedIn Helper progress on a bundle without rebuilding the identity graph:
+ * account statuses, the cleanup keep-rule, and the cleanup cluster that depends on it.
+ */
+export function applyLinkedInProgress(
+  bundle: InsightsBundle,
+  entries: LinkedInHelperEntry[]
+): InsightsBundle {
+  const hasStatuses = bundle.accounts.some(
+    (a) => a.linkedInStatus !== undefined || a.linkedInNotes !== undefined
+  );
+  if (!entries.length && !hasStatuses) return bundle;
+
+  const byUsername = new Map<string, LinkedInHelperEntry>();
+  for (const entry of entries) {
+    byUsername.set(entry.username, entry);
+    byUsername.set(identityNormalizeUsername(entry.username), entry);
+  }
+
+  let changed = false;
+  const accounts = bundle.accounts.map((account) => {
+    const entry =
+      byUsername.get(account.username) ??
+      byUsername.get(identityNormalizeUsername(account.username));
+    const status = entry?.status;
+    const notes = entry?.notes;
+    if (account.linkedInStatus === status && account.linkedInNotes === notes) {
+      return account;
+    }
+    changed = true;
+    return { ...account, linkedInStatus: status, linkedInNotes: notes };
+  });
+  if (!changed) return bundle;
+
+  const cleanup = computeCleanupScores(accounts);
+  return {
+    ...bundle,
+    accounts,
+    cleanup,
+    networkClusters: bundle.networkClusters
+      ? computeNetworkClusters(accounts, cleanup, bundle.realOnes)
+      : bundle.networkClusters,
+  };
+}
+
+const resolvedBaseBundles = new WeakMap<ParsedExportData, InsightsBundle>();
+
+/**
+ * Bundle for a parsed export, independent of LinkedIn progress (apply that with
+ * `applyLinkedInProgress`). Cached per `parsed` object so repeated calls from
+ * several components don't redo the work — a stale saved bundle costs a full
+ * recompute.
+ */
 export function resolveInsightsBundle(
   parsed: ParsedExportData,
   linkedinProgress: LinkedInHelperEntry[] = []
 ): InsightsBundle {
-  const existing = parsed.insights;
-  if (
-    existing &&
-    (existing.version ?? 0) >= INSIGHTS_BUNDLE_VERSION
-  ) {
-    return enrichInsightsBundle(
-      {
-        ...existing,
-        silentMutuals: existing.silentMutuals ?? [],
-      },
-      parsed
-    );
+  let base = resolvedBaseBundles.get(parsed);
+  if (!base) {
+    const existing = parsed.insights;
+    base =
+      existing && (existing.version ?? 0) >= INSIGHTS_BUNDLE_VERSION
+        ? enrichInsightsBundle(
+            {
+              ...existing,
+              silentMutuals: existing.silentMutuals ?? [],
+            },
+            parsed
+          )
+        : computeInsightsBundle(parsed, undefined, []);
+    resolvedBaseBundles.set(parsed, base);
   }
-  return enrichInsightsBundle(
-    computeInsightsBundle(parsed, undefined, linkedinProgress),
-    parsed
-  );
+  if (!linkedinProgress.length) return base;
+  const cached = linkedInOverlays.get(base);
+  if (cached?.entries === linkedinProgress) return cached.result;
+  const result = applyLinkedInProgress(base, linkedinProgress);
+  linkedInOverlays.set(base, { entries: linkedinProgress, result });
+  return result;
 }
+
+const linkedInOverlays = new WeakMap<
+  InsightsBundle,
+  { entries: LinkedInHelperEntry[]; result: InsightsBundle }
+>();

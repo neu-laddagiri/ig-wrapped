@@ -4,6 +4,8 @@ import type {
   ParsedExportData,
   DmAnalytics,
   DmThreadAnalytics,
+  SecurityData,
+  SecurityEvent,
 } from "@/types/instagram";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
@@ -25,7 +27,15 @@ export interface AnalysisSnapshot {
   dmAiSummaries?: DmAiSummariesMap;
   overviewAiSummary?: OverviewAiSummaryResult | null;
   parsedAt: string;
+  /** Small summary read by list views without downloading `parsed`. */
+  counts?: SnapshotCounts;
   parsed: ParsedExportDataForSave;
+}
+
+export interface SnapshotCounts {
+  followers: number | null;
+  following: number | null;
+  mutuals: number | null;
 }
 
 /** Parsed data stored in cloud — omits large file path lists */
@@ -80,21 +90,26 @@ export interface CreateSnapshotInput {
   analysisMode?: string;
 }
 
+/** Drops local-only message text (and the AI sample) from a thread. */
+function stripThreadForCloudSave(
+  thread: DmThreadAnalytics,
+  includePreviews: boolean
+): DmThreadAnalytics {
+  const result: DmThreadAnalytics = { ...thread };
+  delete result.textMessages;
+  delete result.aiSummarySample;
+  if (!includePreviews) delete result.firstMessagePreview;
+  return result;
+}
+
 function enrichThreadForCloudSave(
   thread: DmThreadAnalytics,
   includePreviews: boolean,
   showThreadNames: boolean
 ): DmThreadAnalytics {
-  const {
-    textMessages,
-    firstMessagePreview,
-    aiSummarySample: existingSample,
-    ...rest
-  } = thread;
-
-  let aiSummarySample = existingSample;
-  if (textMessages?.length) {
-    const built = buildAiSummarySampleForCloud(textMessages, {
+  let aiSummarySample = thread.aiSummarySample;
+  if (thread.textMessages?.length) {
+    const built = buildAiSummarySampleForCloud(thread.textMessages, {
       mostActiveMonth: thread.mostActiveMonth,
       isGroup: thread.isGroupChat,
       showThreadNames,
@@ -102,16 +117,37 @@ function enrichThreadForCloudSave(
     if (built) aiSummarySample = built;
   }
 
-  const result: DmThreadAnalytics = {
-    ...rest,
+  return {
+    ...stripThreadForCloudSave(thread, includePreviews),
     aiSummarySample,
   };
+}
 
-  if (includePreviews && firstMessagePreview) {
-    result.firstMessagePreview = firstMessagePreview;
-  }
-
+/** Login IPs, locations and device strings never leave the browser. */
+function stripSecurityEvent(event: SecurityEvent): SecurityEvent {
+  const result: SecurityEvent = { ...event };
+  delete result.ipAddress;
+  delete result.location;
+  delete result.device;
   return result;
+}
+
+function sanitizeSecurity(security: SecurityData | null): SecurityData | null {
+  if (!security) return null;
+  const analysis = security.suspiciousLoginAnalysis;
+  return {
+    ...security,
+    events: security.events?.map(stripSecurityEvent),
+    suspiciousLoginAnalysis: analysis
+      ? {
+          ...analysis,
+          flaggedEvents: (analysis.flaggedEvents ?? []).map((flagged) => ({
+            ...flagged,
+            event: stripSecurityEvent(flagged.event),
+          })),
+        }
+      : analysis,
+  };
 }
 
 function sanitizeMessages(
@@ -123,13 +159,14 @@ function sanitizeMessages(
   const sanitize = (t: DmThreadAnalytics) =>
     enrichThreadForCloudSave(t, includePreviews, showThreadNames);
   const threads = normalizeDmThreads(messages).map(sanitize);
+  // Top threads also appear in `threads`, which already carries their AI samples.
   const topThreads = (
     Array.isArray(messages.topThreads) ? messages.topThreads : threads
   )
     .slice()
     .sort((a, b) => b.messageCount - a.messageCount)
     .slice(0, 25)
-    .map(sanitize);
+    .map((t) => stripThreadForCloudSave(t, includePreviews));
   return {
     ...messages,
     threads,
@@ -142,9 +179,10 @@ export function sanitizeParsedForCloudSave(
   includeMessagePreviews: boolean,
   showThreadNames: boolean
 ): ParsedExportDataForSave {
-  const { filePaths: _removed, messages, ...rest } = parsed;
+  const { filePaths: _removed, messages, security, ...rest } = parsed;
   return {
     ...rest,
+    security: sanitizeSecurity(security),
     messages: sanitizeMessages(messages, includeMessagePreviews, showThreadNames),
   };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import {
   MessageCircle,
   Inbox,
@@ -54,7 +54,8 @@ interface DmsTabProps {
   showFirstMessagePreview?: boolean;
   onShowFirstMessagePreviewChange?: (value: boolean) => void;
   dmAiSummaries?: DmAiSummariesMap;
-  onDmAiSummariesChange?: (summaries: DmAiSummariesMap) => void;
+  /** Accepts a value or an updater (pass the state setter). */
+  onDmAiSummariesChange?: Dispatch<SetStateAction<DmAiSummariesMap>>;
   isLoadedFromCloud?: boolean;
   dmHeatmap?: DmHeatmapResult | null;
   replyPatterns?: ReplyPatternResult | null;
@@ -68,6 +69,16 @@ import {
   buildSenderLabelMap,
   displaySenderLabel,
 } from "@/lib/dmMessageSampling";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
+import { usePresentationMode } from "@/contexts/PresentationContext";
+
+function formatDuration(ms: number): string {
+  const minutes = Math.max(1, Math.round(ms / 60000));
+  if (minutes < 60) return `~${minutes} min`;
+  const hours = Math.round(minutes / 60);
+  if (hours < 48) return `~${hours}h`;
+  return `~${Math.round(hours / 24)}d`;
+}
 
 function formatDate(ts?: number): string {
   if (!ts) return "Not available";
@@ -119,6 +130,7 @@ function ThreadExpandedPanel({
   onAiSummaryChange,
   isLoadedFromCloud,
   relationship,
+  presenting,
 }: {
   thread: NormalizedDmThread;
   showThreadNames: boolean;
@@ -129,6 +141,7 @@ function ThreadExpandedPanel({
   onAiSummaryChange: (threadId: string, summary: DmAiSummarySaved | null) => void;
   isLoadedFromCloud?: boolean;
   relationship?: DmRelationshipInsight;
+  presenting: boolean;
 }) {
   const senderLabelMap = buildSenderLabelMap(
     thread.messagesBySender,
@@ -142,7 +155,12 @@ function ThreadExpandedPanel({
     ? computeConversationChemistry(thread, relationship)
     : null;
 
-  const legacyPanel = (
+  // Saved summaries can quote real names, so they stay hidden while presenting.
+  const legacyPanel = presenting ? (
+    <p className="mt-3 text-xs text-white/40">
+      AI summaries are hidden while presenting.
+    </p>
+  ) : (
     <DmAiSummarySection
       thread={thread}
       showThreadNames={showThreadNames}
@@ -368,14 +386,20 @@ function ThreadExpandedPanel({
 
       <section>
         <SectionTitle>AI summary</SectionTitle>
-        <DmAiSummarySection
-          thread={thread}
-          showThreadNames={showThreadNames}
-          saved={aiSummary}
-          onSummaryChange={onAiSummaryChange}
-          embedded
-          isLoadedFromCloud={isLoadedFromCloud}
-        />
+        {presenting ? (
+          <p className="text-xs text-white/40">
+            AI summaries are hidden while presenting.
+          </p>
+        ) : (
+          <DmAiSummarySection
+            thread={thread}
+            showThreadNames={showThreadNames}
+            saved={aiSummary}
+            onSummaryChange={onAiSummaryChange}
+            embedded
+            isLoadedFromCloud={isLoadedFromCloud}
+          />
+        )}
       </section>
     </div>
   );
@@ -406,12 +430,15 @@ export function DmsTab({
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<DmPageSize>(10);
   const [sortBy, setSortBy] = useState<DmSortKey>("messages");
+  const { presentationMode } = usePresentationMode();
 
   const showThreadNames = controlledShow ?? internalShow;
   const setShowThreadNames = onShowThreadNamesChange ?? setInternalShow;
   const showFirstMessagePreview = controlledPreview ?? internalPreview;
   const setShowFirstMessagePreview =
     onShowFirstMessagePreviewChange ?? setInternalPreview;
+  // A typed query can be a name, so it is neither shown nor applied while presenting.
+  const activeSearch = presentationMode ? "" : search;
 
   const baseThreads = useMemo(
     () => normalizeDmThreadList(messages),
@@ -430,8 +457,8 @@ export function DmsTab({
   );
 
   const filtered = useMemo(
-    () => filterDmThreads(displayThreads, search, showThreadNames),
-    [displayThreads, search, showThreadNames]
+    () => filterDmThreads(displayThreads, activeSearch, showThreadNames),
+    [displayThreads, activeSearch, showThreadNames]
   );
 
   const sorted = useMemo(
@@ -439,23 +466,18 @@ export function DmsTab({
     [filtered, sortBy]
   );
 
+  const totalPages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+
   const paged = useMemo(
-    () => paginateDmThreads(sorted, page, pageSize),
-    [sorted, page, pageSize]
+    () => paginateDmThreads(sorted, currentPage, pageSize),
+    [sorted, currentPage, pageSize]
   );
 
-  useEffect(() => {
-    setPage(1);
-  }, [search, sortBy, pageSize, showThreadNames]);
-
-  useEffect(() => {
-    if (
-      expandedThreadId &&
-      !baseThreads.some((t) => t.id === expandedThreadId)
-    ) {
-      setExpandedThreadId(null);
-    }
-  }, [baseThreads, expandedThreadId]);
+  const openThreadId =
+    expandedThreadId && baseThreads.some((t) => t.id === expandedThreadId)
+      ? expandedThreadId
+      : null;
 
   const hasMessageData =
     messages &&
@@ -510,11 +532,17 @@ export function DmsTab({
     summary: DmAiSummarySaved | null
   ) => {
     if (!onDmAiSummariesChange) return;
-    const next = { ...dmAiSummaries };
-    if (summary) next[threadId] = summary;
-    else delete next[threadId];
-    onDmAiSummariesChange(next);
+    // Functional update: two summaries finishing out of order must not drop one.
+    onDmAiSummariesChange((prev) => {
+      const next = { ...prev };
+      if (summary) next[threadId] = summary;
+      else delete next[threadId];
+      return next;
+    });
   };
+
+  const maskResponder = (label: string) =>
+    label === "You" ? label : redactNameLabel(label, showThreadNames);
 
   return (
     <div className="space-y-6">
@@ -639,20 +667,33 @@ export function DmsTab({
             </div>
             <div className="flex flex-wrap gap-2">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" />
+                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-white/30" aria-hidden />
                 <input
                   type="text"
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
+                  aria-label="Search threads"
+                  value={activeSearch}
+                  disabled={presentationMode}
+                  onChange={(e) => {
+                    setSearch(e.target.value);
+                    setPage(1);
+                  }}
                   placeholder={
-                    showThreadNames ? "Search threads…" : "Search by folder…"
+                    presentationMode
+                      ? "Search hidden while presenting"
+                      : showThreadNames
+                        ? "Search threads…"
+                        : "Search by folder…"
                   }
-                  className="rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-xs text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40"
+                  className="rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-xs text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40 disabled:opacity-60"
                 />
               </div>
               <select
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value as DmSortKey)}
+                aria-label="Sort threads"
+                onChange={(e) => {
+                  setSortBy(e.target.value as DmSortKey);
+                  setPage(1);
+                }}
                 className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white outline-none"
               >
                 <option value="messages">Most messages</option>
@@ -664,12 +705,16 @@ export function DmsTab({
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-4 text-sm text-white/60">
+          <div className="flex flex-wrap items-center gap-4 text-sm text-white/60">
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={showThreadNames}
-                onChange={(e) => setShowThreadNames(e.target.checked)}
+                disabled={presentationMode}
+                onChange={(e) => {
+                  setShowThreadNames(e.target.checked);
+                  setPage(1);
+                }}
                 className="accent-[#DD2A7B]"
               />
               Show thread names
@@ -678,11 +723,17 @@ export function DmsTab({
               <input
                 type="checkbox"
                 checked={showFirstMessagePreview}
+                disabled={presentationMode}
                 onChange={(e) => setShowFirstMessagePreview(e.target.checked)}
                 className="accent-amber-500"
               />
               Show first message previews
             </label>
+            {presentationMode && (
+              <span className="text-xs text-white/35">
+                Names and previews stay hidden while presenting.
+              </span>
+            )}
           </div>
         </div>
 
@@ -693,7 +744,7 @@ export function DmsTab({
             </div>
           ) : (
             paged.map((thread) => {
-              const isOpen = expandedThreadId === thread.id;
+              const isOpen = openThreadId === thread.id;
               const accountKey = dmAccountKeyByThreadId?.get(thread.id);
               const canOpenAccount =
                 Boolean(onOpenAccount) &&
@@ -701,64 +752,55 @@ export function DmsTab({
                 isDirectDmThread(thread);
               return (
                 <div key={thread.id}>
-                  <div className="flex w-full items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]">
+                  <div className="px-4 py-3 transition hover:bg-white/[0.03]">
+                    {canOpenAccount && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onOpenAccount?.({
+                            threadId: thread.id,
+                            accountKey: accountKey!,
+                          })
+                        }
+                        className="block max-w-full truncate text-left font-medium text-white hover:text-[#DD2A7B]"
+                      >
+                        {thread.displayTitle}
+                      </button>
+                    )}
                     <button
                       type="button"
                       onClick={() => toggleExpand(thread.id)}
-                      className="min-w-0 flex-1 text-left"
+                      aria-expanded={isOpen}
+                      className="flex w-full items-center gap-3 text-left"
                     >
-                      <p className="truncate font-medium text-white">
-                        {canOpenAccount ? (
-                          <span
-                            role="link"
-                            tabIndex={0}
-                            className="hover:text-[#DD2A7B]"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenAccount?.({
-                                threadId: thread.id,
-                                accountKey: accountKey!,
-                              });
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                onOpenAccount?.({
-                                  threadId: thread.id,
-                                  accountKey: accountKey!,
-                                });
-                              }
-                            }}
-                          >
+                      <span className="block min-w-0 flex-1">
+                        {!canOpenAccount && (
+                          <span className="block truncate font-medium text-white">
                             {thread.displayTitle}
                           </span>
-                        ) : (
-                          thread.displayTitle
                         )}
-                      </p>
-                      <p className="mt-0.5 truncate text-xs text-white/40">
-                        {formatNumber(thread.totalMessages)} messages ·{" "}
-                        {thread.folder.replace("_", " ")} ·{" "}
-                        {thread.lastMessageAt
-                          ? `Last active ${formatDate(thread.lastMessageAt)}`
-                          : "Last active not available"}
-                      </p>
-                      <p className="mt-1 truncate text-xs italic text-white/35">
-                        {thread.funSummary}
-                      </p>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => toggleExpand(thread.id)}
-                      className="shrink-0 text-white/40"
-                      aria-label={isOpen ? "Collapse thread" : "Expand thread"}
-                    >
-                      {isOpen ? (
-                        <ChevronUp className="h-4 w-4" />
-                      ) : (
-                        <ChevronDown className="h-4 w-4" />
-                      )}
+                        <span className="mt-0.5 block truncate text-xs text-white/40">
+                          {formatNumber(thread.totalMessages)}{" "}
+                          {thread.totalMessages === 1 ? "message" : "messages"} ·{" "}
+                          {thread.folder.replace("_", " ")} ·{" "}
+                          {thread.lastMessageAt
+                            ? `Last active ${formatDate(thread.lastMessageAt)}`
+                            : "Last active not available"}
+                        </span>
+                        <span className="mt-1 block truncate text-xs italic text-white/35">
+                          {thread.funSummary}
+                        </span>
+                      </span>
+                      <span className="shrink-0 text-white/40">
+                        {isOpen ? (
+                          <ChevronUp className="h-4 w-4" aria-hidden />
+                        ) : (
+                          <ChevronDown className="h-4 w-4" aria-hidden />
+                        )}
+                        <span className="sr-only">
+                          {isOpen ? "Collapse thread" : "Expand thread"}
+                        </span>
+                      </span>
                     </button>
                   </div>
                   {isOpen && (
@@ -774,6 +816,7 @@ export function DmsTab({
                       relationship={dmRelationshipInsights.find(
                         (r) => r.threadId === thread.id
                       )}
+                      presenting={presentationMode}
                     />
                   )}
                 </div>
@@ -785,7 +828,7 @@ export function DmsTab({
         {sorted.length > 0 && (
           <DmThreadPagination
             total={sorted.length}
-            page={page}
+            page={currentPage}
             pageSize={pageSize}
             onPageChange={setPage}
             onPageSizeChange={(s) => {
@@ -809,19 +852,19 @@ export function DmsTab({
             {replyPatterns.fastestResponder && (
               <MiniStat
                 label="Fastest responder"
-                value={`${replyPatterns.fastestResponder.label} (~${Math.round(replyPatterns.fastestResponder.avgMs / 60000)}m)`}
+                value={`${maskResponder(replyPatterns.fastestResponder.label)} (${formatDuration(replyPatterns.fastestResponder.avgMs)})`}
               />
             )}
             {replyPatterns.slowestResponder && (
               <MiniStat
                 label="Slowest responder"
-                value={`${replyPatterns.slowestResponder.label} (~${Math.round(replyPatterns.slowestResponder.avgMs / 60000)}m)`}
+                value={`${maskResponder(replyPatterns.slowestResponder.label)} (${formatDuration(replyPatterns.slowestResponder.avgMs)})`}
               />
             )}
             {replyPatterns.longestGhostGap && (
               <MiniStat
                 label="Longest ghost gap"
-                value={`${replyPatterns.longestGhostGap.label} (${replyPatterns.longestGhostGap.days}d)`}
+                value={`${maskResponder(replyPatterns.longestGhostGap.label)} (${replyPatterns.longestGhostGap.days}d)`}
               />
             )}
           </div>

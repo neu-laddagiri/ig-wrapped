@@ -1,6 +1,23 @@
 import type { InsightsBundle, HallOfFameAward } from "@/types/insights";
 import type { ParsedExportData } from "@/types/instagram";
-import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import {
+  formatAccountDisplayName,
+  UNKNOWN_ACCOUNT_LABEL,
+} from "@/lib/accountNameFilter";
+import { dmThreadSizes, isDmAwardMeaningful } from "@/lib/funStats";
+
+const SHAME_DM_AWARDS = new Set(["slowest-responder", "one-sided"]);
+
+/** Deleted/unknown accounts always look like ghosts, so they can't win ghost awards. */
+export function isGhostAwardCandidate(account: {
+  username: string;
+  displayName: string;
+  isUnknownAccount?: boolean;
+}): boolean {
+  if (account.isUnknownAccount) return false;
+  if (account.username.toLowerCase().startsWith("unknown:")) return false;
+  return formatAccountDisplayName(account.displayName) !== UNKNOWN_ACCOUNT_LABEL;
+}
 
 export function computeHallOfFame(
   parsed: ParsedExportData,
@@ -31,7 +48,7 @@ export function computeHallOfFame(
   }
 
   const ghostCandidate = [...bundle.accounts]
-    .filter((a) => a.dmMessageCount > 30 && a.lastDmAt)
+    .filter((a) => a.dmMessageCount > 30 && a.lastDmAt && isGhostAwardCandidate(a))
     .sort((a, b) => (a.lastDmAt ?? 0) - (b.lastDmAt ?? 0))[0];
   if (ghostCandidate) {
     awards.push({
@@ -58,14 +75,17 @@ export function computeHallOfFame(
     });
   }
 
-  for (const dm of bundle.dmAwards.slice(0, 6)) {
+  const threadSizes = dmThreadSizes(parsed.messages);
+  for (const dm of bundle.dmAwards
+    .filter((award) => isDmAwardMeaningful(award, threadSizes))
+    .slice(0, 6)) {
     awards.push({
       id: `dm-award-${dm.id}`,
       title: dm.title,
       winnerLabel: formatAccountDisplayName(dm.threadLabel),
       why: dm.description,
       confidence: "high",
-      category: dm.id.includes("group") ? "fame" : "fame",
+      category: SHAME_DM_AWARDS.has(dm.id) ? "shame" : "fame",
     });
   }
 

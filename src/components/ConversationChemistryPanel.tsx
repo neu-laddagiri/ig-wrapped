@@ -19,6 +19,7 @@ export function ConversationChemistryPanel({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="flex w-full items-center justify-between text-left"
       >
         <div className="flex items-center gap-2">

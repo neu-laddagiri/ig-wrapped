@@ -1,5 +1,6 @@
 -- IG Wrapped — Supabase schema
 -- Run this in the Supabase SQL Editor for your project.
+-- Safe to re-run: policies, constraints and triggers are dropped and recreated.
 
 -- ---------------------------------------------------------------------------
 -- profiles
@@ -13,29 +14,37 @@ create table if not exists public.profiles (
 
 alter table public.profiles enable row level security;
 
+drop policy if exists "Users can view own profile" on public.profiles;
 create policy "Users can view own profile"
   on public.profiles for select
-  using (auth.uid() = id);
+  to authenticated
+  using ((select auth.uid()) = id);
 
+drop policy if exists "Users can insert own profile" on public.profiles;
 create policy "Users can insert own profile"
   on public.profiles for insert
-  with check (auth.uid() = id);
+  to authenticated
+  with check ((select auth.uid()) = id);
 
+drop policy if exists "Users can update own profile" on public.profiles;
 create policy "Users can update own profile"
   on public.profiles for update
-  using (auth.uid() = id)
-  with check (auth.uid() = id);
+  to authenticated
+  using ((select auth.uid()) = id)
+  with check ((select auth.uid()) = id);
 
+drop policy if exists "Users can delete own profile" on public.profiles;
 create policy "Users can delete own profile"
   on public.profiles for delete
-  using (auth.uid() = id);
+  to authenticated
+  using ((select auth.uid()) = id);
 
 -- Auto-create profile on sign up
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 begin
   insert into public.profiles (id, email, display_name)
@@ -78,29 +87,46 @@ create index if not exists saved_analyses_user_id_idx
 create index if not exists saved_analyses_updated_at_idx
   on public.saved_analyses (user_id, updated_at desc);
 
+-- Cap each snapshot at 20 MB. NOT VALID skips checking rows saved before this
+-- constraint existed; new inserts and updates are always checked.
+alter table public.saved_analyses
+  drop constraint if exists saved_analyses_json_size;
+alter table public.saved_analyses
+  add constraint saved_analyses_json_size
+  check (pg_column_size(full_analysis_json) < 20 * 1024 * 1024) not valid;
+
 alter table public.saved_analyses enable row level security;
 
+drop policy if exists "Users can view own saved analyses" on public.saved_analyses;
 create policy "Users can view own saved analyses"
   on public.saved_analyses for select
-  using (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can insert own saved analyses" on public.saved_analyses;
 create policy "Users can insert own saved analyses"
   on public.saved_analyses for insert
-  with check (auth.uid() = user_id);
+  to authenticated
+  with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can update own saved analyses" on public.saved_analyses;
 create policy "Users can update own saved analyses"
   on public.saved_analyses for update
-  using (auth.uid() = user_id)
-  with check (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id)
+  with check ((select auth.uid()) = user_id);
 
+drop policy if exists "Users can delete own saved analyses" on public.saved_analyses;
 create policy "Users can delete own saved analyses"
   on public.saved_analyses for delete
-  using (auth.uid() = user_id);
+  to authenticated
+  using ((select auth.uid()) = user_id);
 
 -- updated_at trigger
 create or replace function public.set_updated_at()
 returns trigger
 language plpgsql
+set search_path = ''
 as $$
 begin
   new.updated_at = now();
@@ -112,3 +138,26 @@ drop trigger if exists saved_analyses_updated_at on public.saved_analyses;
 create trigger saved_analyses_updated_at
   before update on public.saved_analyses
   for each row execute function public.set_updated_at();
+
+-- Per-user row cap (50). The advisory lock serializes concurrent inserts for
+-- the same user so parallel requests cannot slip past the count.
+create or replace function public.enforce_saved_analyses_limit()
+returns trigger
+language plpgsql
+set search_path = ''
+as $$
+begin
+  perform pg_advisory_xact_lock(hashtextextended(new.user_id::text, 0));
+  if (
+    select count(*) from public.saved_analyses where user_id = new.user_id
+  ) >= 50 then
+    raise exception 'saved_analyses_limit: You can keep up to 50 saved analyses. Delete one and try again.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists saved_analyses_limit on public.saved_analyses;
+create trigger saved_analyses_limit
+  before insert on public.saved_analyses
+  for each row execute function public.enforce_saved_analyses_limit();

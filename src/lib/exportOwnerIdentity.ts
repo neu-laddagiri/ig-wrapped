@@ -1,7 +1,4 @@
-import {
-  compactIdentityKey,
-  normalizeIdentityKey,
-} from "@/lib/identityResolver";
+import { normalizeIdentityKey } from "@/lib/identityResolver";
 import type { DmAnalytics } from "@/types/instagram";
 import type { NameConfidence } from "@/types/insights";
 
@@ -13,119 +10,145 @@ export interface ExportOwnerIdentity {
   sources: string[];
 }
 
+const PROFILE_PATH_PATTERNS = [
+  /personal_information/i,
+  /account_information/i,
+  /profile_information/i,
+  /account_profile/i,
+];
+
+const USERNAME_LABEL = /^(user\s*name|handle)$/i;
+const NAME_LABEL = /^(name|full\s*name|display\s*name)$/i;
+
+type ProfileStrings = { usernames: string[]; names: string[] };
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function addKey(keys: Set<string>, raw: string): void {
   if (!raw?.trim()) return;
   keys.add(normalizeIdentityKey(raw));
-  const compact = compactIdentityKey(raw);
-  if (compact.length >= 2) keys.add(compact);
+}
+
+function collectLabeled(label: string, value: unknown, out: ProfileStrings): void {
+  if (typeof value !== "string" || !value.trim()) return;
+  const l = label.trim();
+  if (USERNAME_LABEL.test(l)) out.usernames.push(value.trim());
+  else if (NAME_LABEL.test(l)) out.names.push(value.trim());
+}
+
+/**
+ * Instagram writes profile fields as `string_map_data: { Username: { value }, Name: { value } }`;
+ * newer exports also use `{ label, value }` rows. Only exact field labels count, so
+ * unrelated strings in the profile folder never become owner keys.
+ */
+function extractProfileStrings(data: unknown, out: ProfileStrings, depth = 0): void {
+  if (depth > 8) return;
+  if (Array.isArray(data)) {
+    for (const item of data) extractProfileStrings(item, out, depth + 1);
+    return;
+  }
+  if (!isRecord(data)) return;
+
+  const stringMap = data.string_map_data;
+  if (isRecord(stringMap)) {
+    for (const [label, entry] of Object.entries(stringMap)) {
+      if (isRecord(entry)) collectLabeled(label, entry.value, out);
+    }
+  } else if (Array.isArray(stringMap)) {
+    for (const entry of stringMap) {
+      if (!isRecord(entry)) continue;
+      if (typeof entry.label === "string") collectLabeled(entry.label, entry.value, out);
+      if (isRecord(entry.map)) {
+        for (const [label, value] of Object.entries(entry.map)) {
+          collectLabeled(label, isRecord(value) ? value.value : value, out);
+        }
+      }
+    }
+  }
+
+  if (typeof data.label === "string") collectLabeled(data.label, data.value, out);
+
+  for (const value of Object.values(data)) {
+    if (value === stringMap) continue;
+    if (Array.isArray(value) || isRecord(value)) {
+      extractProfileStrings(value, out, depth + 1);
+    }
+  }
 }
 
 function parseProfileFromFiles(
   files: Map<string, string> | undefined
-): { usernames: string[]; names: string[]; paths: string[] } {
-  const usernames: string[] = [];
-  const names: string[] = [];
+): ProfileStrings & { paths: string[] } {
+  const out: ProfileStrings = { usernames: [], names: [] };
   const paths: string[] = [];
-
-  if (!files?.size) return { usernames, names, paths };
-
-  const pathPatterns = [
-    /personal_information/i,
-    /account_information/i,
-    /profile_information/i,
-    /account_profile/i,
-  ];
-
-  const valuePatterns = [
-    /username/i,
-    /name/i,
-    /display/i,
-    /account/i,
-  ];
+  if (!files?.size) return { ...out, paths };
 
   for (const [path, content] of files) {
     const lower = path.toLowerCase().replace(/\\/g, "/");
-    if (!pathPatterns.some((p) => p.test(lower))) continue;
-
+    if (!PROFILE_PATH_PATTERNS.some((p) => p.test(lower))) continue;
     try {
-      const data = JSON.parse(content) as unknown;
-      extractProfileStrings(data, valuePatterns, usernames, names);
-      paths.push(path);
+      const before = out.usernames.length + out.names.length;
+      extractProfileStrings(JSON.parse(content) as unknown, out);
+      if (out.usernames.length + out.names.length > before) paths.push(path);
     } catch {
       continue;
     }
   }
 
-  return { usernames, names, paths };
+  return { ...out, paths };
 }
 
-function extractProfileStrings(
-  data: unknown,
-  keyPatterns: RegExp[],
-  usernames: string[],
-  names: string[]
-): void {
-  if (Array.isArray(data)) {
-    data.forEach((item) =>
-      extractProfileStrings(item, keyPatterns, usernames, names)
-    );
-    return;
-  }
-  if (typeof data !== "object" || data === null) return;
-
-  const obj = data as Record<string, unknown>;
-
-  if (Array.isArray(obj.string_map_data)) {
-    for (const entry of obj.string_map_data) {
-      if (typeof entry !== "object" || entry === null) continue;
-      const row = entry as Record<string, unknown>;
-      const map = row.map;
-      if (typeof map === "object" && map !== null) {
-        for (const [k, v] of Object.entries(map as Record<string, unknown>)) {
-          if (typeof v !== "string" || !v.trim()) continue;
-          if (/username|handle/i.test(k)) usernames.push(v.trim());
-          else if (/name/i.test(k)) names.push(v.trim());
-        }
-      }
-      if (typeof row.value === "string" && row.value.trim()) {
-        const label = typeof row.label === "string" ? row.label : "";
-        if (/username/i.test(label)) usernames.push(row.value.trim());
-        else if (/name/i.test(label)) names.push(row.value.trim());
-      }
-    }
-  }
-
-  for (const [key, value] of Object.entries(obj)) {
-    if (typeof value === "string" && value.trim() && keyPatterns.some((p) => p.test(key))) {
-      if (/username|handle/i.test(key)) usernames.push(value.trim());
-      else names.push(value.trim());
-    }
-    if (Array.isArray(value) || (typeof value === "object" && value !== null)) {
-      extractProfileStrings(value, keyPatterns, usernames, names);
-    }
-  }
-}
-
-function inferFromTopSender(
+/**
+ * The export owner is a participant in every thread, so the name present in the
+ * most threads wins; message volume only breaks ties.
+ */
+function inferFromThreadPresence(
   messages: DmAnalytics | null | undefined
-): { name: string; total: number; margin: number } | null {
-  if (!messages?.threads?.length) return null;
+): {
+  name: string;
+  threadCount: number;
+  totalThreads: number;
+  runnerUpThreads: number;
+} | null {
+  const threads = messages?.threads ?? [];
+  if (!threads.length) return null;
 
-  const totals = new Map<string, number>();
-  for (const thread of messages.threads) {
+  const stats = new Map<string, { name: string; threads: number; messages: number }>();
+  for (const thread of threads) {
+    const seen = new Set<string>();
+    const names = [
+      ...(thread.participants ?? []),
+      ...Object.keys(thread.messagesBySender ?? {}),
+    ];
+    for (const raw of names) {
+      if (!raw?.trim()) continue;
+      const key = normalizeIdentityKey(raw);
+      const entry = stats.get(key) ?? { name: raw.trim(), threads: 0, messages: 0 };
+      if (!seen.has(key)) {
+        seen.add(key);
+        entry.threads++;
+      }
+      stats.set(key, entry);
+    }
     for (const [sender, count] of Object.entries(thread.messagesBySender ?? {})) {
-      if (!sender?.trim() || !count) continue;
-      totals.set(sender.trim(), (totals.get(sender.trim()) ?? 0) + count);
+      const entry = stats.get(normalizeIdentityKey(sender));
+      if (entry && count) entry.messages += count;
     }
   }
 
-  const ranked = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  const ranked = [...stats.values()].sort(
+    (a, b) => b.threads - a.threads || b.messages - a.messages
+  );
   const top = ranked[0];
-  const second = ranked[1];
-  if (!top || top[1] < 15) return null;
-
-  const margin = second ? top[1] / Math.max(second[1], 1) : top[1];
-  return { name: top[0], total: top[1], margin };
+  if (!top) return null;
+  return {
+    name: top.name,
+    threadCount: top.threads,
+    totalThreads: threads.length,
+    runnerUpThreads: ranked[1]?.threads ?? 0,
+  };
 }
 
 export function resolveExportOwnerIdentity(params: {
@@ -153,15 +176,25 @@ export function resolveExportOwnerIdentity(params: {
     confidence = "high";
   }
 
-  const topSender = inferFromTopSender(messages);
-  if (topSender) {
-    addKey(keys, topSender.name);
-    displayNames.push(topSender.name);
-    sources.push(
-      `Top DM sender (${topSender.total.toLocaleString()} messages across threads)`
-    );
-    if (confidence !== "high") {
-      confidence = topSender.margin >= 1.4 ? "medium" : "low";
+  const presence = inferFromThreadPresence(messages);
+  if (presence && !keys.has(normalizeIdentityKey(presence.name))) {
+    const unique = presence.threadCount > presence.runnerUpThreads;
+    const share = presence.threadCount / presence.totalThreads;
+    // With profile names already known, only add a DM display name that is clearly the owner.
+    const accept =
+      confidence === "high"
+        ? unique && presence.totalThreads >= 3 && share >= 0.9
+        : true;
+    if (accept) {
+      addKey(keys, presence.name);
+      displayNames.push(presence.name);
+      sources.push(
+        `Name in ${presence.threadCount.toLocaleString()} of ${presence.totalThreads.toLocaleString()} DM threads`
+      );
+      if (confidence !== "high") {
+        confidence =
+          unique && presence.totalThreads >= 3 && share >= 0.8 ? "medium" : "low";
+      }
     }
   }
 
@@ -178,12 +211,11 @@ export function resolveExportOwnerIdentity(params: {
   };
 }
 
+/** Exact (case/whitespace-insensitive) match against the owner's names — no fuzzy keys. */
 export function isExportOwnerName(
   name: string,
   owner: ExportOwnerIdentity
 ): boolean {
   if (!name?.trim() || owner.keys.size === 0) return false;
-  const k = normalizeIdentityKey(name);
-  const c = compactIdentityKey(name);
-  return owner.keys.has(k) || owner.keys.has(c);
+  return owner.keys.has(normalizeIdentityKey(name));
 }

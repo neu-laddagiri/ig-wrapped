@@ -12,19 +12,15 @@ export function computeExportCompleteness(
       detected: c.detected,
     }));
 
-  if (extras?.hasSearch) {
-    categoryStatus.push({
-      id: "search_history",
-      label: "Search history",
-      detected: true,
-    });
-  }
-  if (extras?.hasApps) {
-    categoryStatus.push({
-      id: "connected_apps",
-      label: "Connected apps",
-      detected: true,
-    });
+  // Always counted (found or not) so the total doesn't change with the export.
+  const extraCategories: { id: CoverageCategoryId; label: string; detected: boolean }[] = [
+    { id: "search_history", label: "Search history", detected: Boolean(extras?.hasSearch) },
+    { id: "connected_apps", label: "Connected apps", detected: Boolean(extras?.hasApps) },
+  ];
+  for (const extra of extraCategories) {
+    const existing = categoryStatus.find((c) => c.id === extra.id);
+    if (existing) existing.detected = existing.detected || extra.detected;
+    else categoryStatus.push(extra);
   }
 
   const detectedCount = categoryStatus.filter((c) => c.detected).length;

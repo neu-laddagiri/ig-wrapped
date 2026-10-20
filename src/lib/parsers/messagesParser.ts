@@ -26,11 +26,58 @@ function hashString(input: string): string {
   return `dm-${(h >>> 0).toString(36)}`;
 }
 
+/** Long threads are split into message_1.json (newest), message_2.json, … */
+const DM_MESSAGE_FILE = /\/message_(\d+)\.json$/;
+
 function isDmMessageFile(path: string): boolean {
   const lower = path.toLowerCase().replace(/\\/g, "/");
-  if (!lower.endsWith("message_1.json")) return false;
+  if (!DM_MESSAGE_FILE.test(lower)) return false;
   if (!lower.includes("messages/")) return false;
   return lower.includes("/inbox/") || lower.includes("/message_requests/");
+}
+
+function messagePartNumber(path: string): number {
+  const match = path.toLowerCase().replace(/\\/g, "/").match(DM_MESSAGE_FILE);
+  return match ? Number(match[1]) : Number.MAX_SAFE_INTEGER;
+}
+
+/** Combine every message_N.json part of one thread into a single thread record. */
+function mergeThreadParts(
+  parts: { path: string; content: string }[]
+): { path: string; data: JsonRecord } | null {
+  let base: JsonRecord | null = null;
+  let basePath = "";
+  const messages: unknown[] = [];
+  const participants: unknown[] = [];
+  const participantNames = new Set<string>();
+
+  for (const { path, content } of parts) {
+    let data: unknown;
+    try {
+      data = JSON.parse(content);
+    } catch {
+      continue; // skip a malformed part, keep the rest of the thread
+    }
+    if (!isRecord(data)) continue;
+    if (!base) {
+      base = data;
+      basePath = path;
+    }
+    if (Array.isArray(data.messages)) {
+      for (const msg of data.messages) messages.push(msg);
+    }
+    if (Array.isArray(data.participants)) {
+      for (const p of data.participants) {
+        const name = isRecord(p) && typeof p.name === "string" ? p.name : null;
+        if (name === null || participantNames.has(name)) continue;
+        participantNames.add(name);
+        participants.push(p);
+      }
+    }
+  }
+
+  if (!base) return null;
+  return { path: basePath, data: { ...base, participants, messages } };
 }
 
 function getFolder(path: string): DmThreadAnalytics["folder"] {
@@ -376,15 +423,30 @@ function parseThread(
 }
 
 export function parseMessages(files: Map<string, string>): DmAnalytics | null {
-  const messageFiles: { path: string; content: string }[] = [];
+  const threadParts = new Map<
+    string,
+    { path: string; content: string; part: number }[]
+  >();
 
   for (const [path, content] of files) {
-    if (isDmMessageFile(path)) {
-      messageFiles.push({ path, content });
-    }
+    if (!isDmMessageFile(path)) continue;
+    const normalized = path.replace(/\\/g, "/");
+    const threadDir = normalized
+      .slice(0, normalized.lastIndexOf("/"))
+      .toLowerCase();
+    const parts = threadParts.get(threadDir) ?? [];
+    parts.push({ path, content, part: messagePartNumber(path) });
+    threadParts.set(threadDir, parts);
   }
 
-  if (messageFiles.length === 0) return null;
+  if (threadParts.size === 0) return null;
+
+  const messageFiles: { path: string; data: JsonRecord }[] = [];
+  for (const parts of threadParts.values()) {
+    parts.sort((a, b) => a.part - b.part);
+    const merged = mergeThreadParts(parts);
+    if (merged) messageFiles.push(merged);
+  }
 
   const threads: DmThreadAnalytics[] = [];
   const globalMonthCounts = new Map<string, number>();
@@ -394,11 +456,8 @@ export function parseMessages(files: Map<string, string>): DmAnalytics | null {
   let groupChatCount = 0;
   let oneOnOneCount = 0;
 
-  messageFiles.forEach(({ path, content }, index) => {
+  messageFiles.forEach(({ path, data }, index) => {
     try {
-      const data = JSON.parse(content);
-      if (!isRecord(data)) return;
-
       const thread = parseThread(path, data, index);
       if (!thread) return;
 

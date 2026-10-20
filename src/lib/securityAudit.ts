@@ -11,9 +11,10 @@ export function computeSecurityAudit(
   if (!security && !connectedApps.length) return null;
 
   const now = Date.now();
+  // An app with no parsed date has no evidence of being stale.
   const staleApps = connectedApps.filter((app) => {
     const last = app.lastUsedAt ?? app.addedAt;
-    return last ? now - last * 1000 > STALE_MS : true;
+    return last ? now - last * 1000 > STALE_MS : false;
   });
 
   const suspicious = security

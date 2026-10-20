@@ -2,12 +2,14 @@
 
 import type { AdRoastResult } from "@/types/insights";
 import { ConfidencePill } from "@/components/ConfidencePill";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface AdRoastSectionProps {
   roast: AdRoastResult;
 }
 
 export function AdRoastSection({ roast }: AdRoastSectionProps) {
+  const { presentationMode } = usePresentationMode();
   return (
     <div className="rounded-2xl animated-gradient-border bg-[#0a0a12]/80 p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -32,9 +34,16 @@ export function AdRoastSection({ roast }: AdRoastSectionProps) {
           </p>
         </div>
       </div>
-      {roast.brandsStalkingYou.length > 0 && (
+      {roast.brandsStalkingYou.length > 0 && presentationMode && (
+        <p className="mt-4 text-xs text-white/40">
+          {roast.brandsStalkingYou.length} brand
+          {roast.brandsStalkingYou.length === 1 ? "" : "s"} from your export —
+          names hidden in Presentation Mode.
+        </p>
+      )}
+      {roast.brandsStalkingYou.length > 0 && !presentationMode && (
         <div className="mt-4">
-          <p className="text-xs text-white/40">Brands stalking you (from export)</p>
+          <p className="text-xs text-white/40">Advertisers in your export</p>
           <div className="mt-2 flex flex-wrap gap-1.5">
             {roast.brandsStalkingYou.map((b) => (
               <span

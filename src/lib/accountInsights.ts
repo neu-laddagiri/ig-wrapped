@@ -52,7 +52,9 @@ export function computeAccountFlags(
       tone: "green",
     });
   }
-  if (account.followedMeAt && account.followedMeAt < Date.now() - 86400000 * 365 * 2) {
+  // Follow timestamps are unix seconds.
+  const nowSeconds = Date.now() / 1000;
+  if (account.followedMeAt && account.followedMeAt < nowSeconds - 86400 * 365 * 2) {
     green.push({
       id: "long-follower",
       label: "Long-time follower",
@@ -102,7 +104,7 @@ export function computeAccountFlags(
   }
   if (
     account.iFollowedAt &&
-    account.iFollowedAt < Date.now() - 86400000 * 365 * 3 &&
+    account.iFollowedAt < nowSeconds - 86400 * 365 * 3 &&
     account.dmMessageCount === 0 &&
     account.likedCount === 0
   ) {
@@ -127,8 +129,9 @@ export interface ExportComparison {
 export function compareParsedExports(
   before: ParsedExportData,
   after: ParsedExportData,
-  beforeLabel = "Earlier",
-  afterLabel = "Current"
+  // Labels are accepted for callers but not used in the comparison itself.
+  _beforeLabel = "Earlier",
+  _afterLabel = "Current"
 ): {
   summary: ExportComparison[];
   newFollowers: string[];

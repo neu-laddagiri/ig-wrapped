@@ -44,17 +44,19 @@ export function ErasTab({ insights, mostActiveEra }: ErasTabProps) {
     );
   }
 
+  // One source on screen: the eras timeline when present, else the stored era.
   const chartEra: MostActiveEraData | null =
-    mostActiveEra ??
-    (eras
+    eras && eras.peakMonth
       ? {
-          mostActiveMonth: eras.peakMonth?.month ?? "",
-          mostActiveMonthLabel: eras.peakMonth?.label ?? "",
-          mostActiveMonthCount: eras.peakMonth?.count ?? 0,
+          mostActiveMonth: eras.peakMonth.month,
+          mostActiveMonthLabel: eras.peakMonth.label,
+          mostActiveMonthCount: eras.peakMonth.count,
+          topActivityType: heroEra?.topActivityType,
+          topActivityCaption: heroEra?.dominanceLine,
           topMonths: eras.topMonths,
           monthlyTotals: eras.monthlyTotals,
         }
-      : null);
+      : mostActiveEra;
 
   return (
     <div className="space-y-6">

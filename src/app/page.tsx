@@ -31,7 +31,10 @@ import { SavedAnalysesTab } from "@/components/SavedAnalysesTab";
 import { FunStatsTab } from "@/components/FunStatsTab";
 import { parseInstagramZip } from "@/lib/zipParser";
 import { resolveMostActiveEra } from "@/lib/mostActiveEra";
-import { resolveInsightsBundle } from "@/lib/insightsEngine";
+import {
+  applyLinkedInProgress,
+  resolveInsightsBundle,
+} from "@/lib/insightsEngine";
 import { findUnifiedAccount } from "@/lib/relationshipEngine";
 import {
   indexFromCanonicalList,
@@ -61,10 +64,14 @@ import { StoryModeModal } from "@/components/StoryModeModal";
 import { AnalysisChatPanel } from "@/components/AnalysisChatPanel";
 import { CompareTab } from "@/components/CompareTab";
 import { ActionPlanTab } from "@/components/ActionPlanTab";
+import { TabErrorBoundary } from "@/components/TabErrorBoundary";
 import { generateDemoData, DEMO_FILE_FINGERPRINT } from "@/lib/demoData";
+import { repairMojibakeDeep } from "@/lib/instagramText";
 import { usePresentationMode } from "@/contexts/PresentationContext";
+import { useAuth } from "@/contexts/AuthContext";
 import {
   computeFileFingerprint,
+  normalizeLinkedInEntries,
   saveLinkedInProgress,
 } from "@/lib/linkedinStorage";
 import type { SavedAnalysisRow } from "@/types/analysis";
@@ -111,12 +118,15 @@ export default function Home() {
   const [authOpen, setAuthOpen] = useState(false);
   const accountDetail = useAccountDetail();
 
+  // The expensive bundle depends only on the export; LinkedIn edits are a cheap overlay.
+  const baseInsights = useMemo(
+    () => (parsedData ? resolveInsightsBundle(parsedData) : null),
+    [parsedData]
+  );
   const insights = useMemo(
     () =>
-      parsedData
-        ? resolveInsightsBundle(parsedData, linkedinProgress)
-        : null,
-    [parsedData, linkedinProgress]
+      baseInsights ? applyLinkedInProgress(baseInsights, linkedinProgress) : null,
+    [baseInsights, linkedinProgress]
   );
 
   const canonicalIndex = useMemo(
@@ -124,17 +134,25 @@ export default function Home() {
     [insights?.canonicalAccounts]
   );
 
+  const directDmThreadRecords = insights?.directDmThreadRecords;
+  const parsedMessages = parsedData?.messages ?? null;
+  const parsedNetwork = parsedData?.network ?? null;
   const directDmIndex = useMemo(() => {
-    if (insights?.directDmThreadRecords?.length) {
-      return indexFromDirectDmRecords(insights.directDmThreadRecords);
+    if (directDmThreadRecords?.length) {
+      return indexFromDirectDmRecords(directDmThreadRecords);
     }
-    if (parsedData?.messages) {
-      return buildDirectDmIndexFromMessages(parsedData.messages, {
-        network: parsedData.network ?? null,
+    if (parsedMessages) {
+      return buildDirectDmIndexFromMessages(parsedMessages, {
+        network: parsedNetwork,
       });
     }
     return indexFromDirectDmRecords([]);
-  }, [insights?.directDmThreadRecords, parsedData?.messages, parsedData?.network]);
+  }, [directDmThreadRecords, parsedMessages, parsedNetwork]);
+
+  const mostActiveEra = useMemo(
+    () => (parsedData ? resolveMostActiveEra(parsedData) : null),
+    [parsedData]
+  );
 
   const dmAccountKeyByThreadId = useMemo(() => {
     const map = new Map<string, string>();
@@ -201,10 +219,40 @@ export default function Home() {
     mode: "upload" | "saved";
   }>({ visible: false, mode: "upload" });
   const [isDemoMode, setIsDemoMode] = useState(false);
+  /** Dashboard came from a cloud save (not this device's ZIP). */
+  const [openedFromCloud, setOpenedFromCloud] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
-  const [storyHideNames, setStoryHideNames] = useState(false);
+  // Public-safe by default — names in Story Mode are opt-in.
+  const [storyHideNames, setStoryHideNames] = useState(true);
   const [chatOpen, setChatOpen] = useState(false);
   const { presentationMode } = usePresentationMode();
+  const { user } = useAuth();
+  const closeAccountDetail = accountDetail.closeAccount;
+  /** Bumped by every load/clear so a slower, older upload can't overwrite it. */
+  const loadRequestRef = useRef(0);
+
+  // Saved-analysis ids belong to the account that was signed in; a cloud
+  // snapshot shouldn't stay on screen after that account signs out.
+  const userId = user?.id ?? null;
+  const [sessionUserId, setSessionUserId] = useState(userId);
+  if (userId !== sessionUserId) {
+    setSessionUserId(userId);
+    setCurrentSavedId(null);
+    if (sessionUserId && openedFromCloud) {
+      setParsedData(null);
+      setFileName(null);
+      setFileFingerprint("");
+      setLinkedinProgress([]);
+      setDmAiSummaries({});
+      setOverviewAiSummary(null);
+      setIsLoadedFromCloud(false);
+      setOpenedFromCloud(false);
+      setActiveTab("overview");
+      setExportGuideExpanded(true);
+      setDashboardBanner({ visible: false, mode: "upload" });
+      closeAccountDetail();
+    }
+  }
 
   const dashboardRef = useRef<HTMLDivElement>(null);
   const tabPanelRef = useRef<HTMLDivElement>(null);
@@ -312,21 +360,26 @@ export default function Home() {
   }, [parsedData, fileName, scrollToDashboard]);
 
   const handleFileSelect = useCallback(async (file: File) => {
+    const request = ++loadRequestRef.current;
     setError(null);
     setIsLoading(true);
-    setFileName(file.name);
     setLoadingText("Reading ZIP file…");
-    setIsLoadedFromCloud(false);
-    setCurrentSavedId(null);
 
     try {
       const fingerprint = await computeFileFingerprint(file);
-      setFileFingerprint(fingerprint);
-
       const data = await parseInstagramZip(file, (progress) => {
-        setLoadingText(progress.stage);
+        if (loadRequestRef.current === request) setLoadingText(progress.stage);
       });
+      if (loadRequestRef.current !== request) return;
+
+      // Name, fingerprint and data change together, only once parsing succeeded.
+      closeAccountDetail();
       setParsedData(data);
+      setFileName(file.name);
+      setFileFingerprint(fingerprint);
+      setIsLoadedFromCloud(false);
+      setOpenedFromCloud(false);
+      setCurrentSavedId(null);
       setIsDemoMode(false);
       setLinkedinProgress([]);
       setDmShowThreadNames(true);
@@ -340,20 +393,24 @@ export default function Home() {
       pendingScrollRef.current = true;
       setDashboardBanner({ visible: true, mode: "upload" });
     } catch (err) {
-      setParsedData(null);
-      setFileFingerprint("");
+      if (loadRequestRef.current !== request) return;
+      // Keep whatever was already loaded; just explain what went wrong.
       setError(
         err instanceof Error
           ? err.message
           : "Something went wrong while parsing your export."
       );
     } finally {
-      setIsLoading(false);
+      if (loadRequestRef.current === request) setIsLoading(false);
     }
-  }, []);
+  }, [closeAccountDetail]);
 
   const handleTryDemo = useCallback(() => {
+    loadRequestRef.current += 1;
+    closeAccountDetail();
+    setIsLoading(false);
     setError(null);
+    setOpenedFromCloud(false);
     setParsedData(generateDemoData());
     setFileName("demo-synthetic-export.zip");
     setFileFingerprint(DEMO_FILE_FINGERPRINT);
@@ -371,17 +428,30 @@ export default function Home() {
     setDataCoverageExpanded(false);
     pendingScrollRef.current = true;
     setDashboardBanner({ visible: true, mode: "upload" });
-  }, []);
+  }, [closeAccountDetail]);
 
   const handleLoadSavedAnalysis = useCallback((row: SavedAnalysisRow) => {
+    if (!row.full_analysis_json?.parsed) {
+      setError("This saved analysis is incomplete and can't be opened.");
+      return;
+    }
+    loadRequestRef.current += 1;
+    closeAccountDetail();
+    setIsLoading(false);
     setIsDemoMode(false);
-    const snapshot = row.full_analysis_json;
+    setOpenedFromCloud(true);
+    // Saves made before export text was decoded at upload hold mojibake names.
+    const snapshot = repairMojibakeDeep(row.full_analysis_json);
+    // Older saves may predate the current entry shape (missing notes, etc.).
+    const linkedinProgressFromCloud = normalizeLinkedInEntries(
+      repairMojibakeDeep(row.linkedin_progress_json ?? [])
+    );
     setParsedData(restoreParsedFromSnapshot(snapshot.parsed));
     setFileName(row.export_name ?? snapshot.exportName);
     setFileFingerprint(
       row.file_fingerprint ?? snapshot.fileFingerprint ?? ""
     );
-    setLinkedinProgress(row.linkedin_progress_json ?? []);
+    setLinkedinProgress(linkedinProgressFromCloud);
     setDmShowThreadNames(snapshot.dmShowThreadNames ?? true);
     setDmShowFirstMessagePreview(
       snapshot.dmShowFirstMessagePreview ?? false
@@ -398,9 +468,14 @@ export default function Home() {
     setDashboardBanner({ visible: true, mode: "saved" });
 
     const fp = row.file_fingerprint ?? snapshot.fileFingerprint;
-    if (fp && row.linkedin_progress_json?.length) {
-      saveLinkedInProgress(fp, row.linkedin_progress_json);
+    if (fp && linkedinProgressFromCloud.length) {
+      saveLinkedInProgress(fp, linkedinProgressFromCloud);
     }
+  }, [closeAccountDetail]);
+
+  // Deleting the snapshot this session saved to means the next save is a new row.
+  const handleSavedAnalysisDeleted = useCallback((id: string) => {
+    setCurrentSavedId((current) => (current === id ? null : current));
   }, []);
 
   const handleClearLocalSession = useCallback(() => {
@@ -411,6 +486,10 @@ export default function Home() {
     ) {
       return;
     }
+    loadRequestRef.current += 1;
+    closeAccountDetail();
+    setIsLoading(false);
+    setOpenedFromCloud(false);
     setParsedData(null);
     setIsDemoMode(false);
     setFileName(null);
@@ -428,7 +507,7 @@ export default function Home() {
     setExportGuideExpanded(true);
     setDataCoverageExpanded(false);
     setDashboardBanner({ visible: false, mode: "upload" });
-  }, []);
+  }, [closeAccountDetail]);
 
   return (
     <>
@@ -570,9 +649,11 @@ export default function Home() {
 
                       return (
                         <>
+                    <TabErrorBoundary>
                     {activeTab === "overview" && (
                       <OverviewTab
                         data={parsedData}
+                        insights={insights}
                         fileName={fileName}
                         linkedinProgress={linkedinProgress}
                         overviewAiSummary={overviewAiSummary}
@@ -596,12 +677,12 @@ export default function Home() {
                         insights={insights}
                         isDemoMode={isDemoMode}
                         onNavigate={handleTabChange}
+                        storageKey={fileFingerprint}
                       />
                     )}
                     {activeTab === "network" && (
                       <NetworkManagerTab
                         network={parsedData.network}
-                        linkedinProgress={linkedinProgress}
                         onOpenAccount={accountDetail.openAccount}
                       />
                     )}
@@ -636,9 +717,10 @@ export default function Home() {
                       <WrappedInsightsTab
                         wrapped={parsedData.wrapped}
                         network={parsedData.network}
-                        mostActiveEra={resolveMostActiveEra(parsedData)}
+                        mostActiveEra={mostActiveEra}
                         contentDiet={insights.contentDiet}
                         adsInsights={insights.adsInsights}
+                        ads={parsedData.ads}
                       />
                     )}
                     {activeTab === "funstats" && (
@@ -647,7 +729,7 @@ export default function Home() {
                         wrapped={parsedData.wrapped}
                         messages={parsedData.messages}
                         ads={parsedData.ads}
-                        mostActiveEra={resolveMostActiveEra(parsedData)}
+                        mostActiveEra={mostActiveEra}
                         showNames={showAccountNames}
                         dmAwards={insights.dmAwards}
                         replyPatterns={insights.replyPatterns}
@@ -667,7 +749,7 @@ export default function Home() {
                     {activeTab === "eras" && (
                       <ErasTab
                         insights={insights}
-                        mostActiveEra={resolveMostActiveEra(parsedData)}
+                        mostActiveEra={mostActiveEra}
                       />
                     )}
                     {activeTab === "personality" && (
@@ -743,8 +825,10 @@ export default function Home() {
                       <SavedAnalysesTab
                         onSignIn={() => setAuthOpen(true)}
                         onLoadAnalysis={handleLoadSavedAnalysis}
+                        onDeleted={handleSavedAnalysisDeleted}
                       />
                     )}
+                    </TabErrorBoundary>
                     <AccountDetailDrawer
                       open={accountDetail.isOpen}
                       onClose={accountDetail.closeAccount}
@@ -781,6 +865,7 @@ export default function Home() {
               <SavedAnalysesTab
                 onSignIn={() => setAuthOpen(true)}
                 onLoadAnalysis={handleLoadSavedAnalysis}
+                onDeleted={handleSavedAnalysisDeleted}
               />
             </motion.div>
           )}

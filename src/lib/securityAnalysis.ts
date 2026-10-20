@@ -7,9 +7,12 @@ import type {
   SuspiciousLoginAnalysis,
 } from "@/types/instagram";
 
-const BURST_WINDOW_MS = 30 * 60 * 1000;
+// Event timestamps are unix seconds (see parseTimestamp).
+const BURST_WINDOW_S = 30 * 60;
 const BURST_THRESHOLD = 4;
-const NEAR_CHANGE_MS = 24 * 60 * 60 * 1000;
+const NEAR_CHANGE_S = 24 * 60 * 60;
+
+const SEVERITY_RANK = { high: 0, medium: 1, low: 2 } as const;
 
 function isLoginType(type: SecurityEventType): boolean {
   return type === "login";
@@ -21,10 +24,34 @@ function locationKey(event: SecurityEvent): string | null {
   return loc;
 }
 
+/** Coarse device family, so app-version bumps in user agents don't look like new devices. */
 function deviceKey(event: SecurityEvent): string | null {
   const dev = event.device?.trim().toLowerCase();
   if (!dev || dev === "unknown" || dev === "—") return null;
-  return dev;
+  const os = /iphone|ipad|ios/.test(dev)
+    ? "ios"
+    : /android/.test(dev)
+      ? "android"
+      : /windows/.test(dev)
+        ? "windows"
+        : /mac os|macintosh/.test(dev)
+          ? "mac"
+          : /linux|cros/.test(dev)
+            ? "linux"
+            : null;
+  const client = /instagram/.test(dev)
+    ? "instagram-app"
+    : /edg\//.test(dev)
+      ? "edge"
+      : /firefox|fxios/.test(dev)
+        ? "firefox"
+        : /chrome|crios/.test(dev)
+          ? "chrome"
+          : /safari/.test(dev)
+            ? "safari"
+            : null;
+  if (!os && !client) return dev;
+  return `${os ?? "other"}:${client ?? "other"}`;
 }
 
 function buildFlag(
@@ -43,13 +70,18 @@ export function analyzeSuspiciousLogins(
   const passwordChanges = events.filter((e) => e.type === "password_change");
   const privacyChanges = events.filter((e) => e.type === "privacy_change");
 
-  const flagged: FlaggedSecurityEvent[] = [];
-  const flaggedIds = new Set<string>();
+  // One flag per event — the most severe reason wins.
+  const flagsById = new Map<string, FlaggedSecurityEvent>();
 
   const addFlag = (flag: FlaggedSecurityEvent) => {
-    if (flaggedIds.has(flag.event.id)) return;
-    flaggedIds.add(flag.event.id);
-    flagged.push(flag);
+    const existing = flagsById.get(flag.event.id);
+    if (
+      existing &&
+      SEVERITY_RANK[existing.severity] <= SEVERITY_RANK[flag.severity]
+    ) {
+      return;
+    }
+    flagsById.set(flag.event.id, flag);
   };
 
   const locationCounts = new Map<string, number>();
@@ -70,33 +102,16 @@ export function analyzeSuspiciousLogins(
     const loc = locationKey(login);
     const dev = deviceKey(login);
 
-    if (!loc && !dev) {
+    // Instagram's login export rarely includes a location, so only a missing
+    // device is worth mentioning.
+    if (!dev) {
       addFlag(
         buildFlag(
           login,
-          "Login with limited device or location details — worth reviewing.",
-          "medium"
+          "Login missing device/browser info — worth a quick check.",
+          "low"
         )
       );
-    } else {
-      if (!loc) {
-        addFlag(
-          buildFlag(
-            login,
-            "Login missing location info — could be normal if this was you.",
-            "medium"
-          )
-        );
-      }
-      if (!dev) {
-        addFlag(
-          buildFlag(
-            login,
-            "Login missing device/browser info — worth a quick check.",
-            "medium"
-          )
-        );
-      }
     }
 
     if (loc && locationCounts.get(loc) === 1) {
@@ -109,7 +124,7 @@ export function analyzeSuspiciousLogins(
       );
     }
 
-    if (dev && deviceCounts.get(dev) === 1) {
+    if (dev && logins.length >= 3 && deviceCounts.get(dev) === 1) {
       addFlag(
         buildFlag(
           login,
@@ -139,12 +154,12 @@ export function analyzeSuspiciousLogins(
     const nearbyPassword = passwordChanges.some(
       (e) =>
         e.timestamp &&
-        Math.abs(e.timestamp - login.timestamp!) <= NEAR_CHANGE_MS
+        Math.abs(e.timestamp - login.timestamp!) <= NEAR_CHANGE_S
     );
     const nearbyPrivacy = privacyChanges.some(
       (e) =>
         e.timestamp &&
-        Math.abs(e.timestamp - login.timestamp!) <= NEAR_CHANGE_MS
+        Math.abs(e.timestamp - login.timestamp!) <= NEAR_CHANGE_S
     );
     if (nearbyPassword) {
       addFlag(
@@ -173,7 +188,7 @@ export function analyzeSuspiciousLogins(
     let burst = 1;
     for (let j = i + 1; j < sortedLogins.length; j++) {
       const ts = sortedLogins[j].timestamp!;
-      if (ts - base <= BURST_WINDOW_MS) burst++;
+      if (ts - base <= BURST_WINDOW_S) burst++;
       else break;
     }
     if (burst >= BURST_THRESHOLD) {
@@ -181,7 +196,7 @@ export function analyzeSuspiciousLogins(
         buildFlag(
           sortedLogins[i],
           `Multiple login events within a short window (${burst} in ~30 minutes) — could be normal app refreshes.`,
-          "medium"
+          "low"
         )
       );
     }
@@ -207,6 +222,7 @@ export function analyzeSuspiciousLogins(
     );
   }
 
+  const flagged = [...flagsById.values()];
   const reviewedCount = events.length;
   const worthReviewingCount = flagged.length;
 
@@ -219,9 +235,7 @@ export function analyzeSuspiciousLogins(
   score = Math.max(45, Math.min(100, score));
 
   flagged.sort((a, b) => {
-    const severityOrder = { high: 0, medium: 1, low: 2 };
-    const diff =
-      severityOrder[a.severity] - severityOrder[b.severity];
+    const diff = SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
     if (diff !== 0) return diff;
     return (b.event.timestamp ?? 0) - (a.event.timestamp ?? 0);
   });

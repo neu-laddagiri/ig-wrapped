@@ -1,6 +1,5 @@
 import type {
   AdsPrivacyData,
-  DataCoverageItem,
   DmAnalytics,
   DmMessageSample,
   DmThreadAnalytics,
@@ -13,6 +12,17 @@ import type {
 } from "@/types/instagram";
 import { computeInsightsBundle } from "@/lib/insightsEngine";
 import { enrichInsightsBundle } from "@/lib/advancedInsights";
+import { DM_PARSER_VERSION } from "@/lib/parsers/messagesParser";
+import { parseDataCoverage } from "@/lib/parsers/dataCoverageParser";
+import { formatMonthLabel } from "@/lib/formatters";
+
+// Demo data must use the same units the real parsers emit: unix seconds for
+// network/activity/security/thread timestamps, ms only for DM sample timestamp_ms.
+const DAY_S = 86400;
+
+/** The export owner, as Instagram writes them in DMs (never "You"). */
+const DEMO_OWNER_NAME = "Demo User";
+const DEMO_OWNER_USERNAME = "demo.user";
 
 const DEMO_NAMES = [
   "Alex Rivera",
@@ -32,44 +42,58 @@ const DEMO_NAMES = [
   "Cameron Diaz",
 ];
 
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
+
+function slugFor(name: string): string {
+  return name.toLowerCase().replace(/\s+/g, "_");
+}
+
 function demoUser(i: number): InstagramAccount {
   const name = DEMO_NAMES[i % DEMO_NAMES.length];
-  const slug = name.toLowerCase().replace(/\s+/g, "_") + "_demo";
-  const ts = Date.now() - (i + 1) * 86400000 * 14;
+  const round = Math.floor(i / DEMO_NAMES.length);
+  // Names repeat across rounds, so suffix the round to keep usernames unique.
+  const slug = `${slugFor(name)}${round > 0 ? round + 1 : ""}_demo`;
   return {
     username: slug,
     displayUsername: slug,
     href: `https://www.instagram.com/${slug}/`,
-    timestamp: ts,
+    timestamp: nowSeconds() - (i + 1) * DAY_S * 14,
   };
+}
+
+/** Month keys for the last `count` months, oldest first. */
+function recentMonths(count: number): string[] {
+  const now = new Date();
+  return Array.from({ length: count }, (_, i) => {
+    const d = new Date(now.getFullYear(), now.getMonth() - (count - 1 - i), 15);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
 }
 
 function buildNetwork(): NetworkStats {
   const followers = Array.from({ length: 48 }, (_, i) => demoUser(i));
-  const following = Array.from({ length: 72 }, (_, i) => demoUser(i + 5));
-  const mutualUsernames = new Set(
-    following.slice(0, 34).map((a) => a.username)
-  );
-  const mutuals = followers.filter((f) => mutualUsernames.has(f.username));
-  const dontFollowMeBack = following.filter(
-    (f) => !followers.some((x) => x.username === f.username)
-  );
-  const iDontFollowBack = followers.filter(
-    (f) => !following.some((x) => x.username === f.username)
-  );
-  const followBackRatio =
-    following.length > 0 ? mutuals.length / following.length : 0;
+  // The DM friends (first names in DEMO_NAMES) are mutuals.
+  const following = [
+    ...Array.from({ length: 34 }, (_, i) => demoUser(i)),
+    ...Array.from({ length: 38 }, (_, i) => demoUser(i + 48)),
+  ];
+  const followerSet = new Set(followers.map((a) => a.username));
+  const followingSet = new Set(following.map((a) => a.username));
+  const mutuals = followers.filter((f) => followingSet.has(f.username));
 
   return {
     totalFollowers: followers.length,
     totalFollowing: following.length,
     mutuals,
-    dontFollowMeBack,
-    iDontFollowBack,
-    followBackRatio,
-    pendingRequests: [demoUser(40)],
-    recentFollowRequests: [demoUser(41), demoUser(42)],
-    recentlyUnfollowed: [demoUser(43)],
+    dontFollowMeBack: following.filter((f) => !followerSet.has(f.username)),
+    iDontFollowBack: followers.filter((f) => !followingSet.has(f.username)),
+    followBackRatio:
+      following.length > 0 ? mutuals.length / following.length : 0,
+    pendingRequests: [demoUser(90)],
+    recentFollowRequests: [demoUser(91), demoUser(92)],
+    recentlyUnfollowed: [demoUser(93)],
     blocked: [],
     restricted: [],
     followers,
@@ -77,9 +101,9 @@ function buildNetwork(): NetworkStats {
   };
 }
 
-function buildMessages(network: NetworkStats): DmAnalytics {
-  const now = Date.now();
-  const day = 86400000;
+function buildMessages(months: string[]): DmAnalytics {
+  const now = nowSeconds();
+  let folderId = 17843264891230000;
 
   function thread(
     id: string,
@@ -89,19 +113,22 @@ function buildMessages(network: NetworkStats): DmAnalytics {
     isGroup: boolean,
     participants: string[]
   ): DmThreadAnalytics {
+    // Real inbox folders are "<slug>_<numeric thread id>".
+    const folder = `${isGroup ? slugFor(name).replace(/_/g, "") : `${slugFor(partner)}_demo`}_${folderId++}`;
+    const lead = isGroup ? participants[1] : partner;
     const messagesBySender: Record<string, number> = {};
     if (isGroup) {
       participants.forEach((p, i) => {
         messagesBySender[p] = Math.floor(msgCount / participants.length) + i * 3;
       });
     } else {
-      messagesBySender["You"] = Math.floor(msgCount * 0.52);
-      messagesBySender[partner] = msgCount - messagesBySender["You"];
+      messagesBySender[DEMO_OWNER_NAME] = Math.floor(msgCount * 0.52);
+      messagesBySender[partner] = msgCount - messagesBySender[DEMO_OWNER_NAME];
     }
 
     const textMessages: DmMessageSample[] = [];
     if (!isGroup) {
-      let t = now - day * 30;
+      let t = (now - DAY_S * 30) * 1000;
       let sender = partner;
       for (let i = 0; i < Math.min(40, msgCount); i++) {
         textMessages.push({
@@ -109,31 +136,35 @@ function buildMessages(network: NetworkStats): DmAnalytics {
           timestamp_ms: t,
           content: `Demo message ${i + 1}`,
         });
-        sender = sender === "You" ? partner : "You";
+        sender = sender === DEMO_OWNER_NAME ? partner : DEMO_OWNER_NAME;
         t += (i % 3 === 0 ? 120000 : 3600000) + Math.random() * 600000;
       }
     }
 
-    const months = ["2025-09", "2025-10", "2025-11", "2025-12", "2026-01"];
+    const perMonth = months.map((month, i) => ({
+      month,
+      count: Math.floor(msgCount / months.length) + i * 12,
+    }));
     return {
       id,
       threadName: name,
-      participants: isGroup ? participants : [partner, "You"],
+      title: name,
+      threadPath: `inbox/${folder}`,
+      sourcePath: `your_instagram_activity/messages/inbox/${folder}/message_1.json`,
+      participants: isGroup ? participants : [partner, DEMO_OWNER_NAME],
       participantCount: isGroup ? participants.length : 2,
       isGroupChat: isGroup,
       messageCount: msgCount,
       folder: "inbox",
       messagesBySender,
-      firstMessageTimestamp: now - day * 90,
-      lastMessageTimestamp: now - day * 2,
-      firstMessageSender: partner,
-      lastMessageSender: "You",
+      firstMessageTimestamp: now - DAY_S * 90,
+      lastMessageTimestamp: now - DAY_S * 2,
+      firstMessageSender: lead,
+      lastMessageSender: DEMO_OWNER_NAME,
       firstMessagePreview: "Hey! demo chat preview.",
-      mostActiveMonth: "2025-11",
-      messagesByMonth: months.map((month, i) => ({
-        month,
-        count: Math.floor(msgCount / 5) + i * 12,
-      })),
+      mostActiveMonth: [...perMonth].sort((a, b) => b.count - a.count)[0]
+        ?.month,
+      messagesByMonth: perMonth,
       avgMessageLength: 42,
       emojiCount: 28,
       linkCount: 6,
@@ -149,8 +180,8 @@ function buildMessages(network: NetworkStats): DmAnalytics {
       reactionCount: 5,
       callEventCount: 0,
       callCount: 0,
-      reelsLinksBySender: { [partner]: 3 },
-      postLinksBySender: { You: 2 },
+      reelsLinksBySender: { [lead]: 3 },
+      postLinksBySender: { [DEMO_OWNER_NAME]: 2 },
       funSummary: isGroup
         ? "Group chat energy with steady meme traffic."
         : "Balanced back-and-forth with reel links.",
@@ -158,98 +189,71 @@ function buildMessages(network: NetworkStats): DmAnalytics {
     };
   }
 
-  const t1 = thread(
-    "demo-t1",
-    "Alex Rivera",
-    "Alex Rivera",
-    842,
-    false,
-    []
-  );
-  const t2 = thread(
-    "demo-t2",
-    "Jordan Chen",
-    "Jordan Chen",
-    521,
-    false,
-    []
-  );
-  const t3 = thread(
-    "demo-t3",
-    "Weekend Crew",
-    "Group",
-    1204,
-    true,
-    ["You", "Sam Okonkwo", "Taylor Brooks", "Morgan Lee", "Casey Kim"]
-  );
-  const t4 = thread(
-    "demo-t4",
-    "Riley Patel",
-    "Riley Patel",
-    198,
-    false,
-    []
-  );
-  const threads = [t1, t2, t3, t4];
+  const threads = [
+    thread("demo-t1", "Alex Rivera", "Alex Rivera", 842, false, []),
+    thread("demo-t2", "Jordan Chen", "Jordan Chen", 521, false, []),
+    thread("demo-t3", "Weekend Crew", "", 1204, true, [
+      DEMO_OWNER_NAME,
+      "Sam Okonkwo",
+      "Taylor Brooks",
+      "Morgan Lee",
+      "Casey Kim",
+    ]),
+    thread("demo-t4", "Riley Patel", "Riley Patel", 198, false, []),
+  ];
+
+  const monthTotals = new Map<string, number>();
+  for (const t of threads) {
+    for (const { month, count } of t.messagesByMonth) {
+      monthTotals.set(month, (monthTotals.get(month) ?? 0) + count);
+    }
+  }
 
   return {
-    dmParserVersion: 2,
-    totalThreads: threads.length + 3,
+    dmParserVersion: DM_PARSER_VERSION,
+    totalThreads: threads.length,
     inboxThreads: threads.length,
-    messageRequestThreads: 1,
+    messageRequestThreads: 0,
     groupChatCount: 1,
     oneOnOneCount: threads.length - 1,
-    totalMessages: threads.reduce((s, t) => s + t.messageCount, 0) + 340,
-    messagesByMonth: [
-      { month: "2025-09", count: 420 },
-      { month: "2025-10", count: 680 },
-      { month: "2025-11", count: 920 },
-      { month: "2025-12", count: 750 },
-      { month: "2026-01", count: 510 },
-    ],
+    totalMessages: threads.reduce((s, t) => s + t.messageCount, 0),
+    messagesByMonth: months.map((month) => ({
+      month,
+      count: monthTotals.get(month) ?? 0,
+    })),
     threads,
     topThreads: threads,
   };
 }
 
-function buildCoverage(): DataCoverageItem[] {
-  const ids = [
-    ["followers_following", "Followers & Following", "Connection lists"],
-    ["likes", "Likes", "Posts you liked"],
-    ["comments", "Comments", "Comments you posted"],
-    ["saved", "Saved", "Saved posts"],
-    ["story_interactions", "Story Interactions", "Stories viewed"],
-    ["messages", "Messages", "DM threads"],
-    ["ads", "Ads", "Ad interactions"],
-    ["advertisers", "Advertisers", "Advertisers who used your info"],
-    ["login_activity", "Login Activity", "Login history"],
-    ["search_history", "Search History", "Recent searches"],
-    ["connected_apps", "Connected Apps", "Third-party apps"],
-  ] as const;
-  return ids.map(([id, label, description]) => ({
-    id,
-    label,
-    description,
-    detected: true,
-    fileCount: 2,
-  }));
-}
-
 const DEMO_FILE_PATHS = [
   "connections/followers_and_following/followers_1.json",
   "connections/followers_and_following/following.json",
-  "your_instagram_activity/messages/inbox/demo_thread/message_1.json",
+  "connections/followers_and_following/pending_follow_requests.json",
+  "your_instagram_activity/messages/inbox/alex_rivera_demo_17843264891230000/message_1.json",
   "your_instagram_activity/likes/liked_posts.json",
-  "your_instagram_activity/story_interactions/stories_viewed.json",
-  "your_instagram_activity/searches/recent_searches.json",
+  "your_instagram_activity/comments/post_comments_1.json",
+  "your_instagram_activity/saved/saved_posts.json",
+  "your_instagram_activity/story_interactions/story_likes.json",
   "ads_information/ads_and_topics/ads_viewed.json",
-  "security_and_login_information/login_and_profile_activity/login_activity.json",
-  "apps_and_websites/apps_and_websites.json",
+  "ads_information/ads_and_topics/posts_viewed.json",
+  "ads_information/ads_and_topics/videos_watched.json",
+  "ads_information/instagram_ads_and_businesses/advertisers_using_your_activity_or_information.json",
+  "security_and_login_information/login_and_profile_creation/login_activity.json",
+  "security_and_login_information/login_and_profile_creation/password_change_activity.json",
+  "security_and_login_information/login_and_profile_creation/profile_activity.json",
+  "personal_information/personal_information/personal_information.json",
+  "logged_information/recent_searches/account_searches.json",
+  "logged_information/recent_searches/word_or_phrase_searches.json",
+  "apps_and_websites_off_of_instagram/apps_and_websites/active_apps.json",
+  "media/posts/202601/demo_photo.jpg",
 ];
 
 export const DEMO_FILE_FINGERPRINT = "demo-synthetic-v1";
 
 export function generateDemoData(): ParsedExportData {
+  const now = nowSeconds();
+  const months = recentMonths(5);
   const network = buildNetwork();
   const wrapped: WrappedInsights = {
     likedPosts: 1240,
@@ -264,7 +268,7 @@ export function generateDemoData(): ParsedExportData {
     videosWatched: 520,
     postsViewed: 1890,
   };
-  const messages = buildMessages(network);
+  const messages = buildMessages(months);
   const ads: AdsPrivacyData = {
     adsViewed: 312,
     adsClicked: 8,
@@ -286,7 +290,6 @@ export function generateDemoData(): ParsedExportData {
       "Tech",
     ],
   };
-  const now = Date.now();
   const security: SecurityData = {
     loginCount: 48,
     logoutCount: 42,
@@ -297,64 +300,84 @@ export function generateDemoData(): ParsedExportData {
       {
         id: "demo-login-1",
         type: "login",
-        label: "Login from Chrome on Windows",
-        timestamp: now - 86400000 * 2,
-        location: "San Francisco, US",
-        device: "Chrome / Windows",
+        label: "Login",
+        timestamp: now - DAY_S * 2,
+        device: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0",
         severity: "low",
       },
       {
         id: "demo-login-2",
         type: "login",
-        label: "Login from Instagram app",
-        timestamp: now - 86400000 * 14,
-        location: "New York, US",
-        device: "Instagram iOS",
-        severity: "medium",
-        notes: ["Different city than usual — worth a glance."],
+        label: "Login",
+        timestamp: now - DAY_S * 14,
+        device: "Instagram 330.0 (iPhone15,2; iOS 18_1)",
+        severity: "low",
       },
     ],
   };
+
+  const monthCounts = messages.messagesByMonth;
+  const peak = [...monthCounts].sort((a, b) => b.count - a.count)[0];
   const mostActiveEra: MostActiveEraData = {
-    mostActiveMonth: "2025-11",
-    mostActiveMonthLabel: "November 2025",
-    mostActiveMonthCount: 920,
+    mostActiveMonth: peak.month,
+    mostActiveMonthLabel: formatMonthLabel(peak.month),
+    mostActiveMonthCount: peak.count,
     topActivityType: "DMs",
     topActivityCaption: "DMs peaked this month.",
-    topMonths: [
-      { month: "2025-11", label: "Nov 2025", count: 920 },
-      { month: "2025-10", label: "Oct 2025", count: 680 },
-      { month: "2025-12", label: "Dec 2025", count: 750 },
-    ],
-    monthlyTotals: [
-      { month: "2025-09", label: "Sep 2025", count: 420 },
-      { month: "2025-10", label: "Oct 2025", count: 680 },
-      { month: "2025-11", label: "Nov 2025", count: 920 },
-      { month: "2025-12", label: "Dec 2025", count: 750 },
-      { month: "2026-01", label: "Jan 2026", count: 510 },
-    ],
+    topMonths: [...monthCounts]
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3)
+      .map(({ month, count }) => ({ month, label: formatMonthLabel(month), count })),
+    monthlyTotals: monthCounts.map(({ month, count }) => ({
+      month,
+      label: formatMonthLabel(month),
+      count,
+    })),
   };
 
-  const searchJson = JSON.stringify({
-    searches_serialized: [
-      { string_list_data: [{ value: "campus events demo", timestamp: now - 86400000 * 3 }] },
-      { string_list_data: [{ value: "coffee shop demo", timestamp: now - 86400000 * 7 }] },
-      { string_list_data: [{ value: "jordan chen demo", timestamp: now - 86400000 * 12 }] },
-    ],
-  });
-  const appsJson = JSON.stringify({
-    apps_and_websites_off_platform: [
-      { name: "Demo Photo Editor", added: now - 86400000 * 200 },
-      { name: "Old Quiz App Demo", added: now - 86400000 * 800 },
-    ],
-  });
-
+  // Synthetic files in the real export shapes, so owner detection, search and
+  // connected-app parsing take the same code paths as an uploaded ZIP.
   const files = new Map<string, string>();
   files.set(
-    "your_instagram_activity/searches/recent_searches.json",
-    searchJson
+    "personal_information/personal_information/personal_information.json",
+    JSON.stringify({
+      profile_user: [
+        {
+          string_map_data: {
+            Username: { value: DEMO_OWNER_USERNAME },
+            Name: { value: DEMO_OWNER_NAME },
+          },
+        },
+      ],
+    })
   );
-  files.set("apps_and_websites/apps_and_websites.json", appsJson);
+  files.set(
+    "logged_information/recent_searches/account_searches.json",
+    JSON.stringify({
+      searches_user: [
+        { string_map_data: { Search: { value: "jordan_chen_demo" }, Time: { timestamp: now - DAY_S * 12 } } },
+        { string_map_data: { Search: { value: "alex_rivera_demo" }, Time: { timestamp: now - DAY_S * 20 } } },
+      ],
+    })
+  );
+  files.set(
+    "logged_information/recent_searches/word_or_phrase_searches.json",
+    JSON.stringify({
+      searches_keyword: [
+        { string_map_data: { Search: { value: "campus events demo" }, Time: { timestamp: now - DAY_S * 3 } } },
+        { string_map_data: { Search: { value: "coffee shop demo" }, Time: { timestamp: now - DAY_S * 7 } } },
+      ],
+    })
+  );
+  files.set(
+    "apps_and_websites_off_of_instagram/apps_and_websites/active_apps.json",
+    JSON.stringify({
+      apps_and_websites_active_apps: [
+        { title: "Demo Photo Editor", string_map_data: { "Added on": { timestamp: now - DAY_S * 200 } } },
+        { title: "Old Quiz App Demo", string_map_data: { "Added on": { timestamp: now - DAY_S * 800 } } },
+      ],
+    })
+  );
 
   const base: ParsedExportData = {
     network,
@@ -364,7 +387,7 @@ export function generateDemoData(): ParsedExportData {
     security,
     mostActiveEra,
     insights: null,
-    coverage: buildCoverage(),
+    coverage: parseDataCoverage(DEMO_FILE_PATHS).coverage,
     totalFiles: 142,
     jsonFiles: 38,
     mediaFiles: 12,

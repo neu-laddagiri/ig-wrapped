@@ -17,6 +17,7 @@ import { AdRoastSection } from "@/components/AdRoastSection";
 import type { AdRoastResult, AdsPrivacyInsights } from "@/types/insights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber } from "@/lib/formatters";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface AdsPrivacyTabProps {
   ads: AdsPrivacyData | null;
@@ -27,7 +28,25 @@ interface AdsPrivacyTabProps {
 const CATEGORY_PREVIEW = 20;
 const ADVERTISER_PREVIEW = 30;
 
+function HiddenListNote({
+  count,
+  singular,
+  plural,
+}: {
+  count: number;
+  singular: string;
+  plural: string;
+}) {
+  return (
+    <p className="mt-4 text-sm text-white/45">
+      {formatNumber(count)} {count === 1 ? singular : plural} — names hidden in
+      Presentation Mode.
+    </p>
+  );
+}
+
 export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps) {
+  const { presentationMode } = usePresentationMode();
   const [showAllCategories, setShowAllCategories] = useState(false);
   const [showAllAdvertisers, setShowAllAdvertisers] = useState(false);
   const [advertiserQuery, setAdvertiserQuery] = useState("");
@@ -167,7 +186,13 @@ export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps)
               What Instagram thinks you like
             </h3>
           </div>
-          {ads.adCategories.length > 0 ? (
+          {presentationMode && ads.adCategories.length > 0 ? (
+            <HiddenListNote
+              count={ads.adCategories.length}
+              singular="ad category"
+              plural="ad categories"
+            />
+          ) : ads.adCategories.length > 0 ? (
             <>
               <ul className="mt-4 flex flex-wrap gap-2">
                 {visibleCategories.map((cat) => (
@@ -210,7 +235,13 @@ export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps)
           Companies that may have targeted you based on your Instagram activity
         </p>
 
-        {ads.advertiserNames.length > 0 ? (
+        {presentationMode && ads.advertiserNames.length > 0 ? (
+          <HiddenListNote
+            count={ads.advertiserNames.length}
+            singular="advertiser"
+            plural="advertisers"
+          />
+        ) : ads.advertiserNames.length > 0 ? (
           <>
             {ads.advertiserNames.length > 8 && (
               <div className="relative mt-4 max-w-md">
@@ -262,9 +293,9 @@ export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps)
         )}
       </div>
 
-      {adsInsights && adsInsights.brandsStalkingYou.length > 0 && (
+      {!presentationMode && adsInsights && adsInsights.brandsStalkingYou.length > 0 && (
         <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-          <h3 className="font-semibold text-white">Brands stalking you</h3>
+          <h3 className="font-semibold text-white">Advertisers in your export</h3>
           <p className="mt-1 text-xs text-white/40">
             Instagram&apos;s export suggests these advertisers may have used your
             activity.
@@ -295,17 +326,20 @@ export function AdsPrivacyTab({ ads, adsInsights, adRoast }: AdsPrivacyTabProps)
                   <div key={theme}>
                     <p className="text-xs font-medium uppercase text-white/40">
                       {theme}
+                      {presentationMode && ` · ${formatNumber(items.length)}`}
                     </p>
-                    <div className="mt-2 flex flex-wrap gap-1.5">
-                      {items.slice(0, 8).map((item) => (
-                        <span
-                          key={item}
-                          className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[11px] text-white/60"
-                        >
-                          {item}
-                        </span>
-                      ))}
-                    </div>
+                    {!presentationMode && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {items.slice(0, 8).map((item) => (
+                          <span
+                            key={item}
+                            className="rounded-full border border-white/8 bg-white/[0.03] px-2 py-0.5 text-[11px] text-white/60"
+                          >
+                            {item}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>

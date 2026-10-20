@@ -1,14 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Map, ChevronDown } from "lucide-react";
 import type { UnifiedAccount } from "@/types/insights";
 import {
   buildSocialGraphNodes,
   type GraphFilter,
 } from "@/lib/socialGraphMap";
-import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
 import { formatNumber } from "@/lib/formatters";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 const FILTERS: { id: GraphFilter; label: string }[] = [
   { id: "all", label: "All" },
@@ -35,15 +36,18 @@ interface SocialGraphMapProps {
 
 export function SocialGraphMap({
   accounts,
-  showNames = true,
+  showNames: showNamesProp = true,
   onOpenAccount,
 }: SocialGraphMapProps) {
+  const { presentationMode } = usePresentationMode();
+  const showNames = showNamesProp && !presentationMode;
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState<GraphFilter>("all");
+  const filterId = useId();
 
   const nodes = useMemo(
-    () => buildSocialGraphNodes(accounts, filter, 50),
-    [accounts, filter]
+    () => (open ? buildSocialGraphNodes(accounts, filter, 50) : []),
+    [open, accounts, filter]
   );
 
   return (
@@ -51,27 +55,33 @@ export function SocialGraphMap({
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 text-left"
       >
         <span className="flex items-center gap-2 text-sm font-medium text-white">
-          <Map className="h-4 w-4 text-[#DD2A7B]" />
+          <Map className="h-4 w-4 text-[#DD2A7B]" aria-hidden />
           {open ? "Hide relationship map" : "Show relationship map"}
         </span>
         <ChevronDown
           className={`h-4 w-4 text-white/40 transition ${open ? "rotate-180" : ""}`}
+          aria-hidden
         />
       </button>
       <p className="mt-1 text-xs text-white/35">
-        Optional — estimated from export data. Leaderboards below are the main view.
+        Optional — estimated from export data. Leaderboards above are the main view.
       </p>
 
       {open && (
         <div className="mt-4 border-t border-white/8 pt-4">
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-[10px] uppercase tracking-wider text-white/35">
+            <label
+              htmlFor={filterId}
+              className="text-[10px] uppercase tracking-wider text-white/35"
+            >
               Filter
             </label>
             <select
+              id={filterId}
               value={filter}
               onChange={(e) => setFilter(e.target.value as GraphFilter)}
               className="rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white outline-none"
@@ -102,6 +112,7 @@ export function SocialGraphMap({
                   >
                     <span
                       className="h-2.5 w-2.5 shrink-0 rounded-full"
+                      aria-hidden
                       style={{
                         backgroundColor:
                           node.cluster === "dm"
@@ -116,9 +127,7 @@ export function SocialGraphMap({
                       }}
                     />
                     <span className="min-w-0 flex-1 truncate text-sm text-white/85">
-                      {showNames
-                        ? formatAccountDisplayName(node.label)
-                        : "Account"}
+                      {redactNameLabel(node.label, showNames)}
                     </span>
                     <span className="shrink-0 text-[10px] text-white/35">
                       {CLUSTER_LABELS[node.cluster]}

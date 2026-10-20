@@ -20,7 +20,9 @@ function buildRankReason(
 ): string {
   const parts: string[] = [];
   if (account.dmMessageCount > 0) {
-    parts.push(`${account.dmMessageCount.toLocaleString()} direct DMs`);
+    parts.push(
+      `${account.dmMessageCount.toLocaleString()} direct DM${account.dmMessageCount === 1 ? "" : "s"}`
+    );
   }
   if (account.isMutual) parts.push("mutual");
   if (account.lastDmAt) parts.push("recent direct DM");
@@ -97,19 +99,19 @@ export function computeRealOnesScores(
   accounts: UnifiedAccount[]
 ): RealOnesAccount[] {
   const now = Math.floor(Date.now() / 1000);
-  const maxDm = Math.max(...accounts.map((a) => a.dmMessageCount), 1);
+  // A loop, not Math.max(...spread): large exports exceed engine argument limits.
+  let maxDm = 1;
+  for (const a of accounts) {
+    if (a.dmMessageCount > maxDm) maxDm = a.dmMessageCount;
+  }
 
   return accounts
     .filter((a) => a.dmMessageCount > 0)
     .map((account) => {
       const engagement = attributableEngagement(account);
       const components = computeScoreComponents(account, maxDm, now);
-
-      const isSilentMutual =
-        account.isMutual &&
-        account.dmMessageCount === 0 &&
-        engagement === 0 &&
-        (account.groupMessageCount ?? 0) < 2;
+      // Real Ones all have direct DMs, so none of them is a silent mutual.
+      const isSilentMutual = false;
 
       return {
         username: account.username,
@@ -128,12 +130,11 @@ export function computeRealOnesScores(
         scoreBreakdown: `DM ${Math.round(components.directDmScore)} · balance ${Math.round(components.balanceScore)} · recency ${Math.round(components.recencyScore)} · mutual ${Math.round(components.mutualBonus)}`,
       };
     })
-    .filter((a) => !a.isSilentMutual)
     .sort((a, b) => {
-      if (b.dmMessageCount !== a.dmMessageCount) {
-        return b.dmMessageCount - a.dmMessageCount;
+      if (b.realOnesScore !== a.realOnesScore) {
+        return b.realOnesScore - a.realOnesScore;
       }
-      return b.realOnesScore - a.realOnesScore;
+      return b.dmMessageCount - a.dmMessageCount;
     });
 }
 

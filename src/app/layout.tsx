@@ -1,6 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
-import { Analytics } from "@vercel/analytics/next";
+import { PrivacyAnalytics } from "@/components/PrivacyAnalytics";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { PresentationProvider } from "@/contexts/PresentationContext";
 import "./globals.css";
@@ -15,10 +15,20 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+const TITLE = "IG Wrapped — Your Instagram data, decoded";
+const DESCRIPTION =
+  "A privacy-first Instagram data export analyzer. Parse locally in your browser — optional account save for cross-device progress.";
+
 export const metadata: Metadata = {
-  title: "IG Wrapped — Your Instagram data, decoded",
-  description:
-    "A privacy-first Instagram data export analyzer. Parse locally in your browser — optional account save for cross-device progress.",
+  title: TITLE,
+  description: DESCRIPTION,
+  openGraph: { title: TITLE, description: DESCRIPTION, type: "website" },
+  twitter: { card: "summary", title: TITLE, description: DESCRIPTION },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#050509",
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
@@ -35,7 +45,7 @@ export default function RootLayout({
         <AuthProvider>
           <PresentationProvider>{children}</PresentationProvider>
         </AuthProvider>
-        <Analytics />
+        <PrivacyAnalytics />
       </body>
     </html>
   );

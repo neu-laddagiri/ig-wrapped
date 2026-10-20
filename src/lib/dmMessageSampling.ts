@@ -13,12 +13,14 @@ export interface SamplingOptions {
   useRealNames: boolean;
 }
 
-const MAX_MESSAGES = 100;
+/** Max sampled messages per thread sent to AI / kept in cloud saves. */
+export const MAX_AI_SAMPLE_MESSAGES = 100;
 const MAX_MESSAGE_CHARS = 500;
 
 export function maskSensitiveText(text: string): string {
   return text
     .replace(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/gi, "[email]")
+    .replace(/\+\d[\d\s().-]{6,18}\d/g, "[phone]")
     .replace(
       /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g,
       "[phone]"
@@ -61,7 +63,7 @@ export function prepareSelectedMessages(
   textMessages: DmMessageSample[],
   options: SamplingOptions
 ): SelectedMessageForApi[] {
-  const { mostActiveMonth, isGroup: _isGroup, useRealNames } = options;
+  const { mostActiveMonth, useRealNames } = options;
   if (!textMessages.length) return [];
 
   const withText: TextMessage[] = textMessages
@@ -103,7 +105,7 @@ export function prepareSelectedMessages(
       text: maskSensitiveText(m.text).slice(0, MAX_MESSAGE_CHARS),
     });
 
-    if (merged.length >= MAX_MESSAGES) break;
+    if (merged.length >= MAX_AI_SAMPLE_MESSAGES) break;
   }
 
   return merged;
@@ -140,14 +142,6 @@ export function buildSenderLabelMap(
   useRealNames: boolean
 ): Map<string, string> {
   return buildSenderLabels(Object.keys(messagesBySender), useRealNames);
-}
-
-/** @deprecated Use formatSenderStats */
-export function anonymizeSenderStats(
-  messagesBySender: Record<string, number>,
-  _isGroup: boolean
-): Record<string, number> {
-  return formatSenderStats(messagesBySender, false);
 }
 
 function messageKey(timestamp_ms: number, text: string): string {

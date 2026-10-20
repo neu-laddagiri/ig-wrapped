@@ -17,34 +17,54 @@ export function SinceLastSaveCard({
   currentSavedId,
 }: SinceLastSaveCardProps) {
   const { user } = useAuth();
-  const [before, setBefore] = useState<ParsedExportData | null>(null);
-  const [beforeLabel, setBeforeLabel] = useState("");
+  const userId = user?.id;
+  const requestKey =
+    userId && currentSavedId && isSupabaseConfigured()
+      ? `${userId}:${currentSavedId}`
+      : null;
+  // Tagged with the request it answers, so a change of account/save never shows a stale result.
+  const [previous, setPrevious] = useState<{
+    key: string;
+    data: ParsedExportData | null;
+    label: string;
+  } | null>(null);
 
   useEffect(() => {
-    if (!user || !isSupabaseConfigured() || !currentSavedId) {
-      setBefore(null);
-      return;
-    }
+    if (!requestKey) return;
+    let cancelled = false;
+    const settle = (data: ParsedExportData | null, label = "") => {
+      if (!cancelled) setPrevious({ key: requestKey, data, label });
+    };
     void (async () => {
       const { data: summaries } = await loadSavedAnalyses();
-      const prevSummary = summaries.find((s) => s.id !== currentSavedId);
-      if (!prevSummary) {
-        setBefore(null);
-        return;
-      }
+      const currentSummary = summaries.find((s) => s.id === currentSavedId);
+      const others = summaries.filter((s) => s.id !== currentSavedId);
+      // Prefer the newest save that is older than the current one.
+      const prevSummary =
+        others.find(
+          (s) => !currentSummary || s.updatedAt <= currentSummary.updatedAt
+        ) ?? others[0];
+      if (!prevSummary) return settle(null);
       const { data: row } = await loadSavedAnalysisById(prevSummary.id);
       const snap = row?.full_analysis_json?.parsed;
-      if (!snap) return;
-      setBefore({
-        ...snap,
-        filePaths: [],
-        mostActiveEra: snap.mostActiveEra ?? null,
-        insights: snap.insights ?? null,
-      });
-      setBeforeLabel(prevSummary.title ?? prevSummary.exportName ?? "Previous save");
-    })();
-  }, [user, currentSavedId, current]);
+      if (!snap) return settle(null);
+      settle(
+        {
+          ...snap,
+          filePaths: [],
+          mostActiveEra: snap.mostActiveEra ?? null,
+          insights: snap.insights ?? null,
+        },
+        prevSummary.title ?? prevSummary.exportName ?? "Previous save"
+      );
+    })().catch(() => settle(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [requestKey, currentSavedId]);
 
+  const before = previous?.key === requestKey ? previous.data : null;
+  const beforeLabel = previous?.key === requestKey ? previous.label : "";
   const comparison = useMemo(() => {
     if (!before) return null;
     return compareParsedExports(before, current, beforeLabel, "Current");

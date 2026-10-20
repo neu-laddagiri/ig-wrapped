@@ -1,6 +1,6 @@
 # Supabase setup for IG Wrapped
 
-Optional cloud save lets signed-in users store a **parsed analysis snapshot** and LinkedIn Helper progress. Raw ZIP files and media are never uploaded.
+Optional cloud save lets signed-in users store a **parsed analysis snapshot** and LinkedIn Helper progress. Raw ZIP files and media are never uploaded. The snapshot does include some private data (thread names, sampled DM messages, top search terms) — see [What gets saved](#what-gets-saved).
 
 ## 1. Create a Supabase project
 
@@ -32,6 +32,8 @@ NEXT_PUBLIC_SUPABASE_URL=https://your-project-ref.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your-anon-key-here
 ```
 
+Replace both values with your own. Placeholder values, or a URL that isn't a valid `http(s)://` URL, keep the app in **Local Mode** instead of failing.
+
 ## 4. Run the database schema
 
 1. In Supabase, open **SQL Editor**.
@@ -45,6 +47,9 @@ This creates:
 - `saved_analyses` table with RLS
 - Auto-profile trigger on sign up
 - `updated_at` trigger on saved analyses
+- Limits: each snapshot must be under 20 MB, and each user can keep up to 50 saved analyses
+
+The script is safe to re-run on an existing project — policies, constraints and triggers are dropped and recreated.
 
 ## 5. Enable email/password auth
 
@@ -54,7 +59,9 @@ This creates:
    - Local: `http://localhost:3000`
    - Production: your deployed domain
 
-For local development, you can disable email confirmation under **Authentication** → **Providers** → **Email** if you want instant sign-up during testing.
+For local development, you can disable email confirmation under **Authentication** → **Providers** → **Email** if you want instant sign-up during testing. With confirmation on, sign-up shows "Check your email to confirm your account" and the user signs in after clicking the link.
+
+Password reset links redirect to your site root (`/`), so the site URL must be in the allowed redirect URLs. Opening the link shows a **Set a new password** form. It must be opened in the same browser that requested the reset.
 
 ## 6. Restart the dev server
 
@@ -78,13 +85,18 @@ Environment variables are loaded at startup. Restart after changing `.env.local`
 
 | Saved | Not saved |
 |-------|-----------|
-| Parsed network lists | Original ZIP file |
-| Wrapped insight counts | Media files (photos/videos) |
-| DM analytics (counts only) | Raw DM message text |
-| Ads/privacy parsed data | Instagram login credentials |
-| Security activity counts | |
+| Follower/following/mutual lists, blocked & restricted accounts | Original ZIP file |
+| Wrapped activity counts and computed insights (scores, eras, leaderboards) | Media files (photos/videos) |
+| DM thread names, participants and per-sender message counts | Full DM message histories |
+| Up to 100 sampled messages per DM thread (emails and phone numbers masked; threads with ~50 or fewer text messages may be stored in full), used for AI summaries | Login IP addresses, locations and device names |
+| First-message previews — only if you turned previews on before saving | Instagram login credentials |
+| Top search terms and searched accounts (up to 15 each, with counts) | AI provider API keys |
+| Ad interests and advertiser names | |
+| Security event types and dates (login, logout, password and privacy changes) | |
+| Up to 500 export file paths (Data Explorer) | |
 | LinkedIn Helper statuses & notes | |
-| Active tab & DM privacy toggle | |
+| Generated AI summaries | |
+| Active tab & DM privacy toggles | |
 
 ## Troubleshooting
 
@@ -99,8 +111,12 @@ Environment variables are loaded at startup. Restart after changing `.env.local`
 
 ### RLS / permission errors
 
-- Re-run `supabase/schema.sql` in the SQL Editor.
+- Re-run `supabase/schema.sql` in the SQL Editor (safe to run more than once).
 - Confirm you are signed in as the same user who created the row.
+
+### "too large to save" / "up to 50 saved analyses"
+
+- Each snapshot must be under 20 MB, and each account can keep 50 saved analyses. Delete older saves, or adjust the limits in `supabase/schema.sql`.
 
 ### Email confirmation required
 
@@ -109,6 +125,7 @@ Environment variables are loaded at startup. Restart after changing `.env.local`
 ## Security notes
 
 - Row Level Security (RLS) ensures users only access their own rows.
+- Snapshots are stored as plain JSON, so anyone with admin access to the Supabase project (dashboard or service role key) can read them.
 - Only the anon key is used in the browser.
 - No service role key is required for this app.
 - Do not commit `.env.local` or real export ZIPs to git.

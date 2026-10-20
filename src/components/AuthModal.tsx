@@ -64,11 +64,17 @@ export function AuthModal({
       }
 
       if (mode === "signup") {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
         });
         if (signUpError) throw signUpError;
+        // No session means the project requires email confirmation first.
+        if (!data.session) {
+          setSuccess("Check your email to confirm your account, then sign in.");
+          setPassword("");
+          return;
+        }
         setSuccess("Account created! You can now save your analyses.");
         onSuccess?.();
         setTimeout(onClose, 1200);
@@ -252,5 +258,117 @@ export function AuthModal({
         </motion.div>
       </div>
     </AnimatePresence>
+  );
+}
+
+interface SetNewPasswordModalProps {
+  open: boolean;
+  onClose: () => void;
+}
+
+/** Shown after a password-reset link signs the user in (PASSWORD_RECOVERY). */
+export function SetNewPasswordModal({ open, onClose }: SetNewPasswordModalProps) {
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState(false);
+
+  if (!open) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+    const supabase = createClient();
+    if (!supabase) {
+      setError("Cloud save is not configured yet.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: updateError } = await supabase.auth.updateUser({ password });
+      if (updateError) throw updateError;
+      setSuccess(true);
+      setPassword("");
+      setConfirmPassword("");
+      setTimeout(onClose, 1500);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update password.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#0c0c12]/95 p-6 shadow-2xl backdrop-blur-xl">
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-white/40 transition hover:bg-white/10 hover:text-white"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <h2 className="text-xl font-semibold text-white">Set a new password</h2>
+        <p className="mt-1 text-sm text-white/45">
+          You opened a password reset link. Choose a new password for your account.
+        </p>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          {[
+            { label: "New password", value: password, onChange: setPassword },
+            { label: "Confirm new password", value: confirmPassword, onChange: setConfirmPassword },
+          ].map((field) => (
+            <div key={field.label}>
+              <label className="mb-1.5 block text-xs font-medium text-white/50">
+                {field.label}
+              </label>
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+                <input
+                  type="password"
+                  required
+                  minLength={6}
+                  autoComplete="new-password"
+                  value={field.value}
+                  onChange={(e) => field.onChange(e.target.value)}
+                  className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[#DD2A7B]/40"
+                  placeholder="••••••••"
+                />
+              </div>
+            </div>
+          ))}
+
+          {error && (
+            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+              {error}
+            </p>
+          )}
+
+          {success && (
+            <p className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+              <CheckCircle2 className="h-4 w-4 shrink-0" />
+              Password updated.
+            </p>
+          )}
+
+          <button
+            type="submit"
+            disabled={loading || success}
+            className="flex w-full items-center justify-center gap-2 rounded-full animated-gradient-bg py-2.5 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-50"
+          >
+            {loading && <Loader2 className="h-4 w-4 animate-spin" />}
+            Update password
+          </button>
+        </form>
+      </div>
+    </div>
   );
 }

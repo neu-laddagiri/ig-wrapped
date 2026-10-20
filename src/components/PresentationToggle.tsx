@@ -10,6 +10,8 @@ export function PresentationToggle() {
     <button
       type="button"
       onClick={togglePresentationMode}
+      aria-pressed={presentationMode}
+      title="Presentation Mode hides names and other sensitive details"
       className={`inline-flex items-center gap-2 rounded-full border px-3 py-2 text-xs font-medium backdrop-blur-sm transition ${
         presentationMode
           ? "border-[#515BD4]/40 bg-[#515BD4]/15 text-[#c4b5fd]"

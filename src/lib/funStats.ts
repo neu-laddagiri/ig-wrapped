@@ -6,7 +6,9 @@ import type {
   NetworkStats,
   WrappedInsights,
 } from "@/types/instagram";
+import type { DmAward } from "@/types/insights";
 import { formatMonthLabel, formatPercent } from "@/lib/formatters";
+import { adClickStats } from "@/lib/adsPrivacyInsights";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import {
   isDirectDmThread,
@@ -20,6 +22,31 @@ export interface FunStatCard {
   value: string;
   description: string;
   available: boolean;
+}
+
+/** Balanced / one-sided superlatives need enough messages to mean anything. */
+export const MIN_SPLIT_AWARD_MESSAGES = 20;
+
+const SPLIT_AWARD_IDS = new Set(["balanced", "one-sided"]);
+
+/** Message count per DM thread id, for checking award thread sizes. */
+export function dmThreadSizes(messages: DmAnalytics | null): Map<string, number> {
+  return new Map(
+    normalizeDmThreadList(messages).map((t) => {
+      const analytics = normalizedThreadToAnalytics(t);
+      return [analytics.id, analytics.messageCount];
+    })
+  );
+}
+
+/** False for balanced / one-sided DM awards whose thread is too small to judge. */
+export function isDmAwardMeaningful(
+  award: DmAward,
+  threadSizes: Map<string, number>
+): boolean {
+  if (!SPLIT_AWARD_IDS.has(award.id)) return true;
+  const size = threadSizes.get(award.threadId);
+  return size === undefined || size >= MIN_SPLIT_AWARD_MESSAGES;
 }
 
 function balanceScore(thread: DmThreadAnalytics): number {
@@ -46,19 +73,24 @@ export function computeFunStats(params: {
 }): FunStatCard[] {
   const { network, wrapped, messages, ads, mostActiveEra } = params;
   const normalized = normalizeDmThreadList(messages);
-  const threads = normalized.map(normalizedThreadToAnalytics);
   const directThreads = normalized.filter(isDirectDmThread).map(normalizedThreadToAnalytics);
+  const splitCandidates = directThreads.filter(
+    (t) => t.messageCount >= MIN_SPLIT_AWARD_MESSAGES
+  );
 
   const biggestYapper = directThreads.length
     ? [...directThreads].sort((a, b) => b.messageCount - a.messageCount)[0]
     : null;
 
-  const mostBalanced = directThreads.length
-    ? [...directThreads].sort((a, b) => balanceScore(b) - balanceScore(a))[0]
+  const balancedCandidates = splitCandidates.filter(
+    (t) => Object.keys(t.messagesBySender ?? {}).length >= 2
+  );
+  const mostBalanced = balancedCandidates.length
+    ? [...balancedCandidates].sort((a, b) => balanceScore(b) - balanceScore(a))[0]
     : null;
 
-  const mostOneSided = directThreads.length
-    ? [...directThreads].sort((a, b) => oneSidedScore(b) - oneSidedScore(a))[0]
+  const mostOneSided = splitCandidates.length
+    ? [...splitCandidates].sort((a, b) => oneSidedScore(b) - oneSidedScore(a))[0]
     : null;
 
   const reelsDealer = directThreads.length
@@ -136,10 +168,8 @@ export function computeFunStats(params: {
       ? (messages.totalMessages / wrapped.likedPosts).toFixed(1)
       : null;
 
-  const adsRatio =
-    ads && ads.adsViewed > 0
-      ? formatPercent(ads.adsClicked / ads.adsViewed)
-      : null;
+  const clickRate = adClickStats(ads).clickRate;
+  const adsRatio = clickRate !== null ? formatPercent(clickRate) : null;
 
   let personality = "Quiet Scroller";
   if (wrapped) {
@@ -151,8 +181,6 @@ export function computeFunStats(params: {
     else if (messages && messages.totalMessages > 5000)
       personality = "DM Power User";
   }
-
-  const hiddenName = "Hidden for sharing";
 
   const threadLabel = (thread: DmThreadAnalytics | null | undefined) =>
     thread
@@ -166,7 +194,7 @@ export function computeFunStats(params: {
       id: "biggest-yapper",
       title: "Biggest yapper",
       value: biggestYapper
-        ? `${threadLabel(biggestYapper)} (${biggestYapper.messageCount.toLocaleString()} msgs)`
+        ? `${threadLabel(biggestYapper)} (${biggestYapper.messageCount.toLocaleString()} msg${biggestYapper.messageCount === 1 ? "" : "s"})`
         : "—",
       description: "Thread with the most messages overall.",
       available: Boolean(biggestYapper),
@@ -175,14 +203,14 @@ export function computeFunStats(params: {
       id: "most-balanced",
       title: "Most balanced chat",
       value: threadLabel(mostBalanced),
-      description: "Conversation with the most even message split.",
+      description: `Most even message split among chats with ${MIN_SPLIT_AWARD_MESSAGES}+ messages.`,
       available: Boolean(mostBalanced),
     },
     {
       id: "most-one-sided",
       title: "Most one-sided chat",
       value: threadLabel(mostOneSided),
-      description: "Thread where one person sends most messages.",
+      description: `Chat (${MIN_SPLIT_AWARD_MESSAGES}+ messages) where one person sends most messages.`,
       available: Boolean(mostOneSided),
     },
     {
@@ -220,7 +248,7 @@ export function computeFunStats(params: {
       title: "Most active DM month",
       value: dmPeakMonth ? formatMonthLabel(dmPeakMonth.month) : "—",
       description: dmPeakMonth
-        ? `${dmPeakMonth.count.toLocaleString()} messages that month`
+        ? `${dmPeakMonth.count.toLocaleString()} message${dmPeakMonth.count === 1 ? "" : "s"} that month`
         : "Peak DM month across all threads.",
       available: Boolean(dmPeakMonth),
     },
@@ -285,7 +313,7 @@ export function computeFunStats(params: {
       id: "dm-like-ratio",
       title: "DM-to-like ratio",
       value: dmToLikeRatio ? `${dmToLikeRatio}:1` : "—",
-      description: "Messages sent per post liked.",
+      description: "DM messages (sent and received) per post liked.",
       available: Boolean(dmToLikeRatio),
     },
     {
@@ -298,11 +326,13 @@ export function computeFunStats(params: {
   ];
 }
 
+// The optional threads argument is accepted for older callers and unused.
 export function resolveFunStatValue(
   card: FunStatCard,
   showNames: boolean,
-  _threads: DmThreadAnalytics[] = []
-): string {
+  threads?: DmThreadAnalytics[]
+): string;
+export function resolveFunStatValue(card: FunStatCard, showNames: boolean): string {
   const nameCards = [
     "biggest-yapper",
     "most-balanced",
@@ -313,7 +343,7 @@ export function resolveFunStatValue(
   ];
   if (!showNames && nameCards.includes(card.id)) {
     if (card.id === "biggest-yapper") {
-      const match = card.value.match(/\([\d,]+ msgs\)$/);
+      const match = card.value.match(/\([\d,]+ msgs?\)$/);
       return match ? `Hidden for sharing ${match[0]}` : "Hidden for sharing";
     }
     return "Hidden for sharing";

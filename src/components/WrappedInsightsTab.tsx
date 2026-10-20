@@ -16,7 +16,13 @@ import {
   TrendingUp,
   Brain,
 } from "lucide-react";
-import type { NetworkStats, WrappedInsights, MostActiveEraData } from "@/types/instagram";
+import type {
+  AdsPrivacyData,
+  NetworkStats,
+  WrappedInsights,
+  MostActiveEraData,
+} from "@/types/instagram";
+import { adClickStats } from "@/lib/adsPrivacyInsights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber, formatPercent } from "@/lib/formatters";
 import { MostActiveEraCard, MostActiveMonthsChart } from "@/components/MostActiveEraCard";
@@ -29,6 +35,8 @@ interface WrappedInsightsTabProps {
   mostActiveEra: MostActiveEraData | null;
   contentDiet?: ContentDietResult | null;
   adsInsights?: AdsPrivacyInsights | null;
+  /** Raw ad counts — click rate/resistance can't be measured without ad views. */
+  ads?: AdsPrivacyData | null;
 }
 
 function InsightPlaceholder({
@@ -68,7 +76,9 @@ export function WrappedInsightsTab({
   mostActiveEra,
   contentDiet,
   adsInsights,
+  ads,
 }: WrappedInsightsTabProps) {
+  const adStats = adClickStats(ads);
   if (!wrapped) {
     return (
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
@@ -209,7 +219,7 @@ export function WrappedInsightsTab({
             <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
               <p className="text-xs text-white/40">Ad resistance</p>
               <p className="text-lg font-bold text-white">
-                {adsInsights.adResistanceScore}%
+                {adStats.resistance === null ? "—" : `${adStats.resistance}%`}
               </p>
             </div>
             <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
@@ -221,7 +231,9 @@ export function WrappedInsightsTab({
             <div className="rounded-xl border border-white/8 bg-white/[0.03] p-3">
               <p className="text-xs text-white/40">Click rate</p>
               <p className="text-lg font-bold text-white">
-                {Math.round(adsInsights.clickRate * 100)}%
+                {adStats.clickRate === null
+                  ? "—"
+                  : `${Math.round(adStats.clickRate * 100)}%`}
               </p>
             </div>
           </div>

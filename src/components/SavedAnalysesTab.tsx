@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
   Cloud,
@@ -25,32 +25,50 @@ import type { SavedAnalysisRow } from "@/types/analysis";
 interface SavedAnalysesTabProps {
   onSignIn: () => void;
   onLoadAnalysis: (row: SavedAnalysisRow) => void;
+  /** Called after a saved analysis is deleted, so callers can clear stale ids. */
+  onDeleted?: (id: string) => void;
 }
 
 export function SavedAnalysesTab({
   onSignIn,
   onLoadAnalysis,
+  onDeleted,
 }: SavedAnalysesTabProps) {
   const { user } = useAuth();
-  const [items, setItems] = useState<SavedAnalysisSummary[]>([]);
-  const [loading, setLoading] = useState(false);
+  const userId = user?.id;
+  // The list remembers whose it is, so switching accounts never shows stale rows.
+  const [list, setList] = useState<{
+    owner: string;
+    items: SavedAnalysisSummary[];
+    error: string | null;
+  } | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchList = useCallback(async () => {
-    if (!user) return;
-    setLoading(true);
-    setError(null);
-    const result = await loadSavedAnalyses();
-    setItems(result.data);
-    if (result.error) setError(result.error);
-    setLoading(false);
-  }, [user]);
-
   useEffect(() => {
-    fetchList();
-  }, [fetchList]);
+    if (!userId) return;
+    let cancelled = false;
+    loadSavedAnalyses()
+      .then((result) => {
+        if (!cancelled) {
+          setList({ owner: userId, items: result.data, error: result.error ?? null });
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setList({ owner: userId, items: [], error: "Could not load saved analyses." });
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const currentList = list && list.owner === userId ? list : null;
+  const items = currentList?.items ?? [];
+  const loading = Boolean(userId) && !currentList;
+  const shownError = error ?? currentList?.error ?? null;
 
   if (!isSupabaseConfigured()) {
     return (
@@ -107,26 +125,36 @@ export function SavedAnalysesTab({
   const handleLoad = async (id: string) => {
     setLoadingId(id);
     setError(null);
-    const result = await loadSavedAnalysisById(id);
-    if (result.error || !result.data) {
-      setError(result.error ?? "Could not load analysis.");
+    try {
+      const result = await loadSavedAnalysisById(id);
+      if (result.error || !result.data) {
+        setError(result.error ?? "Could not load analysis.");
+        return;
+      }
+      await onLoadAnalysis(result.data);
+    } catch {
+      setError("Could not load analysis.");
+    } finally {
       setLoadingId(null);
-      return;
     }
-    await onLoadAnalysis(result.data);
-    setLoadingId(null);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this saved analysis permanently?")) return;
     setDeletingId(id);
-    const result = await deleteSavedAnalysis(id);
-    if (result.success) {
-      setItems((prev) => prev.filter((i) => i.id !== id));
-    } else {
-      setError(result.error ?? "Could not delete.");
+    try {
+      const result = await deleteSavedAnalysis(id);
+      if (result.success) {
+        setList((prev) =>
+          prev ? { ...prev, items: prev.items.filter((i) => i.id !== id) } : prev
+        );
+        onDeleted?.(id);
+      } else {
+        setError(result.error ?? "Could not delete.");
+      }
+    } finally {
+      setDeletingId(null);
     }
-    setDeletingId(null);
   };
 
   return (
@@ -139,9 +167,9 @@ export function SavedAnalysesTab({
         </p>
       </div>
 
-      {error && (
+      {shownError && (
         <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
-          {error}
+          {shownError}
         </p>
       )}
 

@@ -5,6 +5,7 @@ import { Users, ChevronDown, ChevronUp } from "lucide-react";
 import type { InsightsBundle, GroupChatInsight } from "@/types/insights";
 import { formatTimestamp } from "@/lib/formatters";
 import { usePresentationMode } from "@/contexts/PresentationContext";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
 
 const PAGE_SIZE = 8;
 
@@ -111,6 +112,7 @@ function GroupRow({
       <button
         type="button"
         onClick={onToggle}
+        aria-expanded={isOpen}
         className="flex w-full items-start justify-between gap-3 p-4 text-left hover:bg-white/[0.02]"
       >
         <div className="min-w-0 flex-1">
@@ -123,7 +125,7 @@ function GroupRow({
             {group.topSender && (
               <span>
                 Top sender:{" "}
-                {hideNames ? "—" : group.topSender}
+                {redactNameLabel(group.topSender, !hideNames)}
               </span>
             )}
             {group.mostActiveMonth && (
@@ -135,9 +137,9 @@ function GroupRow({
           </div>
         </div>
         {isOpen ? (
-          <ChevronUp className="h-5 w-5 shrink-0 text-white/40" />
+          <ChevronUp className="h-5 w-5 shrink-0 text-white/40" aria-hidden />
         ) : (
-          <ChevronDown className="h-5 w-5 shrink-0 text-white/40" />
+          <ChevronDown className="h-5 w-5 shrink-0 text-white/40" aria-hidden />
         )}
       </button>
 

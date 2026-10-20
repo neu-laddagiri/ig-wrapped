@@ -28,7 +28,7 @@ export function buildActionPlan(
   if (highCleanup.length > 0) {
     items.push({
       id: "cleanup-high",
-      title: `Review ${highCleanup.length} high-priority follows`,
+      title: `Review ${highCleanup.length} high-priority follow${highCleanup.length === 1 ? "" : "s"}`,
       reason: "These accounts score high on cleanup priority based on export signals.",
       priority: "high",
       tab: "cleanup",
@@ -50,7 +50,7 @@ export function buildActionPlan(
     items.push({
       id: "security-review",
       title: "Review flagged security events",
-      reason: `${flagged.length} login or security events worth a glance.`,
+      reason: `${flagged.length} login or security event${flagged.length === 1 ? "" : "s"} worth a glance.`,
       priority: "high",
       tab: "security",
     });
@@ -107,18 +107,32 @@ export function buildActionPlan(
 
 const DISMISSED_KEY = "igwrapped-dismissed-actions";
 
-export function getDismissedActions(): Set<string> {
+/** Dismissals are per export (file fingerprint) so a new upload starts fresh. */
+function dismissedKey(storageKey?: string): string {
+  return storageKey ? `${DISMISSED_KEY}:${storageKey}` : DISMISSED_KEY;
+}
+
+export function getDismissedActions(storageKey?: string): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
-    return new Set(raw ? JSON.parse(raw) : []);
+    const raw = localStorage.getItem(dismissedKey(storageKey));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(
+      Array.isArray(parsed)
+        ? parsed.filter((id): id is string => typeof id === "string")
+        : []
+    );
   } catch {
     return new Set();
   }
 }
 
-export function dismissAction(id: string): void {
-  const set = getDismissedActions();
+export function dismissAction(id: string, storageKey?: string): void {
+  const set = getDismissedActions(storageKey);
   set.add(id);
-  localStorage.setItem(DISMISSED_KEY, JSON.stringify([...set]));
+  try {
+    localStorage.setItem(dismissedKey(storageKey), JSON.stringify([...set]));
+  } catch {
+    // Storage blocked or full — the dismissal just won't persist.
+  }
 }

@@ -10,6 +10,7 @@ import type {
   NetworkStats,
   ParsedExportData,
 } from "@/types/instagram";
+import type { ErasTimeline } from "@/types/insights";
 import { formatMonthKey } from "@/lib/formatters";
 
 const ACTIVITY_LABELS: Record<ActivityTypeKey, string> = {
@@ -27,8 +28,14 @@ const ACTIVITY_LABELS: Record<ActivityTypeKey, string> = {
   postsViewed: "posts viewed",
   following: "follows",
   followers: "new followers",
-  adsVideosWatched: "ad videos watched",
-  adsPostsViewed: "ad posts viewed",
+  adsVideosWatched: "videos watched",
+  adsPostsViewed: "posts viewed",
+};
+
+// posts_viewed / videos_watched under ads_information/ are organic impressions.
+const ORGANIC_TYPE: Partial<Record<ActivityTypeKey, ActivityTypeKey>> = {
+  adsVideosWatched: "videosWatched",
+  adsPostsViewed: "postsViewed",
 };
 
 type CombinedMonthMap = Map<string, Map<ActivityTypeKey, number>>;
@@ -58,7 +65,7 @@ function mergeMonthlyByType(
   source: MonthlyActivityByType
 ): void {
   for (const [type, monthMap] of source) {
-    mergeTypeMap(combined, type, monthMap);
+    mergeTypeMap(combined, ORGANIC_TYPE[type] ?? type, monthMap);
   }
 }
 
@@ -128,7 +135,7 @@ function buildEraFromCombined(combined: CombinedMonthMap): MostActiveEraData | n
       label: formatMonthLabel(month),
       count: monthTotal(types),
     }))
-    .sort((a, b) => b.count - a.count);
+    .sort((a, b) => b.count - a.count || b.month.localeCompare(a.month));
 
   const peak = monthlyTotals[0];
   if (!peak || peak.count <= 0) return null;
@@ -173,10 +180,34 @@ export function computeMostActiveEra(
   return buildEraFromCombined(combined);
 }
 
-/** Use stored era or recompute from snapshot fields (older saves) */
+function eraFromTimeline(eras: ErasTimeline): MostActiveEraData | null {
+  const peak = eras.peakMonth ?? eras.topMonths[0];
+  if (!peak || !eras.monthlyTotals.length) return null;
+  const peakLabel = eras.eraLabels.find((e) => e.month === peak.month);
+  return {
+    mostActiveMonth: peak.month,
+    mostActiveMonthLabel: peak.label || formatMonthLabel(peak.month),
+    mostActiveMonthCount: peak.count,
+    topActivityType: peakLabel?.topActivityType,
+    topActivityTypes: peakLabel?.breakdown?.slice(0, 2).map((b) => b.label),
+    topActivityCaption: peakLabel?.dominanceLine,
+    topMonths: eras.topMonths,
+    monthlyTotals: eras.monthlyTotals,
+  };
+}
+
+/**
+ * Peak-month data for display. Prefers the insights eras timeline so every tab
+ * shows the same month and count as the Eras tab; falls back to the stored era
+ * or a recompute from snapshot fields (older saves).
+ */
 export function resolveMostActiveEra(
   parsed: ParsedExportData
 ): MostActiveEraData | null {
+  const fromTimeline = parsed.insights?.eras
+    ? eraFromTimeline(parsed.insights.eras)
+    : null;
+  if (fromTimeline) return fromTimeline;
   if (parsed.mostActiveEra) return parsed.mostActiveEra;
 
   const combined = createCombinedMap();

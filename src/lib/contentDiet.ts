@@ -4,6 +4,7 @@ import type {
   WrappedInsights,
 } from "@/types/instagram";
 import type { ContentDietResult } from "@/types/insights";
+import { adClickStats } from "@/lib/adsPrivacyInsights";
 
 export function computeContentDiet(params: {
   wrapped: WrappedInsights | null;
@@ -56,10 +57,9 @@ export function computeContentDiet(params: {
     100,
     Math.round(((w.videosWatched + w.postsViewed) / Math.max(total, 1)) * 100)
   );
-  const adClickResistance =
-    ads && ads.adsViewed > 0
-      ? Math.round((1 - ads.adsClicked / ads.adsViewed) * 100)
-      : 100;
+  // null when there is no ad-view history; the shared type still wants a number.
+  const resistance = adClickStats(ads).resistance;
+  const adClickResistance = resistance ?? 100;
 
   let personality = "Engagement Machine";
   if (messages && messages.totalMessages > likes * 2) personality = "DM-First User";
@@ -68,11 +68,18 @@ export function computeContentDiet(params: {
   else if (passiveRatio > 0.7) personality = "Silent Viewer";
   else if (likes > w.savedPosts * 5) personality = "Generous Liker";
   else if (w.postComments < 5 && likes > 50) personality = "Comment Ghost";
-  else if (adClickResistance > 90) personality = "Ad-Resistant Scroller";
+  else if (
+    resistance !== null &&
+    resistance > 90 &&
+    (ads?.adsViewed ?? 0) >= 50
+  )
+    personality = "Ad-Resistant Scroller";
 
   const caption =
     personality === "DM-First User"
-      ? "You talk more than you scroll."
+      ? wrapped
+        ? "You talk more than you scroll."
+        : "Based on DMs only — this export has no likes, stories or views to compare."
       : personality === "Story Watcher"
         ? "Stories get more of your attention than likes."
         : personality === "Reels Addict"
@@ -96,7 +103,10 @@ export function computeContentDiet(params: {
       { label: "Active actions", value: active.toLocaleString() },
       { label: "Passive ratio", value: `${Math.round(passiveRatio * 100)}%` },
       { label: "Doomscroll score", value: `${doomscrollScore}/100` },
-      { label: "Ad resistance", value: `${adClickResistance}%` },
+      {
+        label: "Ad resistance",
+        value: resistance === null ? "—" : `${resistance}%`,
+      },
     ],
   };
 }

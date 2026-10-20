@@ -1,33 +1,68 @@
-import { parseTimestamp } from "@/lib/formatters";
+import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
 import { isValidAccountName, isGenericSearchLabel } from "@/lib/accountNameFilter";
 import type { SearchWrappedResult } from "@/types/insights";
 
 type JsonRecord = Record<string, unknown>;
+type SearchKind = "account" | "term";
+type SearchHit = { query: string; ts?: number; kind?: SearchKind };
 
 function isRecord(v: unknown): v is JsonRecord {
   return typeof v === "object" && v !== null && !Array.isArray(v);
 }
 
+const SEARCH_FOLDERS = [
+  "your_instagram_activity/searches/",
+  "your_instagram_activity/recent_searches/",
+  "logged_information/searches/",
+  "logged_information/recent_searches/",
+  "recent_searches/",
+  "search_history",
+  "your_search_history",
+];
+
 function isSearchPath(path: string): boolean {
   const lower = path.toLowerCase().replace(/\\/g, "/");
-  if (
-    lower.includes("your_instagram_activity/searches") ||
-    lower.includes("your_instagram_activity/recent_searches") ||
-    lower.includes("logged_information/searches") ||
-    lower.includes("recent_searches") ||
-    lower.includes("search_history") ||
-    lower.includes("your_search_history")
-  ) {
-    return true;
-  }
-  return (
-    (lower.includes("search") || lower.includes("searches")) &&
-    lower.endsWith(".json")
-  );
+  if (!lower.endsWith(".json") || lower.includes("/messages/")) return false;
+  if (SEARCH_FOLDERS.some((folder) => lower.includes(folder))) return true;
+  // Otherwise only the file name may mark it (a DM folder like "researchgate_99" must not).
+  const fileName = lower.slice(lower.lastIndexOf("/") + 1);
+  return fileName.includes("search");
 }
 
-function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
-  const results: { query: string; ts?: number }[] = [];
+/** The file says what was searched: account_searches.json vs word_or_phrase/tag searches. */
+function kindFromPath(path: string): SearchKind | undefined {
+  const fileName = path.toLowerCase().replace(/\\/g, "/").split("/").pop() ?? "";
+  if (/account|profile|user/.test(fileName)) return "account";
+  if (/word|phrase|keyword|tag|hashtag|place/.test(fileName)) return "term";
+  return undefined;
+}
+
+function acceptQuery(raw: unknown): string | null {
+  if (typeof raw !== "string") return null;
+  const q = raw.trim();
+  if (q.length <= 1 || q.length >= 120) return null;
+  if (q.startsWith("http") || isGenericSearchLabel(q)) return null;
+  return q;
+}
+
+/** { Search: {value}, Time: {timestamp} } — the time is a sibling of the query. */
+function hitFromStringMap(map: JsonRecord): SearchHit | null {
+  let query: string | null = null;
+  let ts: number | undefined;
+  for (const [key, entry] of Object.entries(map)) {
+    if (!isRecord(entry)) continue;
+    const k = key.trim().toLowerCase();
+    const t = parseTimestamp(entry.timestamp);
+    if (t && (k === "time" || !ts)) ts = t;
+    if (!query && /search|query|value|name|user/.test(k)) {
+      query = acceptQuery(entry.value);
+    }
+  }
+  return query ? { query, ts } : null;
+}
+
+function extractSearchEntries(data: unknown): SearchHit[] {
+  const results: SearchHit[] = [];
 
   function walk(node: unknown): void {
     if (Array.isArray(node)) {
@@ -36,47 +71,46 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
     }
     if (!isRecord(node)) return;
 
-    const queryFields = [
+    // Each record is one search — stop once it's counted so nested copies of
+    // the same query (title + string_list_data value) aren't counted again.
+    if (isRecord(node.string_map_data)) {
+      const hit = hitFromStringMap(node.string_map_data);
+      if (hit) {
+        results.push(hit);
+        return;
+      }
+    }
+
+    if (Array.isArray(node.string_list_data)) {
+      let found = false;
+      for (const entry of node.string_list_data) {
+        if (!isRecord(entry)) continue;
+        const q = acceptQuery(entry.value) ?? acceptQuery(node.title);
+        if (!q) continue;
+        results.push({
+          query: q,
+          ts: parseTimestamp(entry.timestamp ?? entry.timestamp_ms),
+        });
+        found = true;
+      }
+      if (found) return;
+    }
+
+    const ts = parseTimestamp(
+      node.timestamp ?? node.timestamp_ms ?? node.creation_timestamp
+    );
+    for (const field of [
       node.query,
       node.search_query,
       node.text,
       node.title,
       node.label,
       node.value,
-    ];
-    const ts = parseTimestamp(
-      node.timestamp ?? node.timestamp_ms ?? node.creation_timestamp
-    );
-
-    for (const field of queryFields) {
-      if (typeof field === "string") {
-        const q = field.trim();
-        if (
-          q.length > 1 &&
-          q.length < 120 &&
-          !q.startsWith("http") &&
-          !isGenericSearchLabel(q)
-        ) {
-          if (isValidAccountName(q) || q.includes(" ") || q.startsWith("@")) {
-            results.push({ query: q, ts });
-          }
-        }
-      }
-    }
-
-    if (Array.isArray(node.entries)) {
-      walk(node.entries);
-    }
-
-    if (Array.isArray(node.string_list_data)) {
-      for (const entry of node.string_list_data) {
-        if (!isRecord(entry)) continue;
-        const v =
-          typeof entry.value === "string" ? entry.value.trim() : undefined;
-        const t = parseTimestamp(entry.timestamp ?? entry.timestamp_ms);
-        if (v && v.length > 1 && v.length < 120 && !v.startsWith("http") && !isGenericSearchLabel(v)) {
-          results.push({ query: v, ts: t });
-        }
+    ]) {
+      const q = acceptQuery(field);
+      if (q && (isValidAccountName(q) || q.includes(" ") || q.startsWith("@"))) {
+        results.push({ query: q, ts });
+        return;
       }
     }
 
@@ -89,26 +123,20 @@ function extractSearchEntries(data: unknown): { query: string; ts?: number }[] {
   return results;
 }
 
-function monthKey(ts?: number): string | undefined {
-  if (!ts) return undefined;
-  const d = new Date(ts * 1000);
-  if (Number.isNaN(d.getTime())) return undefined;
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
 export function parseSearchHistory(
   files: Map<string, string>
 ): SearchWrappedResult | null {
-  const all: { query: string; ts?: number }[] = [];
+  const all: SearchHit[] = [];
   const filesParsed: string[] = [];
 
   for (const [path, content] of files) {
     if (!isSearchPath(path)) continue;
     try {
+      const kind = kindFromPath(path);
       const entries = extractSearchEntries(JSON.parse(content));
       if (entries.length) {
         filesParsed.push(path);
-        all.push(...entries);
+        for (const entry of entries) all.push({ ...entry, kind });
       }
     } catch {
       continue;
@@ -117,25 +145,31 @@ export function parseSearchHistory(
 
   if (!all.length) return null;
 
-  const counts = new Map<string, { count: number; lastAt?: number }>();
-  for (const { query, ts } of all) {
+  const counts = new Map<
+    string,
+    { count: number; lastAt?: number; kind?: SearchKind }
+  >();
+  for (const { query, ts, kind } of all) {
     const key = query.toLowerCase();
     const existing = counts.get(key) ?? { count: 0 };
     counts.set(key, {
       count: existing.count + 1,
       lastAt: ts && (!existing.lastAt || ts > existing.lastAt) ? ts : existing.lastAt,
+      kind: existing.kind ?? kind,
     });
   }
 
   const entries = [...counts.entries()]
-    .map(([query, { count, lastAt }]) => ({
+    .map(([query, { count, lastAt, kind }]) => ({
       query,
       count,
       lastSearchedAt: lastAt,
       type:
-        query.startsWith("@") || (!query.includes(" ") && isValidAccountName(query))
+        kind ??
+        (query.startsWith("@") ||
+        (!query.includes(" ") && isValidAccountName(query))
           ? ("account" as const)
-          : ("term" as const),
+          : ("term" as const)),
     }))
     .sort((a, b) => b.count - a.count);
 
@@ -146,8 +180,9 @@ export function parseSearchHistory(
 
   const monthCounts = new Map<string, number>();
   for (const { ts } of all) {
-    const m = monthKey(ts);
-    if (m) monthCounts.set(m, (monthCounts.get(m) ?? 0) + 1);
+    if (!ts) continue;
+    const m = formatMonthKey(ts);
+    if (m !== "unknown") monthCounts.set(m, (monthCounts.get(m) ?? 0) + 1);
   }
   const searchTimeline = [...monthCounts.entries()]
     .map(([month, count]) => ({ month, count }))
@@ -162,6 +197,6 @@ export function parseSearchHistory(
     filesParsed,
     searchTimeline,
     privacyNote:
-      "Instagram export may only include search history retained in this download. Search history can be extremely private — raw search text is not saved to cloud.",
+      "Instagram export may only include search history retained in this download. Search history can be extremely private — cloud saves keep only your top searches and counts, not the full history.",
   };
 }

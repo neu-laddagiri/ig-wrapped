@@ -15,6 +15,7 @@ import {
 import type { ParsedExportData } from "@/types/instagram";
 import type { LinkedInHelperEntry } from "@/types/instagram";
 import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
+import type { InsightsBundle } from "@/types/insights";
 import { SummaryCard } from "@/components/SummaryCard";
 import { formatNumber, formatPercent } from "@/lib/formatters";
 import { resolveInsightsBundle, INSIGHTS_BUNDLE_VERSION } from "@/lib/insightsEngine";
@@ -24,6 +25,7 @@ import { WrappedScoreboardCard } from "@/components/WrappedScoreboardCard";
 import { SinceLastSaveCard } from "@/components/SinceLastSaveCard";
 import { Play, Bot, Trash2, MessageCircle, Sparkles, Cloud } from "lucide-react";
 import type { DashboardTabId } from "@/components/DashboardTabs";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface OverviewTabProps {
   data: ParsedExportData;
@@ -37,6 +39,8 @@ interface OverviewTabProps {
   hideShareNames?: boolean;
   onNavigateTab?: (tab: DashboardTabId) => void;
   onScrollToSave?: () => void;
+  /** Precomputed bundle from the page; recomputed from `data` when absent. */
+  insights?: InsightsBundle | null;
 }
 
 export function OverviewTab({
@@ -51,11 +55,14 @@ export function OverviewTab({
   hideShareNames: hideShareNamesProp = false,
   onNavigateTab,
   onScrollToSave,
+  insights: insightsProp,
 }: OverviewTabProps) {
-  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const { presentationMode } = usePresentationMode();
+  // Names on the share card are opt-in.
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(true);
   const hideShareNames = hideShareNamesProp || hideShareNamesLocal;
   const network = data.network;
-  const insights = resolveInsightsBundle(data, linkedinProgress);
+  const insights = insightsProp ?? resolveInsightsBundle(data, linkedinProgress);
   const completeness = insights.exportCompleteness;
   const needsReupload =
     data.insights && (data.insights.version ?? 0) < INSIGHTS_BUNDLE_VERSION;
@@ -172,7 +179,13 @@ export function OverviewTab({
         <SummaryCard
           label="Export status"
           value={fileName ? "Loaded" : "—"}
-          sublabel={fileName ?? "No file"}
+          sublabel={
+            fileName
+              ? presentationMode
+                ? "File name hidden while presenting"
+                : fileName
+              : "No file"
+          }
           icon={Files}
           accent="green"
         />
@@ -299,8 +312,8 @@ export function OverviewTab({
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
           <p className="font-medium">Parsing notes</p>
           <ul className="mt-2 list-disc space-y-1 pl-5 text-amber-200/80">
-            {data.errors.map((e) => (
-              <li key={e}>{e}</li>
+            {data.errors.map((e, i) => (
+              <li key={`${i}-${e}`}>{e}</li>
             ))}
           </ul>
         </div>

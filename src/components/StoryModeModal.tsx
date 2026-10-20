@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ChevronLeft,
@@ -15,6 +15,9 @@ import {
 import type { ParsedExportData } from "@/types/instagram";
 import type { InsightsBundle } from "@/types/insights";
 import { formatNumber } from "@/lib/formatters";
+import { resolveMostActiveEra } from "@/lib/mostActiveEra";
+import { resolveDmAwardLabel } from "@/lib/dmDisplayLabels";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface StorySlide {
   id: string;
@@ -33,21 +36,32 @@ interface StoryModeModalProps {
   onHideNamesChange: (v: boolean) => void;
 }
 
-export function StoryModeModal({
-  open,
+const FOCUSABLE =
+  'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])';
+
+export function StoryModeModal({ open, ...props }: StoryModeModalProps) {
+  // Mounting the dialog only while open gives every opening a fresh slide index.
+  if (!open) return null;
+  return <StoryModeDialog {...props} />;
+}
+
+function StoryModeDialog({
   onClose,
   data,
   insights,
   hideNames,
   onHideNamesChange,
-}: StoryModeModalProps) {
+}: Omit<StoryModeModalProps, "open">) {
+  const { presentationMode } = usePresentationMode();
   const [index, setIndex] = useState(0);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   const slides = useMemo((): StorySlide[] => {
     const { network, messages, ads, wrapped } = data;
     const personality = insights.personality;
     const award = insights.dmAwards[0];
     const scoreboard = insights.wrappedScoreboard;
+    const era = resolveMostActiveEra(data);
 
     return [
       {
@@ -83,10 +97,8 @@ export function StoryModeModal({
         id: "era",
         title: "Most active era",
         lines: [
-          data.mostActiveEra?.mostActiveMonthLabel ?? "Not enough data",
-          data.mostActiveEra
-            ? `${formatNumber(data.mostActiveEra.mostActiveMonthCount)} tracked actions`
-            : "",
+          era?.mostActiveMonthLabel ?? "Not enough data",
+          era ? `${formatNumber(era.mostActiveMonthCount)} tracked actions` : "",
         ].filter(Boolean),
         icon: Sparkles,
       },
@@ -104,7 +116,7 @@ export function StoryModeModal({
         id: "award",
         title: award?.title ?? "DM highlight",
         lines: award
-          ? [award.description]
+          ? [resolveDmAwardLabel(award, !hideNames), award.description]
           : ["Upload message data to unlock DM awards."],
         icon: MessageCircle,
       },
@@ -154,7 +166,9 @@ export function StoryModeModal({
             ? `IG Health: ${scoreboard.overallHealth}/100`
             : "Wrapped complete",
           scoreboard?.verdict ?? "Thanks for exploring IG Wrapped.",
-          hideNames ? "Names hidden for sharing." : "Toggle public-safe mode before sharing.",
+          hideNames
+            ? "Names are hidden for sharing."
+            : "Names are visible — uncheck “Show names” before sharing.",
         ],
         icon: Sparkles,
       },
@@ -173,30 +187,68 @@ export function StoryModeModal({
   );
 
   useEffect(() => {
-    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowRight") go(1);
-      if (e.key === "ArrowLeft") go(-1);
-      if (e.key === "Escape") onClose();
+      else if (e.key === "ArrowLeft") go(-1);
+      else if (e.key === "Escape") onClose();
+      else if (e.key === "Tab") {
+        const dialog = dialogRef.current;
+        if (!dialog) return;
+        const focusable = [...dialog.querySelectorAll<HTMLElement>(FOCUSABLE)];
+        if (!focusable.length) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        const active = document.activeElement;
+        if (!dialog.contains(active)) {
+          e.preventDefault();
+          first.focus();
+        } else if (e.shiftKey && (active === first || active === dialog)) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [open, go, onClose]);
+  }, [go, onClose]);
 
   useEffect(() => {
-    if (open) setIndex(0);
-  }, [open]);
-
-  if (!open) return null;
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialogRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      previouslyFocused?.focus();
+    };
+  }, []);
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-4 backdrop-blur-md">
-      <div className="relative flex h-full max-h-[640px] w-full max-w-lg flex-col overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12]">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="IG Wrapped Story Mode"
+        tabIndex={-1}
+        className="relative flex h-full max-h-[640px] w-full max-w-lg flex-col overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12] outline-none"
+      >
         <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-          <label className="flex items-center gap-2 text-xs text-white/50">
+          <label
+            className="flex items-center gap-2 text-xs text-white/50"
+            title={
+              presentationMode
+                ? "Turn off Presentation Mode to show names"
+                : undefined
+            }
+          >
             <input
               type="checkbox"
               checked={!hideNames}
+              disabled={presentationMode}
               onChange={(e) => onHideNamesChange(!e.target.checked)}
               className="accent-[#DD2A7B]"
             />
@@ -205,13 +257,17 @@ export function StoryModeModal({
           <button
             type="button"
             onClick={onClose}
+            aria-label="Close Story Mode"
             className="rounded-lg p-2 text-white/40 hover:bg-white/10"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="flex flex-1 flex-col items-center justify-center px-8 py-10 text-center">
+        <div
+          className="flex flex-1 flex-col items-center justify-center px-8 py-10 text-center"
+          aria-live="polite"
+        >
           <AnimatePresence mode="wait">
             <motion.div
               key={slide.id}
@@ -251,7 +307,8 @@ export function StoryModeModal({
                     ? "w-6 animated-gradient-bg"
                     : "w-1.5 bg-white/20"
                 }`}
-                aria-label={`Slide ${i + 1}`}
+                aria-label={`Go to slide ${i + 1} of ${total}`}
+                aria-current={i === index ? "step" : undefined}
               />
             ))}
           </div>

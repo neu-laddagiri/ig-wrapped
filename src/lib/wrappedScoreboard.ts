@@ -1,5 +1,39 @@
 import type { ParsedExportData } from "@/types/instagram";
-import type { InsightsBundle, WrappedScoreboard } from "@/types/insights";
+import type {
+  ConfidenceLevel,
+  InsightsBundle,
+  ScoreboardEntry,
+  WrappedScoreboard,
+} from "@/types/insights";
+
+/**
+ * `available: false` means the export lacks this entry's inputs; `score` is then
+ * a 0 placeholder that must be shown as "—" and is left out of the overall score.
+ */
+export interface ScoreboardEntryWithAvailability extends ScoreboardEntry {
+  available?: boolean;
+}
+
+export function isScoreboardEntryAvailable(entry: ScoreboardEntry): boolean {
+  return (entry as ScoreboardEntryWithAvailability).available !== false;
+}
+
+function clampScore(n: number): number {
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(Math.max(0, Math.min(100, n)));
+}
+
+function entry(
+  id: string,
+  label: string,
+  score: number | null,
+  confidence: ConfidenceLevel
+): ScoreboardEntryWithAvailability {
+  if (score === null) {
+    return { id, label, score: 0, maxScore: 100, confidence: "low", available: false };
+  }
+  return { id, label, score: clampScore(score), maxScore: 100, confidence, available: true };
+}
 
 export function computeWrappedScoreboard(
   parsed: ParsedExportData,
@@ -9,74 +43,82 @@ export function computeWrappedScoreboard(
   const mutualRatio =
     network && network.totalFollowing > 0
       ? network.mutuals.length / network.totalFollowing
-      : 0;
+      : null;
 
-  const social = Math.min(
-    100,
-    Math.round(
-      (wrapped?.likedPosts ?? 0) / 20 +
+  const social =
+    wrapped || messages
+      ? (wrapped?.likedPosts ?? 0) / 20 +
         (wrapped?.postComments ?? 0) * 2 +
         (messages?.totalMessages ?? 0) / 80
-    )
-  );
-  const networkScore = Math.min(
-    100,
-    Math.round(mutualRatio * 100 + (network?.mutuals.length ?? 0) / 2)
-  );
-  const privacy = Math.min(
-    100,
-    Math.round(
-      100 -
-        (insights.adsInsights?.privacyCreepScore ?? 30) * 0.4 -
-        (ads?.adsClicked ?? 0) * 0.5
-    )
-  );
-  const dmEnergy = Math.min(
-    100,
-    Math.round((messages?.totalMessages ?? 0) / 50)
-  );
-  const contentDiet = Math.min(
-    100,
-    Math.round(100 - (insights.contentDiet?.doomscrollScore ?? 40))
-  );
-  const securityScore = insights.securityAudit?.healthScore ?? 70;
-  const cleanupAvg =
+      : null;
+  const networkScore =
+    network && mutualRatio !== null
+      ? mutualRatio * 100 + network.mutuals.length / 2
+      : null;
+  // Click penalty is capped so heavy clickers bottom out instead of going negative.
+  const privacy =
+    ads && insights.adsInsights
+      ? 100 -
+        insights.adsInsights.privacyCreepScore * 0.4 -
+        Math.min(40, ads.adsClicked * 0.5)
+      : null;
+  const dmEnergy = messages ? messages.totalMessages / 50 : null;
+  const contentDiet = insights.contentDiet
+    ? 100 - insights.contentDiet.doomscrollScore
+    : null;
+  const securityScore = insights.securityAudit?.healthScore ?? null;
+  const cleanupScore =
     insights.cleanup.length > 0
-      ? insights.cleanup.reduce((s, c) => s + c.cleanupPriorityScore, 0) /
-        insights.cleanup.length
-      : 50;
-  const cleanupScore = Math.min(100, Math.round(100 - cleanupAvg * 0.8));
+      ? 100 -
+        (insights.cleanup.reduce((s, c) => s + c.cleanupPriorityScore, 0) /
+          insights.cleanup.length) *
+          0.8
+      : null;
   const completeness = insights.exportCompleteness.score;
 
   const entries = [
-    { id: "social", label: "Social Score", score: social, maxScore: 100, confidence: "medium" as const },
-    { id: "network", label: "Network Score", score: networkScore, maxScore: 100, confidence: "high" as const },
-    { id: "privacy", label: "Privacy Score", score: privacy, maxScore: 100, confidence: "medium" as const },
-    { id: "dm", label: "DM Energy", score: dmEnergy, maxScore: 100, confidence: "high" as const },
-    { id: "content", label: "Content Diet", score: contentDiet, maxScore: 100, confidence: "medium" as const },
-    { id: "security", label: "Security Score", score: securityScore, maxScore: 100, confidence: "high" as const },
-    { id: "cleanup", label: "Cleanup Score", score: cleanupScore, maxScore: 100, confidence: "medium" as const },
-    { id: "data", label: "Data Completeness", score: completeness, maxScore: 100, confidence: "high" as const },
+    entry("social", "Social Score", social, wrapped && messages ? "medium" : "low"),
+    entry("network", "Network Score", networkScore, "high"),
+    entry("privacy", "Privacy Score", privacy, "medium"),
+    entry("dm", "DM Energy", dmEnergy, "high"),
+    entry("content", "Content Diet", contentDiet, "medium"),
+    entry("security", "Security Score", securityScore, security ? "high" : "medium"),
+    entry("cleanup", "Cleanup Score", cleanupScore, "medium"),
+    entry("data", "Data Completeness", completeness, "high"),
   ];
 
-  const overallHealth = Math.round(
-    entries.reduce((s, e) => s + e.score, 0) / entries.length
-  );
+  const available = entries.filter((e) => e.available);
+  const overallHealth = available.length
+    ? Math.round(available.reduce((s, e) => s + e.score, 0) / available.length)
+    : 0;
+
+  const scoreOf = (id: string): number | null => {
+    const found = entries.find((e) => e.id === id);
+    return found?.available ? found.score : null;
+  };
+  const dm = scoreOf("dm");
+  const net = scoreOf("network");
+  const priv = scoreOf("privacy");
+  const soc = scoreOf("social");
 
   let verdict = "Balanced Instagram energy with room to optimize.";
-  if (dmEnergy > 75 && networkScore > 60)
+  if (dm !== null && dm > 75 && net !== null && net > 60)
     verdict = "DM main character with a surprisingly clean network.";
-  else if (dmEnergy > 70)
-    verdict = "Strong network, chaotic inbox.";
-  else if (networkScore > 75 && dmEnergy < 40)
+  else if (dm !== null && dm > 70)
+    verdict = "Chaotic inbox — your DMs do the heavy lifting.";
+  else if (mutualRatio !== null && mutualRatio > 0.75 && (dm === null || dm < 40))
     verdict = "Low-key lurker with elite follow-back discipline.";
-  else if (privacy > 75 && social < 50)
+  else if (priv !== null && priv > 75 && soc !== null && soc < 50)
     verdict = "Socially selective, privacy-aware scroller.";
-  else if (social > 70 && privacy < 50)
+  else if (soc !== null && soc > 70 && priv !== null && priv < 50)
     verdict = "Socially active, privacy could use a tune-up.";
 
-  if (insights.personality?.title.includes("DM Main"))
-    verdict = "Socially active, privacy-aware, slightly addicted to DMs.";
+  if (insights.personality?.title.includes("DM Main")) {
+    verdict =
+      priv !== null && priv > 60
+        ? "Socially active, privacy-aware, slightly addicted to DMs."
+        : "Socially active and slightly addicted to DMs.";
+  }
 
   return { entries, overallHealth, verdict };
 }

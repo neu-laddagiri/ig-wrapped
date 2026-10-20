@@ -1,6 +1,7 @@
 import type { ParsedExportData } from "@/types/instagram";
 import { resolveInsightsBundle } from "@/lib/insightsEngine";
 import { resolveMostActiveEra } from "@/lib/mostActiveEra";
+import { adClickStats } from "@/lib/adsPrivacyInsights";
 import type { LinkedInHelperEntry } from "@/types/instagram";
 
 export function buildOverviewMetrics(
@@ -52,7 +53,8 @@ export function buildOverviewMetrics(
       : null,
     adsViewed: ads?.adsViewed ?? null,
     adsClicked: ads?.adsClicked ?? null,
-    adResistance: insights.contentDiet?.adClickResistance ?? null,
+    // null (not 100) when the export has no ad-view history.
+    adResistance: adClickStats(ads).resistance,
     privacyCreepScore: insights.adsInsights?.privacyCreepScore ?? null,
     avgCleanupScore: avgCleanup,
     avgRealOnesScore: avgRealOnes,

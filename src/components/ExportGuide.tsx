@@ -1,5 +1,6 @@
 "use client";
 
+import { useId } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Download, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 
@@ -29,6 +30,7 @@ interface ExportGuideProps {
 }
 
 export function ExportGuide({ expanded, onExpandedChange }: ExportGuideProps) {
+  const panelId = useId();
   return (
     <motion.section
       initial={{ opacity: 0, y: 16 }}
@@ -36,35 +38,40 @@ export function ExportGuide({ expanded, onExpandedChange }: ExportGuideProps) {
       transition={{ delay: 0.25 }}
       className="rounded-3xl border border-white/10 bg-white/[0.04] backdrop-blur-sm"
     >
-      <button
-        type="button"
-        onClick={() => onExpandedChange(!expanded)}
-        className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left sm:px-8"
-      >
-        <div className="flex items-center gap-2">
-          <Download className="h-5 w-5 text-[#F58529]" />
-          <h2 className="text-base font-semibold text-white sm:text-lg">
-            How to get your Instagram export
-          </h2>
-        </div>
-        <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-[#DD2A7B]">
-          {expanded ? (
-            <>
-              Hide steps
-              <ChevronUp className="h-4 w-4" />
-            </>
-          ) : (
-            <>
-              Show steps
-              <ChevronDown className="h-4 w-4" />
-            </>
-          )}
-        </span>
-      </button>
+      <h2>
+        <button
+          type="button"
+          onClick={() => onExpandedChange(!expanded)}
+          aria-expanded={expanded}
+          aria-controls={panelId}
+          className="flex w-full items-center justify-between gap-3 px-6 py-4 text-left sm:px-8"
+        >
+          <span className="flex items-center gap-2">
+            <Download className="h-5 w-5 text-[#F58529]" />
+            <span className="text-base font-semibold text-white sm:text-lg">
+              How to get your Instagram export
+            </span>
+          </span>
+          <span className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-[#DD2A7B]">
+            {expanded ? (
+              <>
+                Hide steps
+                <ChevronUp className="h-4 w-4" />
+              </>
+            ) : (
+              <>
+                Show steps
+                <ChevronDown className="h-4 w-4" />
+              </>
+            )}
+          </span>
+        </button>
+      </h2>
 
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
+            id={panelId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

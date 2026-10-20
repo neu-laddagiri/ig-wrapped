@@ -1,6 +1,6 @@
 import type { ParsedExportData } from "@/types/instagram";
 import type { ContentDietResult, BurnoutMeterResult } from "@/types/insights";
-import type { ConfidenceLevel } from "@/types/insights";
+import { isLateNightHour, localHourAndDay } from "@/lib/timeOfDay";
 
 export type { BurnoutMeterResult };
 
@@ -11,7 +11,8 @@ export function computeBurnoutMeter(
   contentDiet: ContentDietResult | null
 ): BurnoutMeterResult | null {
   const { messages, wrapped } = parsed;
-  if (!wrapped && !messages) return null;
+  // Without a content diet there is no activity or DM volume to estimate from.
+  if ((!wrapped && !messages) || !contentDiet) return null;
 
   const hourCounts = new Map<number, number>();
   const dayCounts = new Map<number, number>();
@@ -25,14 +26,12 @@ export function computeBurnoutMeter(
       const ms = msg.timestamp_ms;
       if (!ms) continue;
       totalTs++;
-      const d = new Date(ms);
-      const hour = d.getUTCHours();
-      const day = d.getUTCDay();
+      const { hour, day } = localHourAndDay(ms);
       hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
       dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
       if (day === 0 || day === 6) weekend++;
       else weekday++;
-      if (hour >= 0 && hour <= 5) lateNight++;
+      if (isLateNightHour(hour)) lateNight++;
     }
   }
 
@@ -45,13 +44,13 @@ export function computeBurnoutMeter(
     ? [...messages.messagesByMonth].sort((a, b) => b.count - a.count)[0]
     : null;
 
-  const passiveRatio = contentDiet?.passiveRatio ?? 0.55;
+  const passiveRatio = contentDiet.passiveRatio;
   const lateNightScore = totalTs > 0 ? Math.round((lateNight / totalTs) * 100) : 0;
   const touchGrassScore = clamp(
     100 -
       passiveRatio * 40 -
       lateNightScore * 0.35 -
-      (contentDiet?.doomscrollScore ?? 30) * 0.25
+      contentDiet.doomscrollScore * 0.25
   );
   const socialBatteryDrain = clamp(
     passiveRatio * 50 + lateNightScore * 0.4 + (wrapped?.storiesViewed ?? 0) / 500
@@ -66,9 +65,9 @@ export function computeBurnoutMeter(
         : "balanced";
 
   return {
-    confidence: totalTs > 100 ? "medium" : totalTs > 20 ? "low" : "low",
+    confidence: totalTs > 100 ? "medium" : "low",
     disclaimer:
-      "Estimated from available export timestamps. Instagram may not include all activity.",
+      "Estimated from available export timestamps in your local time zone. Instagram may not include all activity.",
     mostActiveHour,
     mostActiveDay,
     peakDoomscrollMonth: peakMonth?.month,
@@ -91,6 +90,10 @@ export function computeBurnoutMeter(
       {
         label: "DM messages",
         value: (messages?.totalMessages ?? 0).toLocaleString(),
+      },
+      {
+        label: "Timestamped DMs",
+        value: totalTs.toLocaleString(),
       },
       {
         label: "Passive scroll ratio",

@@ -5,11 +5,13 @@ import {
   UNKNOWN_ACCOUNT_LABEL,
 } from "@/lib/accountNameFilter";
 import {
+  buildNetworkUsernameIndex,
+  folderSlugFromPath,
   getCanonicalAccountKey,
-  isLikelyInstagramUsername,
-  normalizeUsername as canonicalNormalizeUsername,
-  rawFolderSegment,
+  isSyntheticCanonicalKey,
+  resolveUsernameCandidate,
   usernameFromFolderPath,
+  type NetworkUsernameIndex,
 } from "@/lib/accountIdentity";
 import {
   inferAccountOwnerKeys,
@@ -26,7 +28,6 @@ import {
   normalizeDmThreadList,
   type NormalizedDmThread,
 } from "@/lib/dmThreads";
-import { normalizeUsername } from "@/lib/formatters";
 import type { DmAnalytics, NetworkStats } from "@/types/instagram";
 import type { NameConfidence } from "@/types/insights";
 
@@ -96,9 +97,9 @@ export interface CoreAnalytics {
 }
 
 function folderDisplaySlug(path?: string): string | null {
-  const raw = rawFolderSegment(path);
-  if (!raw) return null;
-  return raw.replace(/_/g, " ").trim();
+  const slug = folderSlugFromPath(path);
+  if (!slug) return null;
+  return slug.replace(/_/g, " ").trim();
 }
 
 function countSentByOther(
@@ -110,6 +111,11 @@ function countSentByOther(
   splitAvailable: boolean;
 } {
   if (owner.confidence === "low" || owner.keys.size === 0) {
+    return { me: 0, them: 0, splitAvailable: false };
+  }
+  // A friend with the owner's exact display name is indistinguishable from the owner.
+  const participants = thread.participants ?? [];
+  if (participants.length > 0 && participants.every((p) => isExportOwnerName(p, owner))) {
     return { me: 0, them: 0, splitAvailable: false };
   }
   let me = 0;
@@ -128,135 +134,120 @@ function messageBalance(thread: NormalizedDmThread): number | undefined {
   return 1 - Math.abs(sorted[0] - sorted[1]) / thread.totalMessages;
 }
 
-function inferOtherParticipant(
-  thread: NormalizedDmThread,
-  owner: ExportOwnerIdentity
-): { name: string; method: MatchMethod; confidence: NameConfidence } | null {
-  const candidates: { name: string; method: MatchMethod }[] = [];
+interface NameCandidate {
+  name: string;
+  method: MatchMethod;
+}
 
-  const folderRaw = rawFolderSegment(thread.sourcePath);
-  if (folderRaw) candidates.push({ name: folderRaw, method: "folder-path" });
+/** Non-owner names for a 1:1 thread, best display source first; the folder slug is a last resort. */
+function otherParticipantCandidates(
+  thread: NormalizedDmThread,
+  owner?: ExportOwnerIdentity
+): NameCandidate[] {
+  const out: NameCandidate[] = [];
+  const isOwner = (name: string) => Boolean(owner && isExportOwnerName(name, owner));
 
   for (const p of thread.participants ?? []) {
-    if (!isExportOwnerName(p, owner)) {
-      candidates.push({ name: p, method: "participant-name" });
-    }
+    if (!isOwner(p)) out.push({ name: p, method: "participant-name" });
   }
   for (const sender of Object.keys(thread.messagesBySender ?? {})) {
-    if (!isExportOwnerName(sender, owner)) {
-      candidates.push({ name: sender, method: "sender-name" });
-    }
+    if (!isOwner(sender)) out.push({ name: sender, method: "sender-name" });
   }
   if (thread.title && !thread.isGroup && !thread.title.startsWith("Group chat")) {
-    if (!isExportOwnerName(thread.title, owner)) {
-      candidates.push({ name: thread.title, method: "thread-title" });
-    }
+    if (!isOwner(thread.title)) out.push({ name: thread.title, method: "thread-title" });
   }
+  const folderSlug = folderSlugFromPath(thread.sourcePath);
+  if (folderSlug) out.push({ name: folderSlug, method: "folder-path" });
+  return out;
+}
 
-  const names = candidates.map((c) => c.name);
-  const best = pickBestDisplayName(names) ?? names[0];
+function inferOtherParticipant(
+  thread: NormalizedDmThread,
+  owner?: ExportOwnerIdentity
+): { name: string; method: MatchMethod; confidence: NameConfidence } | null {
+  const candidates = otherParticipantCandidates(thread, owner);
+  const best = pickBestDisplayName(candidates.map((c) => c.name)) ?? candidates[0]?.name;
   if (!best?.trim()) return null;
 
+  const bestKey = normalizeIdentityKey(best);
   const method =
-    candidates.find(
-      (c) => normalizeIdentityKey(c.name) === normalizeIdentityKey(best)
-    )?.method ?? "thread-title";
-
+    candidates.find((c) => normalizeIdentityKey(c.name) === bestKey)?.method ??
+    "thread-title";
   const confidence: NameConfidence =
-    method === "folder-path" || method === "exact-username"
-      ? "high"
-      : method === "thread-title" || method === "display-name"
-        ? "medium"
-        : "high";
+    method === "participant-name" || method === "sender-name" ? "high" : "medium";
 
   return { name: best.trim(), method, confidence };
 }
 
-function resolveDirectThreadIdentity(
-  thread: NormalizedDmThread,
-  owner: ExportOwnerIdentity,
-  network: NetworkStats | null
-): {
+export interface DirectThreadAccount {
   canonicalKey: string;
+  /** Network/handle username, or the synthetic key when none could be verified. */
   username: string;
+  /** True when `username` is a real Instagram handle (safe for @labels and profile links). */
+  hasHandle: boolean;
   displayName: string;
   matchMethod: MatchMethod;
   matchConfidence: NameConfidence;
   isUnknown: boolean;
-} | null {
-  const folderUser = usernameFromFolderPath(thread.sourcePath);
-  const other = inferOtherParticipant(thread, owner);
+}
 
+/**
+ * Account for a 1:1 thread. Instagram DMs carry display names only, so a username is
+ * accepted from the folder slug or a participant name only when it matches the network
+ * export (or is unmistakably a handle); everything else is a DM-only `thread:` account.
+ * Shared by core analytics and the direct DM index so both tabs agree.
+ */
+export function resolveDirectThreadAccount(
+  thread: NormalizedDmThread,
+  owner: ExportOwnerIdentity | undefined,
+  index: NetworkUsernameIndex | null
+): DirectThreadAccount {
+  const other = inferOtherParticipant(thread, owner);
+  const isUnknown = other ? isInstagramPlaceholderName(other.name) : false;
+  const displayFor = (fallback: string) =>
+    other && !isUnknown
+      ? formatAccountDisplayName(other.name)
+      : isUnknown
+        ? UNKNOWN_ACCOUNT_LABEL
+        : formatAccountDisplayName(fallback);
+
+  const folderUser = usernameFromFolderPath(thread.sourcePath, index);
   if (folderUser) {
-    const display =
-      other && !isInstagramPlaceholderName(other.name)
-        ? formatAccountDisplayName(other.name)
-        : folderUser;
     return {
       canonicalKey: folderUser,
       username: folderUser,
-      displayName: display,
+      hasHandle: true,
+      displayName: displayFor(folderUser),
       matchMethod: "folder-path",
       matchConfidence: "high",
       isUnknown: false,
     };
   }
 
-  if (!other) return null;
-
-  const isUnknown = isInstagramPlaceholderName(other.name);
-
-  if (isLikelyInstagramUsername(other.name)) {
-    const user = canonicalNormalizeUsername(other.name);
+  for (const candidate of otherParticipantCandidates(thread, owner)) {
+    if (candidate.method === "folder-path") continue;
+    if (isInstagramPlaceholderName(candidate.name)) continue;
+    const user = resolveUsernameCandidate(candidate.name, index);
+    if (!user) continue;
     return {
       canonicalKey: user,
       username: user,
-      displayName: isUnknown
-        ? UNKNOWN_ACCOUNT_LABEL
-        : formatAccountDisplayName(other.name),
-      matchMethod: other.method,
+      hasHandle: true,
+      displayName: displayFor(user),
+      matchMethod: index?.exact.has(user) ? "exact-username" : candidate.method,
       matchConfidence: "high",
-      isUnknown,
+      isUnknown: false,
     };
   }
 
-  if (network) {
-    const normOther = canonicalNormalizeUsername(other.name);
-    const all = [
-      ...network.followers,
-      ...network.following,
-      ...network.mutuals,
-    ];
-    for (const acc of all) {
-      const netUser = canonicalNormalizeUsername(acc.username);
-      if (netUser === normOther) {
-        return {
-          canonicalKey: netUser,
-          username: netUser,
-          displayName: formatAccountDisplayName(
-            acc.displayUsername || other.name
-          ),
-          matchMethod: "exact-username",
-          matchConfidence: "high",
-          isUnknown: false,
-        };
-      }
-    }
-  }
-
-  const canonicalKey = getCanonicalAccountKey({
-    folderPath: thread.sourcePath,
-    threadId: thread.id,
-  });
-
+  const canonicalKey = getCanonicalAccountKey({ threadId: thread.id });
   return {
     canonicalKey,
     username: canonicalKey,
-    displayName: isUnknown
-      ? UNKNOWN_ACCOUNT_LABEL
-      : formatAccountDisplayName(other.name),
-    matchMethod: other.method,
-    matchConfidence: other.confidence,
+    hasHandle: false,
+    displayName: displayFor(thread.title || UNKNOWN_ACCOUNT_LABEL),
+    matchMethod: other?.method ?? "thread-title",
+    matchConfidence: other?.confidence ?? "low",
     isUnknown,
   };
 }
@@ -264,7 +255,7 @@ function resolveDirectThreadIdentity(
 function resolveGroupSenderIdentity(
   sender: string,
   threadId: string,
-  network: NetworkStats | null
+  index: NetworkUsernameIndex | null
 ): {
   canonicalKey: string;
   username: string;
@@ -273,42 +264,21 @@ function resolveGroupSenderIdentity(
 } {
   const isUnknown = isInstagramPlaceholderName(sender);
 
-  if (isLikelyInstagramUsername(sender)) {
-    const user = canonicalNormalizeUsername(sender);
+  const user = isUnknown ? null : resolveUsernameCandidate(sender, index);
+  if (user) {
     return {
       canonicalKey: user,
       username: user,
-      displayName: isUnknown
-        ? UNKNOWN_ACCOUNT_LABEL
-        : formatAccountDisplayName(sender),
-      isUnknown,
+      displayName: formatAccountDisplayName(sender),
+      isUnknown: false,
     };
   }
 
-  if (network) {
-    const norm = canonicalNormalizeUsername(sender);
-    const all = [
-      ...network.followers,
-      ...network.following,
-      ...network.mutuals,
-    ];
-    for (const acc of all) {
-      const netUser = canonicalNormalizeUsername(acc.username);
-      if (netUser === norm) {
-        return {
-          canonicalKey: netUser,
-          username: netUser,
-          displayName: formatAccountDisplayName(
-            acc.displayUsername || sender
-          ),
-          isUnknown: false,
-        };
-      }
-    }
-  }
-
   const senderKey = normalizeIdentityKey(sender);
-  const canonicalKey = `group:${threadId}:${senderKey}`;
+  // Same name across chats = one person; deleted "Instagram User"s stay per thread.
+  const canonicalKey = isUnknown
+    ? `group:${threadId}:${senderKey}`
+    : `group:${senderKey}`;
   return {
     canonicalKey,
     username: canonicalKey,
@@ -392,6 +362,7 @@ export function buildCoreAnalytics(params: {
   const { messages, network, files } = params;
   const normalized = normalizeDmThreadList(messages);
   const ownerIdentity = inferAccountOwnerKeys(network, messages, files);
+  const networkIndex = buildNetworkUsernameIndex(network);
 
   const directDmThreads = normalized.filter((t) => isDirectDmThread(t));
   const groupDmThreads = normalized.filter((t) => !isDirectDmThread(t));
@@ -400,15 +371,8 @@ export function buildCoreAnalytics(params: {
   const groupByKey = new Map<string, GroupSenderRecord>();
 
   for (const thread of directDmThreads) {
-    const identity = resolveDirectThreadIdentity(
-      thread,
-      ownerIdentity,
-      network
-    );
-    if (!identity) continue;
-
     const { canonicalKey, username, displayName, matchMethod, matchConfidence, isUnknown } =
-      identity;
+      resolveDirectThreadAccount(thread, ownerIdentity, networkIndex);
 
     const sent = countSentByOther(thread, ownerIdentity);
     const balance = messageBalance(thread);
@@ -445,11 +409,34 @@ export function buildCoreAnalytics(params: {
     }
   }
 
+  // A group sender with the same display name as a 1:1 partner who is already
+  // linked to a network username is that person — otherwise they'd split into a
+  // separate group persona and be credited with the same likes twice.
+  const usernameByDisplayName = new Map<string, string | null>();
+  for (const person of dmPeopleByKey.values()) {
+    if (person.isUnknownOrDeleted || isSyntheticCanonicalKey(person.username)) continue;
+    const nameKey = normalizeIdentityKey(person.displayName);
+    if (!nameKey) continue;
+    const known = usernameByDisplayName.get(nameKey);
+    usernameByDisplayName.set(
+      nameKey,
+      known === undefined || known === person.username ? person.username : null
+    );
+  }
+
   for (const thread of groupDmThreads) {
     for (const [sender, count] of Object.entries(thread.messagesBySender ?? {})) {
       if (!count || isExportOwnerName(sender, ownerIdentity)) continue;
 
-      const identity = resolveGroupSenderIdentity(sender, thread.id, network);
+      const linkedUsername = usernameByDisplayName.get(normalizeIdentityKey(sender));
+      const identity = linkedUsername
+        ? {
+            canonicalKey: linkedUsername,
+            username: linkedUsername,
+            displayName: formatAccountDisplayName(sender),
+            isUnknown: false,
+          }
+        : resolveGroupSenderIdentity(sender, thread.id, networkIndex);
       const existing = groupByKey.get(identity.canonicalKey);
       if (existing) {
         existing.messagesSent += count;
@@ -488,7 +475,7 @@ export function buildCoreAnalytics(params: {
     .map((p, i) => ({
       rank: i + 1,
       name: p.displayName,
-      username: p.username.startsWith("dm:") ? undefined : p.username,
+      username: isSyntheticCanonicalKey(p.username) ? undefined : p.username,
       messageCount: p.directDmCount,
       matchMethod: p.matchMethod,
       threadTitle: p.threadTitles[0],

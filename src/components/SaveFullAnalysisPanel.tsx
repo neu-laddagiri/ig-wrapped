@@ -15,12 +15,12 @@ import {
   createAnalysisSnapshot,
   saveFullAnalysisToCloud,
   deleteSavedAnalysis,
-  isSupabaseConfigured,
 } from "@/lib/cloudSave";
 import type { DashboardTabId } from "@/components/DashboardTabs";
 import type { ParsedExportData, LinkedInHelperEntry } from "@/types/instagram";
 import type { DmAiSummariesMap } from "@/types/dmAiSummary";
 import type { OverviewAiSummaryResult } from "@/types/overviewAiSummary";
+import { MAX_AI_SAMPLE_MESSAGES } from "@/lib/dmMessageSampling";
 
 interface SaveFullAnalysisPanelProps {
   parsedData: ParsedExportData;
@@ -111,36 +111,40 @@ export function SaveFullAnalysisPanel({
     setSaving(true);
     setMessage(null);
 
-    const snapshot = createAnalysisSnapshot({
-      parsedData,
-      fileName,
-      fileFingerprint,
-      linkedinProgress,
-      activeTab,
-      dmShowThreadNames,
-      dmShowFirstMessagePreview,
-      expandedGroupThreads,
-      dmAiSummaries,
-      overviewAiSummary,
-      analysisMode: isDemoMode ? "demo" : "full",
-    });
-
-    const result = await saveFullAnalysisToCloud({
-      snapshot,
-      linkedinProgress,
-      existingId: currentSavedId,
-    });
-
-    setSaving(false);
-
-    if (result.success && result.id) {
-      setMessage({ type: "success", text: "Full analysis saved to your account." });
-      onSaved(result.id);
-    } else {
-      setMessage({
-        type: "error",
-        text: result.error ?? "Could not save analysis.",
+    try {
+      const snapshot = createAnalysisSnapshot({
+        parsedData,
+        fileName,
+        fileFingerprint,
+        linkedinProgress,
+        activeTab,
+        dmShowThreadNames,
+        dmShowFirstMessagePreview,
+        expandedGroupThreads,
+        dmAiSummaries,
+        overviewAiSummary,
+        analysisMode: isDemoMode ? "demo" : "full",
       });
+
+      const result = await saveFullAnalysisToCloud({
+        snapshot,
+        linkedinProgress,
+        existingId: currentSavedId,
+      });
+
+      if (result.success && result.id) {
+        setMessage({ type: "success", text: "Full analysis saved to your account." });
+        onSaved(result.id);
+      } else {
+        setMessage({
+          type: "error",
+          text: result.error ?? "Could not save analysis.",
+        });
+      }
+    } catch {
+      setMessage({ type: "error", text: "Could not save analysis." });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -150,17 +154,19 @@ export function SaveFullAnalysisPanel({
 
     setDeleting(true);
     setMessage(null);
-    const result = await deleteSavedAnalysis(currentSavedId);
-    setDeleting(false);
-
-    if (result.success) {
-      setMessage({ type: "success", text: "Saved analysis deleted." });
-      onDeleted();
-    } else {
-      setMessage({
-        type: "error",
-        text: result.error ?? "Could not delete analysis.",
-      });
+    try {
+      const result = await deleteSavedAnalysis(currentSavedId);
+      if (result.success) {
+        setMessage({ type: "success", text: "Saved analysis deleted." });
+        onDeleted();
+      } else {
+        setMessage({
+          type: "error",
+          text: result.error ?? "Could not delete analysis.",
+        });
+      }
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -182,7 +188,7 @@ export function SaveFullAnalysisPanel({
           <p className="mt-2 text-xs text-white/35">
             {isDemoMode
               ? "Demo mode uses synthetic data. Cloud save is optional — use “Save full analysis” only if you want a demo snapshot on your account."
-              : "This saves your parsed analysis snapshot and app progress. It does not upload your original ZIP or media files. Saved analyses include limited, sanitized DM samples so AI summaries can work later. Raw ZIPs, media files, and full message histories are not saved."}
+              : `Saves your parsed dashboard: follower/following lists, DM thread names and participants with message counts, up to ${MAX_AI_SAMPLE_MESSAGES} sampled messages per thread (emails and phone numbers masked; short threads may be saved in full) so AI summaries work later, your top search terms, ad interests and advertisers, security event types and dates, LinkedIn Helper notes, and any AI summaries. Not saved: your ZIP, media files, full message histories, or login IP addresses, locations and devices.`}
           </p>
         </div>
       </div>

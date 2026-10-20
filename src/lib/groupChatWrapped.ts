@@ -2,6 +2,7 @@ import type { DmThreadAnalytics } from "@/types/instagram";
 import type { GroupChatInsight, GroupChatRole } from "@/types/insights";
 import { normalizeDmThreads } from "@/lib/dmThreads";
 import type { DmAnalytics } from "@/types/instagram";
+import { isLateNightHour, localHourAndDay } from "@/lib/timeOfDay";
 
 function assignRole(
   participant: string,
@@ -33,7 +34,7 @@ export function computeGroupChatInsights(
 
 function buildGroupInsight(thread: DmThreadAnalytics): GroupChatInsight {
   const total = thread.messageCount || 1;
-  const senders = Object.entries(thread.messagesBySender).sort(
+  const senders = Object.entries(thread.messagesBySender ?? {}).sort(
     (a, b) => b[1] - a[1]
   );
   const maxCount = senders[0]?.[1] ?? 0;
@@ -45,8 +46,8 @@ function buildGroupInsight(thread: DmThreadAnalytics): GroupChatInsight {
     const share = Math.round((count / total) * 100);
     messageShare[participant] = share;
     const reels =
-      (thread.reelsLinksBySender[participant] ?? 0) +
-      (thread.postLinksBySender[participant] ?? 0);
+      (thread.reelsLinksBySender?.[participant] ?? 0) +
+      (thread.postLinksBySender?.[participant] ?? 0);
     roles.push({
       participant,
       role: assignRole(
@@ -65,9 +66,8 @@ function buildGroupInsight(thread: DmThreadAnalytics): GroupChatInsight {
 
   let lateNightCount = 0;
   for (const m of thread.textMessages ?? []) {
-    const d = new Date(m.timestamp_ms);
-    const hour = d.getUTCHours();
-    if (hour >= 0 && hour <= 5) lateNightCount++;
+    if (!m.timestamp_ms) continue;
+    if (isLateNightHour(localHourAndDay(m.timestamp_ms).hour)) lateNightCount++;
   }
 
   return {

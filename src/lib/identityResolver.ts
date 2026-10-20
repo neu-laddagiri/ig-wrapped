@@ -2,9 +2,7 @@ import { normalizeUsername } from "@/lib/formatters";
 import {
   isInstagramPlaceholderName,
   pickBestDisplayName,
-  cleanRawDisplayName,
   formatAccountDisplayName,
-  formatAccountUsername,
   UNKNOWN_ACCOUNT_LABEL,
 } from "@/lib/accountNameFilter";
 import {
@@ -28,9 +26,9 @@ import {
   type InteractionExportMeta,
 } from "@/lib/interactionExportParser";
 import {
+  folderSlugFromPath,
   isLikelyInstagramUsername,
   normalizeUsername as identityNormalizeUsername,
-  usernamesMatch,
 } from "@/lib/accountIdentity";
 
 export type MatchMethod =
@@ -128,30 +126,8 @@ export interface IdentityGraph {
   coreAnalytics?: import("@/lib/insights/coreAnalytics").CoreAnalytics;
 }
 
-const COMMON_FIRST_NAMES = new Set([
-  "alex",
-  "chris",
-  "jordan",
-  "sam",
-  "taylor",
-  "morgan",
-  "casey",
-  "jamie",
-  "riley",
-  "avery",
-  "john",
-  "mike",
-  "david",
-  "sarah",
-  "emma",
-  "james",
-  "michael",
-  "daniel",
-  "maria",
-]);
-
 export function normalizeIdentityKey(name: string): string {
-  return repairMojibake(name)
+  return name
     .normalize("NFKC")
     .replace(/[\u200B-\u200D\uFEFF]/g, "")
     .trim()
@@ -176,26 +152,27 @@ export function primaryNameToken(name: string): string {
   return compactIdentityKey(first);
 }
 
-function repairMojibake(text: string): string {
-  if (!/Ã|Â|â€™|â€œ|â€/.test(text)) return text;
-  try {
-    const bytes = new Uint8Array([...text].map((c) => c.charCodeAt(0) & 0xff));
-    return new TextDecoder("utf-8").decode(bytes);
-  } catch {
-    return text;
-  }
-}
-
 function slugFromPath(path?: string): string | null {
-  if (!path) return null;
-  const parts = path.replace(/\\/g, "/").split("/");
-  const inboxIdx = parts.findIndex(
-    (p) => p === "inbox" || p === "message_requests"
-  );
-  if (inboxIdx < 0 || !parts[inboxIdx + 1]) return null;
-  const slug = parts[inboxIdx + 1].replace(/_/g, " ").trim();
+  const slug = folderSlugFromPath(path);
   if (!slug || isInstagramPlaceholderName(slug)) return null;
   return slug;
+}
+
+interface NetworkLookup {
+  followers: Map<string, NetworkStats["followers"][number]>;
+  following: Map<string, NetworkStats["following"][number]>;
+}
+
+function buildNetworkLookup(network: NetworkStats): NetworkLookup {
+  const toMap = (list: NetworkStats["followers"]) => {
+    const map = new Map<string, NetworkStats["followers"][number]>();
+    for (const acc of list) {
+      const user = identityNormalizeUsername(acc.username);
+      if (!map.has(user)) map.set(user, acc);
+    }
+    return map;
+  };
+  return { followers: toMap(network.followers), following: toMap(network.following) };
 }
 
 export function inferAccountOwnerKeys(
@@ -345,7 +322,7 @@ function applyInteractionsToPerson(
 
 function createPersonFromDmRecord(
   record: DmPersonRecord,
-  network: NetworkStats
+  lookup: NetworkLookup
 ): CanonicalPerson {
   const username = record.username;
   const canonicalId = isLikelyInstagramUsername(username)
@@ -365,12 +342,9 @@ function createPersonFromDmRecord(
     aliases.add(normalizeIdentityKey(displayName));
   }
 
-  const follower = network.followers.find((a) =>
-    usernamesMatch(a.username, username)
-  );
-  const following = network.following.find((a) =>
-    usernamesMatch(a.username, username)
-  );
+  const normUser = identityNormalizeUsername(username);
+  const follower = lookup.followers.get(normUser);
+  const following = lookup.following.get(normUser);
 
   return {
     canonicalId,
@@ -420,12 +394,10 @@ function resolveDmRecordToCanonicalId(
   record: DmPersonRecord,
   persons: Map<string, CanonicalPerson>
 ): string | null {
+  // Persons are keyed by normalized username, so a direct lookup equals the old full scan.
   if (isLikelyInstagramUsername(record.username)) {
     const user = identityNormalizeUsername(record.username);
     if (persons.has(user)) return user;
-    for (const person of persons.values()) {
-      if (usernamesMatch(person.username, user)) return person.canonicalId;
-    }
   }
   if (persons.has(record.stableKey)) return record.stableKey;
   return null;
@@ -443,7 +415,7 @@ function applyGroupSender(
 
 function createPersonFromGroupSender(
   sender: GroupSenderRecord,
-  network: NetworkStats
+  lookup: NetworkLookup
 ): CanonicalPerson {
   const base = createPersonFromDmRecord(
     {
@@ -461,7 +433,7 @@ function createPersonFromGroupSender(
       senderSplitAvailable: false,
       senderSplitConfidence: "low",
     },
-    network
+    lookup
   );
   base.groupMessagesSent = sender.messagesSent;
   base.dm = emptyDmMatch();
@@ -476,7 +448,7 @@ function createPersonFromNetwork(
     href?: string;
     timestamp?: number;
   },
-  network: NetworkStats
+  lookup: NetworkLookup
 ): CanonicalPerson {
   const username = normalizeUsername(acc.username);
   const displayName = acc.displayUsername || username;
@@ -488,8 +460,8 @@ function createPersonFromNetwork(
     aliases.add(normalizeIdentityKey(displayName));
   }
 
-  const follower = network.followers.find((a) => a.username === username);
-  const following = network.following.find((a) => a.username === username);
+  const follower = lookup.followers.get(username);
+  const following = lookup.following.get(username);
 
   return {
     canonicalId: username,
@@ -601,22 +573,6 @@ function collectDirectThreadCandidates(
   return out;
 }
 
-function countSentByOther(
-  thread: DmThreadAnalytics,
-  owner: ExportOwnerIdentity
-): { me: number; them: number; splitAvailable: boolean } {
-  if (owner.confidence === "low" || owner.keys.size === 0) {
-    return { me: 0, them: 0, splitAvailable: false };
-  }
-  let me = 0;
-  let them = 0;
-  for (const [sender, count] of Object.entries(thread.messagesBySender ?? {})) {
-    if (isOwnerName(sender, owner)) me += count;
-    else them += count;
-  }
-  return { me, them, splitAvailable: true };
-}
-
 export interface BuildIdentityGraphParams {
   network: NetworkStats | null;
   messages: DmAnalytics | null;
@@ -679,17 +635,17 @@ export function buildIdentityGraph(
     ...network.restricted,
   ];
 
+  const lookup = buildNetworkLookup(network);
+
   for (const acc of allNetwork) {
     const username = normalizeUsername(acc.username);
     if (persons.has(username)) continue;
-    const person = createPersonFromNetwork(acc, network);
+    const person = createPersonFromNetwork(acc, lookup);
     persons.set(username, person);
     for (const alias of person.aliases) {
       registerAlias(aliasToCanonical, alias, username);
     }
   }
-
-  const owner = inferAccountOwnerKeys(network, messages, files);
 
   const core =
     coreAnalyticsInput ??
@@ -748,7 +704,7 @@ export function buildIdentityGraph(
         threadTitle: record.threadTitles[0],
       });
     } else if (network) {
-      const person = createPersonFromDmRecord(record, network);
+      const person = createPersonFromDmRecord(record, lookup);
       persons.set(person.canonicalId, person);
       for (const alias of person.aliases) {
         registerAlias(aliasToCanonical, alias, person.canonicalId);
@@ -804,7 +760,7 @@ export function buildIdentityGraph(
       continue;
     }
 
-    const person = createPersonFromGroupSender(sender, network);
+    const person = createPersonFromGroupSender(sender, lookup);
     persons.set(person.canonicalId, person);
     for (const alias of person.aliases) {
       registerAlias(aliasToCanonical, alias, person.canonicalId);
@@ -985,7 +941,8 @@ export function buildThreadDebugFromGraph(
   const { messages, network } = params;
   if (!messages) return [];
 
-  const owner = inferAccountOwnerKeys(network, messages);
+  const owner =
+    graph.coreAnalytics?.ownerIdentity ?? inferAccountOwnerKeys(network, messages);
   const debug: DmThreadDebugEntry[] = [];
 
   for (const thread of messages.threads ?? []) {

@@ -1,7 +1,6 @@
 import { formatMonthKey, formatMonthLabel } from "@/lib/formatters";
 import { parseActivityTimelineFromFiles } from "@/lib/activityTimelineParser";
 import type { MonthlyActivityByType } from "@/lib/activityTimelineParser";
-import { computeMostActiveEra } from "@/lib/mostActiveEra";
 import type {
   ActivityTypeKey,
   DmAnalytics,
@@ -33,7 +32,7 @@ const GROUP_LABELS: Record<EraGroupKey, string> = {
   comments: "Comments",
   saves: "Saved posts",
   follows: "Follows",
-  ads: "Ad views",
+  ads: "Ads seen or clicked",
   searches: "Searches",
   accountEvents: "Account events",
 };
@@ -53,8 +52,10 @@ const TYPE_TO_GROUP: Partial<Record<ActivityTypeKey, EraGroupKey>> = {
   savedPosts: "saves",
   following: "follows",
   followers: "follows",
-  adsVideosWatched: "ads",
-  adsPostsViewed: "ads",
+  // posts_viewed / videos_watched under ads_information/ads_and_topics/ are
+  // organic content impressions, not ads.
+  adsVideosWatched: "doomscroll",
+  adsPostsViewed: "doomscroll",
 };
 
 type MonthSources = Set<"export_files" | "dm_parser" | "network" | "security" | "search">;
@@ -69,8 +70,7 @@ function addGroupCount(
   map: MonthlyGroupMap,
   month: string,
   group: EraGroupKey,
-  count: number,
-  source: MonthSources extends Set<infer S> ? S : never
+  count: number
 ): void {
   if (!month || month === "unknown" || count <= 0) return;
   let groups = map.get(month);
@@ -100,7 +100,7 @@ function mergeActivityTypes(
     const group = TYPE_TO_GROUP[type];
     if (!group || !monthMap) continue;
     for (const [month, count] of monthMap) {
-      addGroupCount(map, month, group, count, "export_files");
+      addGroupCount(map, month, group, count);
       markSource(month, "export_files");
     }
   }
@@ -109,7 +109,7 @@ function mergeActivityTypes(
 function addDmMonths(map: MonthlyGroupMap, messages: DmAnalytics | null): void {
   if (!messages?.messagesByMonth?.length) return;
   for (const { month, count } of messages.messagesByMonth) {
-    addGroupCount(map, month, "dms", count, "dm_parser");
+    addGroupCount(map, month, "dms", count);
     markSource(month, "dm_parser");
   }
 }
@@ -119,13 +119,13 @@ function addNetworkMonths(map: MonthlyGroupMap, network: NetworkStats | null): v
   for (const account of network.following) {
     if (!account.timestamp) continue;
     const month = formatMonthKey(account.timestamp);
-    addGroupCount(map, month, "follows", 1, "network");
+    addGroupCount(map, month, "follows", 1);
     markSource(month, "network");
   }
   for (const account of network.followers) {
     if (!account.timestamp) continue;
     const month = formatMonthKey(account.timestamp);
-    addGroupCount(map, month, "follows", 1, "network");
+    addGroupCount(map, month, "follows", 1);
     markSource(month, "network");
   }
 }
@@ -138,7 +138,7 @@ function addSecurityMonths(map: MonthlyGroupMap, security: SecurityData | null):
     if (seen.has(dedupeKey)) continue;
     seen.add(dedupeKey);
     const month = formatMonthKey(e.timestamp);
-    addGroupCount(map, month, "accountEvents", 1, "security");
+    addGroupCount(map, month, "accountEvents", 1);
     markSource(month, "security");
   }
 }
@@ -148,7 +148,7 @@ function addSearchMonths(
   search: SearchWrappedResult | null | undefined
 ): void {
   for (const { month, count } of search?.searchTimeline ?? []) {
-    addGroupCount(map, month, "searches", count, "search");
+    addGroupCount(map, month, "searches", count);
     markSource(month, "search");
   }
 }
@@ -160,10 +160,10 @@ function addAdsFromFiles(map: MonthlyGroupMap, files?: Map<string, string>): voi
     if (!lower.includes("ads_viewed") && !lower.includes("ads_clicked")) continue;
     try {
       const data = JSON.parse(content);
-      const timestamps = extractUniqueTimestamps(data);
+      const timestamps = extractEventTimestamps(data);
       for (const ts of timestamps) {
         const month = formatMonthKey(ts);
-        addGroupCount(map, month, "ads", 1, "export_files");
+        addGroupCount(map, month, "ads", 1);
         markSource(month, "export_files");
       }
     } catch {
@@ -172,8 +172,8 @@ function addAdsFromFiles(map: MonthlyGroupMap, files?: Map<string, string>): voi
   }
 }
 
-function extractUniqueTimestamps(data: unknown): number[] {
-  const seen = new Set<number>();
+/** One timestamp per ad event; same-second events are distinct events. */
+function extractEventTimestamps(data: unknown): number[] {
   const out: number[] = [];
 
   function walk(node: unknown): void {
@@ -190,10 +190,7 @@ function extractUniqueTimestamps(data: unknown): number[] {
         if (typeof entry !== "object" || entry === null) continue;
         const e = entry as Record<string, unknown>;
         const ts = parseTs(e.timestamp ?? e.timestamp_ms);
-        if (ts && !seen.has(ts)) {
-          seen.add(ts);
-          out.push(ts);
-        }
+        if (ts) out.push(ts);
       }
       return;
     }
@@ -202,11 +199,23 @@ function extractUniqueTimestamps(data: unknown): number[] {
       rec.timestamp ?? rec.timestamp_ms ?? rec.creation_timestamp
     );
     if (direct) {
-      if (!seen.has(direct)) {
-        seen.add(direct);
-        out.push(direct);
-      }
+      out.push(direct);
       return;
+    }
+
+    // { string_map_data: { Author, Time: { timestamp } } } is a single event.
+    const map = rec.string_map_data;
+    if (typeof map === "object" && map !== null && !Array.isArray(map)) {
+      let mapTs: number | undefined;
+      for (const [key, entry] of Object.entries(map as Record<string, unknown>)) {
+        if (typeof entry !== "object" || entry === null) continue;
+        const ts = parseTs((entry as Record<string, unknown>).timestamp);
+        if (ts && (key.toLowerCase() === "time" || !mapTs)) mapTs = ts;
+      }
+      if (mapTs) {
+        out.push(mapTs);
+        return;
+      }
     }
 
     for (const value of Object.values(rec)) {
@@ -258,6 +267,10 @@ export function monthTotal(groups: Map<EraGroupKey, number>): number {
   return t;
 }
 
+function inlineLabel(label: string): string {
+  return label === "DMs" ? label : label.toLowerCase();
+}
+
 export function topGroupsForMonth(
   groups: Map<EraGroupKey, number>,
   limit = 3
@@ -298,15 +311,19 @@ export function inferEraFromGroups(
     topShare < 0.35 ||
     (second && second.count / total > 0.25 && top.count - second.count < total * 0.1);
 
+  // A runner-up with a sliver of the month isn't "dominating" it.
   const dominanceLine =
-    ranked.length >= 2
-      ? `Dominated by ${ranked[0].label.toLowerCase()} and ${ranked[1].label.toLowerCase()}.`
-      : `Dominated by ${ranked[0].label.toLowerCase()}.`;
+    second && second.count / total >= 0.15
+      ? `Dominated by ${inlineLabel(ranked[0].label)} and ${inlineLabel(ranked[1].label)}.`
+      : `Dominated by ${inlineLabel(ranked[0].label)}.`;
 
   if (isMixed) {
+    const dmsRanked = ranked.some((r) => r.key === "dms");
     return {
       eraName: "Mixed Activity Era",
-      caption: "Your feed and inbox were both working overtime.",
+      caption: dmsRanked
+        ? "Your feed and inbox were both working overtime."
+        : "Your activity was spread across several things this month.",
       dominanceLine,
       topGroup: top.key,
       topCount: top.count,
@@ -322,7 +339,7 @@ export function inferEraFromGroups(
     return {
       eraName: "Account Changes Era",
       caption:
-        "This month had unusual account/profile activity worth reviewing.",
+        "Mostly logins and account/profile events this month — usually routine.",
       dominanceLine,
       topGroup: "accountEvents",
       topCount: accountEvents,
@@ -340,10 +357,10 @@ export function inferEraFromGroups(
     comments: "You were commenting up a storm this month.",
     saves: "Curator mode — saving posts for later.",
     follows: "Network growth was the main event this month.",
-    ads: "Ads were showing up more than usual in your export.",
+    ads: "Ads you saw or clicked dominated this month in your export.",
     searches: "Search curiosity spiked this month.",
     accountEvents:
-      "This month had unusual account/profile activity worth reviewing.",
+      "Mostly logins and account/profile events this month — usually routine.",
   };
 
   const eraNames: Record<EraGroupKey, string> = {
@@ -402,12 +419,15 @@ export function resolveMonthlyBreakdown(
 
   let mostActiveEra = parsed.mostActiveEra;
 
-  if (combinedForTotals.size > 0) {
+  // Without the ZIP files (saved analyses) the group map is partial; keep the
+  // era computed from the full export instead of overwriting it.
+  if (combinedForTotals.size > 0 && (files?.size || !mostActiveEra)) {
     const monthlyTotals = [...combinedForTotals.values()].sort((a, b) =>
       a.month.localeCompare(b.month)
     );
+    // Ties go to the more recent month so the peak is deterministic.
     const byCount = [...combinedForTotals.values()].sort(
-      (a, b) => b.count - a.count
+      (a, b) => b.count - a.count || b.month.localeCompare(a.month)
     );
     const peak = byCount[0];
     const peakGroups = groupMap.get(peak.month);
@@ -424,13 +444,6 @@ export function resolveMonthlyBreakdown(
       topMonths: byCount.slice(0, 3),
       monthlyTotals,
     };
-  } else if (!mostActiveEra && files?.size) {
-    mostActiveEra = computeMostActiveEra({
-      files,
-      messages: parsed.messages,
-      network: parsed.network,
-      ads: parsed.ads,
-    });
   }
 
   return { groupMap, mostActiveEra };

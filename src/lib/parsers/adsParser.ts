@@ -147,6 +147,7 @@ function countItems(data: unknown): number {
     "label_values",
     "inferred_data_from_your_activity",
     "inferred_data_from_your_information",
+    "ig_custom_audiences_all_types",
     "ig_custom_audience_all_types",
     "custom_audience_info",
   ];

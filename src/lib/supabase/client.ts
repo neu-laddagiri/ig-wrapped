@@ -9,7 +9,13 @@ export function createClient(): SupabaseClient | null {
 
   if (!client) {
     const { url, anonKey } = getSupabaseEnv();
-    client = createBrowserClient(url, anonKey);
+    try {
+      client = createBrowserClient(url, anonKey);
+    } catch (err) {
+      // A malformed env value degrades to local-only mode instead of crashing.
+      console.error("[supabase] could not create client:", err instanceof Error ? err.message : err);
+      return null;
+    }
   }
 
   return client;

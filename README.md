@@ -62,7 +62,7 @@ IG Wrapped is designed with privacy as the core principle:
 - **ZIP parsed locally** — JSZip parses JSON in your browser; the raw ZIP is never uploaded automatically
 - **Optional cloud save** — Sign in only if you want to save your parsed analysis snapshot
 - **No media upload** — Photos and videos from your export are never sent to the cloud
-- **No scraping** — Does not access Instagram, LinkedIn, or any external API
+- **No scraping** — Never contacts Instagram or LinkedIn; the only network calls are the optional cloud save (Supabase) and optional AI features you trigger
 - **No LinkedIn automation** — LinkedIn Helper only opens manual Google search links
 - **DM privacy** — Message previews off by default; Presentation Mode hides names and sensitive details for sharing
 - **AI summaries are opt-in** — DM text is only sent to the AI provider when you click Generate AI Summary for a thread
@@ -71,20 +71,17 @@ IG Wrapped is designed with privacy as the core principle:
 
 ### What cloud save stores
 
-When you click **Save full analysis**, IG Wrapped stores:
+When you click **Save full analysis**, IG Wrapped stores a parsed snapshot in your Supabase account:
 
-- Parsed dashboard data (network lists, wrapped insights, DM analytics, ads, security)
-- Computed insights bundle (unified accounts, cleanup/real ones scores, DM awards, eras, content diet, personality, export completeness)
-- LinkedIn Helper statuses and notes
-- Generated AI summaries (if you created them)
-- Export metadata and progress
+- Follower, following, mutual, blocked and restricted account lists
+- Activity counts and computed insights (scores, eras, leaderboards, personality)
+- DM thread names, participants and per-sender message counts
+- Up to 100 sampled messages per DM thread (emails and phone numbers masked; short threads may be stored in full) so AI summaries work later; first-message previews only if you enabled them
+- Your top search terms and searched accounts (up to 15 each, with counts)
+- Ad interests and advertiser names; security event types and dates
+- LinkedIn Helper statuses and notes, generated AI summaries, and export metadata
 
-It does **not** store:
-
-- Your original ZIP or media files
-- Full raw message history
-- Raw search history (only sanitized summaries when applicable)
-- API keys
+It does **not** store your original ZIP or media files, full DM message histories, login IP addresses, locations or device names, or API keys. Each snapshot is limited to 20 MB, and each account can keep 50.
 
 Older saved analyses without the insights bundle will still load; re-upload and save again to unlock newer insights.
 
@@ -113,7 +110,14 @@ Open [http://localhost:3000](http://localhost:3000) and upload your Instagram ex
 ```bash
 npm run build   # Production build
 npm start       # Run production server
+npm run lint    # ESLint (React Compiler rules included)
+npx tsc --noEmit -p .   # Type-check
 ```
+
+If `npm run dev` gets stuck in a reload loop with a Turbopack panic saying
+`Next.js package not found`, its on-disk cache is stale — delete
+`.next/dev/cache/turbopack` (or all of `.next`) and restart. `npx next dev --webpack`
+is a fallback that skips Turbopack entirely.
 
 ## Optional Supabase setup (cloud save)
 
@@ -144,7 +148,8 @@ See **[SUPABASE_SETUP.md](./SUPABASE_SETUP.md)** for the full step-by-step guide
 
 ## Limitations
 
-- Only JSON files are parsed; media files are counted but not processed
+- Only JSON files are parsed; media files are counted but not processed (HTML-format exports are rejected with a re-export hint)
+- The whole ZIP is read into browser memory — exports of roughly 1.5 GB+ (mostly media) may not open; request a new export with Media quality: Low
 - Export formats vary by region and Instagram version — some files may not parse
 - Account leaderboards depend on Instagram including account names/URLs in activity JSON
 - DM reply-time and hour/day analytics require local message text (stripped from cloud saves)

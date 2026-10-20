@@ -24,7 +24,7 @@ import {
   ChevronDown,
   ChevronUp,
 } from "lucide-react";
-import type { ElementType } from "react";
+import { useId, type ElementType } from "react";
 import type { CoverageCategoryId, DataCoverageItem } from "@/types/instagram";
 
 const iconMap: Record<CoverageCategoryId, ElementType> = {
@@ -58,6 +58,7 @@ export function DataCoverage({
   expanded,
   onExpandedChange,
 }: DataCoverageProps) {
+  const panelId = useId();
   const detectedCount = items.filter((i) => i.detected).length;
   const previewItems = items.filter((i) => i.detected).slice(0, 4);
 
@@ -79,6 +80,8 @@ export function DataCoverage({
         <button
           type="button"
           onClick={() => onExpandedChange(!expanded)}
+          aria-expanded={expanded}
+          aria-controls={panelId}
           className="inline-flex items-center gap-1.5 self-start rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/75 transition hover:bg-white/10 sm:self-auto"
         >
           {expanded ? (
@@ -120,6 +123,7 @@ export function DataCoverage({
       <AnimatePresence initial={false}>
         {expanded && (
           <motion.div
+            id={panelId}
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: "auto", opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}

@@ -32,39 +32,40 @@ export function HallOfFameSection({
     const label = showNames
       ? formatAccountDisplayName(award.winnerLabel)
       : "Hidden for sharing";
+    const winnerUsername = award.winnerUsername;
+    const canOpen = Boolean(winnerUsername && showNames && onOpenAccount);
 
     return (
       <div
         key={rowKey}
         className="rounded-xl border border-white/10 bg-white/[0.03] overflow-hidden"
       >
-        <button
-          type="button"
-          onClick={() =>
-            setExpanded((e) => ({ ...e, [rowKey]: !e[rowKey] }))
-          }
-          className="flex w-full items-start justify-between gap-2 px-3 py-2.5 text-left"
-        >
-          <div className="min-w-0">
-            <p className="text-sm font-medium text-white">{award.title}</p>
-            <p
-              className={`mt-0.5 truncate text-xs ${
-                award.winnerUsername && showNames
-                  ? "text-[#DD2A7B] hover:underline"
-                  : "text-white/55"
-              }`}
-              onClick={(e) => {
-                if (award.winnerUsername && showNames) {
-                  e.stopPropagation();
-                  onOpenAccount?.(award.winnerUsername);
-                }
-              }}
+        <div className="flex items-start justify-between gap-2 px-3 py-2.5">
+          <div className="min-w-0 flex-1">
+            <button
+              type="button"
+              onClick={() =>
+                setExpanded((e) => ({ ...e, [rowKey]: !e[rowKey] }))
+              }
+              aria-expanded={Boolean(isOpen)}
+              className="block w-full text-left text-sm font-medium text-white"
             >
-              {label}
-            </p>
+              {award.title}
+            </button>
+            {canOpen && winnerUsername ? (
+              <button
+                type="button"
+                onClick={() => onOpenAccount?.(winnerUsername)}
+                className="mt-0.5 block max-w-full truncate text-left text-xs text-[#DD2A7B] hover:underline"
+              >
+                {label}
+              </button>
+            ) : (
+              <p className="mt-0.5 truncate text-xs text-white/55">{label}</p>
+            )}
           </div>
           <ConfidencePill level={award.confidence} />
-        </button>
+        </div>
         {isOpen && (
           <p className="border-t border-white/8 px-3 py-2 text-xs text-white/45">
             {award.why}
@@ -80,7 +81,9 @@ export function HallOfFameSection({
         <Trophy className="h-5 w-5 text-[#F58529]" />
         <h3 className="font-semibold text-white">Hall of Fame / Hall of Shame</h3>
       </div>
-      <p className="mt-1 text-xs text-white/40">For fun only — tap an award for details.</p>
+      <p className="mt-1 text-xs text-white/40">
+        For fun only — tap an award title for details.
+      </p>
       {fame.length > 0 && (
         <div className="mt-4">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80">
@@ -105,6 +108,7 @@ export function HallOfFameSection({
         <button
           type="button"
           onClick={() => setShowAll((s) => !s)}
+          aria-expanded={showAll}
           className="mt-3 flex w-full items-center justify-center gap-1 text-xs text-white/50 hover:text-white/70"
         >
           <ChevronDown className={`h-3.5 w-3.5 ${showAll ? "rotate-180" : ""}`} />

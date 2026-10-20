@@ -7,8 +7,9 @@ export function computeAdRoast(
 ): AdRoastResult | null {
   if (!ads || !adsInsights) return null;
 
+  // "Other" is a catch-all bucket, not an interest.
   const topThemes = Object.entries(adsInsights.themedCategories)
-    .filter(([, cats]) => cats.length > 0)
+    .filter(([theme, cats]) => theme !== "Other" && cats.length > 0)
     .sort((a, b) => b[1].length - a[1].length)
     .slice(0, 3)
     .map(([theme]) => theme);
@@ -18,11 +19,12 @@ export function computeAdRoast(
     ads.adCategoriesCount * 2 + ads.advertisersCount
   );
 
-  const creepy = adsInsights.creepyAdvertisers[0] ?? ads.advertiserNames[0];
   const personality =
     topThemes.length > 0
-      ? `Instagram thinks you're into ${topThemes.join(", ").toLowerCase()}.`
-      : "Instagram's ad profile is vague in this export.";
+      ? `Instagram's ad categories suggest you're into ${topThemes.join(", ").toLowerCase()}.`
+      : ads.adCategoriesCount > 0
+        ? "Instagram's ad categories for you don't fit the usual themes."
+        : "Instagram's ad profile is vague in this export.";
 
   const fbiNotes =
     ads.adCategoriesCount > 15
@@ -31,18 +33,27 @@ export function computeAdRoast(
         ? "Some ad categories detected. Mild profiling vibes."
         : "Limited ad category data in this download.";
 
+  let roastLine: string;
+  if (identityCrisis > 60) {
+    roastLine = "Your ad profile has more plot twists than your feed.";
+  } else if (identityCrisis > 30) {
+    roastLine = "Instagram has opinions about you — mostly from advertisers.";
+  } else if (ads.adsViewed >= 200) {
+    roastLine = "A small ad profile — but you still saw plenty of ads.";
+  } else if (ads.adsViewed > 0) {
+    roastLine = "Relatively low ad exposure in this export. Touch grass approved.";
+  } else {
+    roastLine = "A light ad profile, and no ad-view history in this export.";
+  }
+
   return {
     personality,
     fbiNotes,
     identityCrisisScore: identityCrisis,
-    topAdvertiser: creepy ?? "—",
+    // Advertisers are listed alphabetically in the export, so none is "top".
+    topAdvertiser: "—",
     brandsStalkingYou: adsInsights.brandsStalkingYou.slice(0, 8),
-    roastLine:
-      identityCrisis > 60
-        ? "Your ad profile has more plot twists than your feed."
-        : identityCrisis > 30
-          ? "Instagram has opinions about you — mostly from advertisers."
-          : "Relatively low ad exposure in this export. Touch grass approved.",
+    roastLine,
     confidence: ads.adCategoriesCount > 0 ? "medium" : "low",
     themedCategories: adsInsights.themedCategories,
   };

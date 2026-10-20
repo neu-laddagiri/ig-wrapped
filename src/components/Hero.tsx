@@ -17,7 +17,7 @@ export function Hero() {
         className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-1.5 text-sm text-white/60 backdrop-blur-sm"
       >
         <span className="h-2 w-2 rounded-full animated-gradient-bg" />
-        Privacy-first · Client-side only
+        Privacy-first · Parsed in your browser
       </motion.div>
 
       <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl">
@@ -30,8 +30,8 @@ export function Hero() {
 
       <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-white/50 sm:text-lg">
         Analyze your followers, following, activity, ads, messages, and account
-        history from your official Instagram export — all locally in your
-        browser.
+        history from your official Instagram export — your ZIP is parsed in
+        your browser. Cloud save and AI summaries are optional.
       </p>
     </motion.section>
   );

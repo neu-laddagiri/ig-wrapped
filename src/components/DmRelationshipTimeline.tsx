@@ -77,7 +77,7 @@ export function DmRelationshipTimeline({
   if (relationship?.mostActiveHour != null) {
     events.push({
       label: "Most active hour",
-      detail: `${relationship.mostActiveHour}:00 UTC`,
+      detail: `${relationship.mostActiveHour}:00`,
     });
   }
 
@@ -106,7 +106,7 @@ export function DmRelationshipTimeline({
       </div>
       {!showNames && (
         <p className="mt-2 text-[10px] text-white/35">
-          Names hidden in presentation mode.
+          Names are hidden.
         </p>
       )}
     </section>

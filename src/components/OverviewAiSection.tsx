@@ -45,7 +45,7 @@ export function OverviewAiSection({
           metrics: buildOverviewMetrics(parsed, linkedinProgress),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(friendlyAiError(data.error, "recap"));
         return;

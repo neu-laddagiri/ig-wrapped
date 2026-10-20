@@ -30,6 +30,23 @@ export function parseConnectedApps(files: Map<string, string>): ConnectedApp[] {
   return apps;
 }
 
+/** Exports usually keep dates as { "Added on": { timestamp } } in string_map_data. */
+function timestampsFromStringMap(map: unknown): {
+  added?: number;
+  lastUsed?: number;
+} {
+  const out: { added?: number; lastUsed?: number } = {};
+  if (!isRecord(map)) return out;
+  for (const [key, entry] of Object.entries(map)) {
+    if (!isRecord(entry)) continue;
+    const ts = parseTimestamp(entry.timestamp);
+    if (!ts) continue;
+    if (/last|used|active|updated/i.test(key)) out.lastUsed ??= ts;
+    else out.added ??= ts;
+  }
+  return out;
+}
+
 function walkApps(
   node: unknown,
   apps: ConnectedApp[],
@@ -45,8 +62,12 @@ function walkApps(
     (typeof node.name === "string" && node.name.trim()) ||
     (typeof node.title === "string" && node.title.trim()) ||
     (typeof node.app_name === "string" && node.app_name.trim());
-  const addedAt = parseTimestamp(node.added ?? node.created ?? node.timestamp);
-  const lastUsedAt = parseTimestamp(node.last_used ?? node.updated);
+  const mapped = timestampsFromStringMap(node.string_map_data);
+  const addedAt =
+    parseTimestamp(node.added ?? node.created ?? node.timestamp) ??
+    mapped.added;
+  const lastUsedAt =
+    parseTimestamp(node.last_used ?? node.updated) ?? mapped.lastUsed;
 
   if (name && !seen.has(name.toLowerCase())) {
     seen.add(name.toLowerCase());
@@ -57,7 +78,8 @@ function walkApps(
       name,
       addedAt,
       lastUsedAt,
-      isStale: last ? now - last * 1000 > staleThreshold : true,
+      // No date in the export means unknown, not stale.
+      isStale: last ? now - last * 1000 > staleThreshold : false,
     });
   }
 

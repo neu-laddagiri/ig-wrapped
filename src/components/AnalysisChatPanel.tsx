@@ -6,6 +6,9 @@ import { buildOverviewMetrics } from "@/lib/overviewMetrics";
 import type { ParsedExportData } from "@/types/instagram";
 import type { LinkedInHelperEntry } from "@/types/instagram";
 
+const MAX_QUESTION_CHARS = 1000;
+const MAX_HISTORY_CHARS = 1000;
+
 const SUGGESTED = [
   "Who should I review for cleanup?",
   "Summarize my Instagram personality.",
@@ -36,7 +39,6 @@ export function AnalysisChatPanel({
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [includeSearch, setIncludeSearch] = useState(false);
 
   if (!open) return null;
 
@@ -54,13 +56,15 @@ export function AnalysisChatPanel({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          question: text.trim(),
+          question: text.trim().slice(0, MAX_QUESTION_CHARS),
           metrics,
-          includeSearch,
-          history: messages.slice(-6),
+          history: messages.slice(-6).map((m) => ({
+            role: m.role,
+            text: m.text.slice(0, MAX_HISTORY_CHARS),
+          })),
         }),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
       if (!res.ok) {
         setError(data.error ?? "Could not get a response.");
         return;
@@ -90,8 +94,8 @@ export function AnalysisChatPanel({
         </div>
 
         <p className="border-b border-white/5 px-4 py-2 text-[10px] text-white/40">
-          Uses parsed summaries only — not your raw ZIP. Search history excluded
-          unless enabled below.
+          Uses aggregated counts only — never your raw ZIP, DM text, names, or
+          search terms.
         </p>
 
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
@@ -132,18 +136,10 @@ export function AnalysisChatPanel({
         </div>
 
         <div className="border-t border-white/10 p-3">
-          <label className="mb-2 flex items-center gap-2 text-[10px] text-white/40">
-            <input
-              type="checkbox"
-              checked={includeSearch}
-              onChange={(e) => setIncludeSearch(e.target.checked)}
-              className="accent-[#DD2A7B]"
-            />
-            Include search history summary (sensitive)
-          </label>
           <div className="flex gap-2">
             <input
               value={input}
+              maxLength={MAX_QUESTION_CHARS}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && void send(input)}
               placeholder="Ask about your parsed data…"

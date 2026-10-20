@@ -52,20 +52,22 @@ export function TablePagination({
             type="button"
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
+            aria-label="Previous page"
             className="rounded-lg border border-white/10 p-2 text-white/60 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
-          <span className="min-w-[4rem] text-center text-xs text-white/50">
+          <span className="min-w-[4rem] text-center text-xs text-white/50" aria-live="polite">
             {safePage} / {totalPages}
           </span>
           <button
             type="button"
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
+            aria-label="Next page"
             className="rounded-lg border border-white/10 p-2 text-white/60 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>
@@ -73,7 +75,10 @@ export function TablePagination({
   );
 }
 
+/** Clamps `page` to the last page so a shrunken list never renders empty. */
 export function paginate<T>(items: T[], page: number, pageSize: number): T[] {
-  const start = (page - 1) * pageSize;
+  const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
   return items.slice(start, start + pageSize);
 }

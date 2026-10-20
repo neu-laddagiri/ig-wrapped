@@ -1,5 +1,6 @@
 import type { DmAnalytics } from "@/types/instagram";
 import type { DmHeatmapResult } from "@/types/insights";
+import { isLateNightHour, localHourAndDay } from "@/lib/timeOfDay";
 
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -19,14 +20,16 @@ export function computeDmHeatmap(
 
   const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
   const timestamps: number[] = [];
+  let lateNight = 0;
 
   for (const thread of messages.threads) {
     const samples = thread.textMessages ?? [];
     for (const m of samples) {
       if (!m.timestamp_ms) continue;
       timestamps.push(m.timestamp_ms);
-      const d = new Date(m.timestamp_ms);
-      grid[d.getDay()][d.getHours()]++;
+      const { hour, day } = localHourAndDay(m.timestamp_ms);
+      grid[day][hour]++;
+      if (isLateNightHour(hour)) lateNight++;
     }
   }
 
@@ -48,12 +51,6 @@ export function computeDmHeatmap(
         maxHour = hour;
       }
     }
-  }
-
-  let lateNight = 0;
-  for (const ts of timestamps) {
-    const h = new Date(ts).getHours();
-    if (h >= 0 && h < 5) lateNight++;
   }
 
   let maxGap = 0;

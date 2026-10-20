@@ -24,8 +24,14 @@ import {
   compareLinkedInRows,
   type LinkedInSortMode,
 } from "@/lib/linkedinRows";
-import { normalizeUsername } from "@/lib/accountIdentity";
+import {
+  isLikelyInstagramUsername,
+  isSyntheticCanonicalKey,
+  normalizeUsername,
+} from "@/lib/accountIdentity";
 import { getAccountsForLinkedInSource } from "@/lib/networkAccountDetail";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 import {
   loadLinkedInProgress,
   saveLinkedInProgress,
@@ -104,8 +110,46 @@ const INTERACTION_FILTERS: { value: InteractionFilter; label: string }[] = [
   { value: "has-notes", label: "Has notes" },
 ];
 
+const VALID_STATUSES = new Set<LinkedInStatus>(
+  STATUS_OPTIONS.map((opt) => opt.value)
+);
+
 function stopRowClick(e: React.SyntheticEvent) {
   e.stopPropagation();
+}
+
+/** Stored progress may predate the current shape — fill required fields. */
+function sanitizeStoredEntries(stored: unknown[]): LinkedInHelperEntry[] {
+  const out: LinkedInHelperEntry[] = [];
+  for (const raw of stored) {
+    if (!raw || typeof raw !== "object") continue;
+    const e = raw as Partial<LinkedInHelperEntry>;
+    if (typeof e.username !== "string" || !e.username.trim()) continue;
+    out.push({
+      ...e,
+      username: e.username,
+      displayUsername:
+        typeof e.displayUsername === "string" ? e.displayUsername : e.username,
+      status: e.status && VALID_STATUSES.has(e.status) ? e.status : "not-reviewed",
+      notes: typeof e.notes === "string" ? e.notes : "",
+    });
+  }
+  return out;
+}
+
+/** Real profile links only — never for synthetic account keys or "#". */
+function safeInstagramHref(href?: string): string | null {
+  const match = href?.match(/^https:\/\/(?:www\.)?instagram\.com\/([^/?#]+)\/?$/i);
+  if (!href || !match) return null;
+  let handle: string;
+  try {
+    handle = decodeURIComponent(match[1]);
+  } catch {
+    return null;
+  }
+  return isSyntheticCanonicalKey(handle) || !isLikelyInstagramUsername(handle)
+    ? null
+    : href;
 }
 
 export function LinkedInHelperTab({
@@ -122,19 +166,19 @@ export function LinkedInHelperTab({
     const school = schoolContext?.trim();
     return school ? { school } : undefined;
   }, [schoolContext]);
+  const { presentationMode } = usePresentationMode();
+  const showNames = !presentationMode;
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [source, setSource] = useState<LinkedInSource>("all");
-  const [statusFilter, setStatusFilter] = useState<LinkedInStatus | "all">(
-    "all"
-  );
   const [sortMode, setSortMode] = useState<SortMode>("most-interacted");
   const [interactionFilter, setInteractionFilter] =
     useState<InteractionFilter>("hide-unknown");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<PageSize>(25);
-  const [progressLoaded, setProgressLoaded] = useState(false);
-  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hydratedRef = useRef(false);
+  const mountEntriesRef = useRef(entries);
+  const pendingSaveRef = useRef<LinkedInHelperEntry[] | null>(null);
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebouncedSearch(searchInput), 250);
@@ -144,6 +188,7 @@ export function LinkedInHelperTab({
   const entryByKey = useMemo(() => {
     const map = new Map<string, LinkedInHelperEntry>();
     for (const entry of entries) {
+      if (typeof entry.username !== "string") continue;
       map.set(entry.username, entry);
       map.set(normalizeUsername(entry.username), entry);
     }
@@ -155,27 +200,36 @@ export function LinkedInHelperTab({
     return getAccountsForLinkedInSource(network, source);
   }, [network, source]);
 
+  // Hydrate from localStorage once, and only when nothing is in memory —
+  // in-memory progress (edits, cloud loads) is always newer than storage.
   useEffect(() => {
-    if (!fingerprint || progressLoaded) return;
+    if (hydratedRef.current || !fingerprint) return;
+    hydratedRef.current = true;
+    if (entries.length > 0) return;
     const stored = loadLinkedInProgress(fingerprint);
-    if (stored?.length) onEntriesChange(stored);
-    setProgressLoaded(true);
-  }, [fingerprint, progressLoaded, onEntriesChange]);
+    if (stored?.length) onEntriesChange(sanitizeStoredEntries(stored));
+  }, [fingerprint, entries.length, onEntriesChange]);
 
   useEffect(() => {
-    if (!fingerprint || !progressLoaded) return;
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
+    if (!fingerprint || entries === mountEntriesRef.current) return;
+    pendingSaveRef.current = entries;
+    const timer = window.setTimeout(() => {
       saveLinkedInProgress(fingerprint, entries);
+      pendingSaveRef.current = null;
     }, 400);
-    return () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    };
-  }, [entries, fingerprint, progressLoaded]);
+    return () => window.clearTimeout(timer);
+  }, [entries, fingerprint]);
 
+  // Flush a debounced save when the tab unmounts (e.g. switching tabs).
   useEffect(() => {
-    setPage(1);
-  }, [debouncedSearch, source, statusFilter, sortMode, interactionFilter]);
+    const pending = pendingSaveRef;
+    return () => {
+      if (pending.current && fingerprint) {
+        saveLinkedInProgress(fingerprint, pending.current);
+        pending.current = null;
+      }
+    };
+  }, [fingerprint]);
 
   const baseRows = useMemo(
     () =>
@@ -195,20 +249,28 @@ export function LinkedInHelperTab({
     ]
   );
 
+  const activeQuery = showNames ? debouncedSearch.trim().toLowerCase() : "";
+
   const displayRows = useMemo(() => {
-    const q = debouncedSearch.trim().toLowerCase();
+    const q = activeQuery;
 
     const filtered = baseRows.filter((row) => {
-      const { entry, directDmCount, isMutual, isUnknown, isSilentMutual, displayLabel, secondaryLabel } =
-        row;
+      const {
+        entry,
+        directDmCount,
+        isMutual,
+        isUnknown,
+        isSilentMutual,
+        followsMe,
+        iFollowThem,
+        displayLabel,
+        secondaryLabel,
+      } = row;
 
-      if (statusFilter !== "all" && entry.status !== statusFilter) {
-        return false;
-      }
       if (
         q &&
-        !entry.username.includes(q) &&
-        !entry.displayUsername.toLowerCase().includes(q) &&
+        !entry.username.toLowerCase().includes(q) &&
+        !(entry.displayUsername ?? "").toLowerCase().includes(q) &&
         !displayLabel.toLowerCase().includes(q) &&
         !secondaryLabel.toLowerCase().includes(q) &&
         !(entry.category?.toLowerCase().includes(q) ?? false)
@@ -224,13 +286,13 @@ export function LinkedInHelperTab({
       if (interactionFilter === "mutuals" && !isMutual) return false;
       if (
         interactionFilter === "dont-follow-back" &&
-        entry.category !== "dontFollowMeBack"
+        !(iFollowThem && !followsMe)
       ) {
         return false;
       }
       if (
         interactionFilter === "i-dont-follow-back" &&
-        entry.category !== "iDontFollowBack"
+        !(followsMe && !iFollowThem)
       ) {
         return false;
       }
@@ -240,7 +302,7 @@ export function LinkedInHelperTab({
       ) {
         return false;
       }
-      if (interactionFilter === "has-notes" && !entry.notes.trim()) {
+      if (interactionFilter === "has-notes" && !(entry.notes ?? "").trim()) {
         return false;
       }
 
@@ -248,17 +310,14 @@ export function LinkedInHelperTab({
     });
 
     return [...filtered].sort((a, b) => compareLinkedInRows(a, b, sortMode));
-  }, [
-    baseRows,
-    debouncedSearch,
-    statusFilter,
-    interactionFilter,
-    sortMode,
-  ]);
+  }, [baseRows, activeQuery, interactionFilter, sortMode]);
+
+  const totalPages = Math.max(1, Math.ceil(displayRows.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
 
   const pagedRows = useMemo(
-    () => paginate(displayRows, page, pageSize),
-    [displayRows, page, pageSize]
+    () => paginate(displayRows, currentPage, pageSize),
+    [displayRows, currentPage, pageSize]
   );
 
   const updateEntry = useCallback(
@@ -298,11 +357,13 @@ export function LinkedInHelperTab({
 
   const handleExport = useCallback(() => {
     if (!network) return;
+    // Same labels and school context as the in-app Search buttons.
     exportLinkedInHelperCsv(
-      displayRows.map(({ entry }) => entry),
-      "linkedin-helper.csv"
+      displayRows.map(({ entry, displayLabel }) => ({ ...entry, displayLabel })),
+      "linkedin-helper.csv",
+      linkedInSearchContext
     );
-  }, [network, displayRows]);
+  }, [network, displayRows, linkedInSearchContext]);
 
   const handleClearProgress = useCallback(() => {
     if (!fingerprint) return;
@@ -351,18 +412,29 @@ export function LinkedInHelperTab({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden />
           <input
             type="search"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            placeholder="Search username or name…"
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40"
+            aria-label="Search LinkedIn helper accounts"
+            value={showNames ? searchInput : ""}
+            disabled={!showNames}
+            onChange={(e) => {
+              setSearchInput(e.target.value);
+              setPage(1);
+            }}
+            placeholder={
+              showNames ? "Search username or name…" : "Search hidden while presenting"
+            }
+            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40 disabled:opacity-60"
           />
         </div>
         <select
           value={source}
-          onChange={(e) => setSource(e.target.value as LinkedInSource)}
+          aria-label="Account source"
+          onChange={(e) => {
+            setSource(e.target.value as LinkedInSource);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {SOURCE_OPTIONS.map((opt) => (
@@ -373,7 +445,11 @@ export function LinkedInHelperTab({
         </select>
         <select
           value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as SortMode)}
+          aria-label="Sort accounts"
+          onChange={(e) => {
+            setSortMode(e.target.value as SortMode);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {SORT_OPTIONS.map((opt) => (
@@ -384,9 +460,11 @@ export function LinkedInHelperTab({
         </select>
         <select
           value={interactionFilter}
-          onChange={(e) =>
-            setInteractionFilter(e.target.value as InteractionFilter)
-          }
+          aria-label="Filter accounts"
+          onChange={(e) => {
+            setInteractionFilter(e.target.value as InteractionFilter);
+            setPage(1);
+          }}
           className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
         >
           {INTERACTION_FILTERS.map((opt) => (
@@ -439,15 +517,18 @@ export function LinkedInHelperTab({
                   directDmCount,
                   reason,
                 } = row;
+                const notes = entry.notes ?? "";
                 const searchAccount = {
-                  username: entry.username,
+                  username: isSyntheticCanonicalKey(entry.username)
+                    ? undefined
+                    : entry.username,
                   displayName: entry.displayUsername,
                   displayLabel,
                 };
-                const searchQuery = buildLinkedInSearchQuery(
-                  searchAccount,
-                  linkedInSearchContext
-                );
+                const searchQuery = showNames
+                  ? buildLinkedInSearchQuery(searchAccount, linkedInSearchContext)
+                  : "";
+                const igHref = safeInstagramHref(entry.instagramHref);
 
                 return (
                   <tr
@@ -464,11 +545,15 @@ export function LinkedInHelperTab({
                         }}
                         className="text-left font-medium text-white hover:text-[#DD2A7B]"
                       >
-                        {displayLabel}
+                        {showNames
+                          ? displayLabel
+                          : redactNameLabel(displayLabel, false)}
                       </button>
-                      <p className="text-[10px] text-white/35">
-                        {secondaryLabel}
-                      </p>
+                      {showNames && (
+                        <p className="text-[10px] text-white/35">
+                          {secondaryLabel}
+                        </p>
+                      )}
                     </td>
                     <td className="px-4 py-3 align-top font-semibold tabular-nums text-white">
                       {directDmCount > 0
@@ -482,36 +567,46 @@ export function LinkedInHelperTab({
                       className="px-4 py-3 align-top"
                       onClick={stopRowClick}
                     >
-                      <a
-                        href={entry.instagramHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={stopRowClick}
-                        className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
-                      >
-                        IG profile
-                        <ExternalLink className="h-3 w-3" />
-                      </a>
+                      {showNames && igHref ? (
+                        <a
+                          href={igHref}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={stopRowClick}
+                          className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
+                        >
+                          IG profile
+                          <ExternalLink className="h-3 w-3" aria-hidden />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-white/30">
+                          {showNames ? "No profile link" : "Hidden"}
+                        </span>
+                      )}
                     </td>
                     <td
                       className="px-4 py-3 align-top"
                       onClick={stopRowClick}
                     >
-                      <button
-                        type="button"
-                        title={searchQuery}
-                        onClick={(e) => {
-                          stopRowClick(e);
-                          openLinkedInGoogleSearch(
-                            searchAccount,
-                            linkedInSearchContext
-                          );
-                        }}
-                        className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
-                      >
-                        <Briefcase className="h-3 w-3" />
-                        Search LinkedIn
-                      </button>
+                      {showNames ? (
+                        <button
+                          type="button"
+                          title={searchQuery}
+                          onClick={(e) => {
+                            stopRowClick(e);
+                            openLinkedInGoogleSearch(
+                              searchAccount,
+                              linkedInSearchContext
+                            );
+                          }}
+                          className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
+                        >
+                          <Briefcase className="h-3 w-3" aria-hidden />
+                          Search LinkedIn
+                        </button>
+                      ) : (
+                        <span className="text-xs text-white/30">Hidden</span>
+                      )}
                     </td>
                     <td
                       className="px-4 py-3 align-top"
@@ -519,6 +614,7 @@ export function LinkedInHelperTab({
                     >
                       <select
                         value={entry.status}
+                        aria-label="LinkedIn status"
                         onClick={stopRowClick}
                         onMouseDown={stopRowClick}
                         onChange={(e) => {
@@ -544,24 +640,31 @@ export function LinkedInHelperTab({
                       className="px-4 py-3 align-top"
                       onClick={stopRowClick}
                     >
-                      <input
-                        type="text"
-                        value={entry.notes}
-                        onClick={stopRowClick}
-                        onMouseDown={stopRowClick}
-                        onFocus={stopRowClick}
-                        onKeyDown={stopRowClick}
-                        onChange={(e) => {
-                          stopRowClick(e);
-                          updateEntry(
-                            accountKey,
-                            { notes: e.target.value },
-                            entry
-                          );
-                        }}
-                        placeholder="Add note…"
-                        className="w-full min-w-0 rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white placeholder:text-white/25 outline-none focus:border-[#DD2A7B]/40"
-                      />
+                      {showNames ? (
+                        <input
+                          type="text"
+                          aria-label="Notes"
+                          value={notes}
+                          onClick={stopRowClick}
+                          onMouseDown={stopRowClick}
+                          onFocus={stopRowClick}
+                          onKeyDown={stopRowClick}
+                          onChange={(e) => {
+                            stopRowClick(e);
+                            updateEntry(
+                              accountKey,
+                              { notes: e.target.value },
+                              entry
+                            );
+                          }}
+                          placeholder="Add note…"
+                          className="w-full min-w-0 rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white placeholder:text-white/25 outline-none focus:border-[#DD2A7B]/40"
+                        />
+                      ) : (
+                        <span className="text-xs text-white/30">
+                          {notes.trim() ? "Hidden" : "—"}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 );
@@ -572,7 +675,7 @@ export function LinkedInHelperTab({
       </div>
 
       <TablePagination
-        page={page}
+        page={currentPage}
         pageSize={pageSize}
         total={displayRows.length}
         onPageChange={setPage}

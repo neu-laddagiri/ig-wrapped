@@ -3,12 +3,16 @@
 import type { BurnoutMeterResult } from "@/types/insights";
 import { ConfidencePill } from "@/components/ConfidencePill";
 import { ExplainTooltip } from "@/components/ExplainTooltip";
+import { formatMonthLabel } from "@/lib/formatters";
 
 interface BurnoutPanelProps {
   burnout: BurnoutMeterResult;
 }
 
 export function BurnoutPanel({ burnout }: BurnoutPanelProps) {
+  // No most-active hour means no DM timestamps, so time-of-day scores are unknown.
+  const hasTimestamps = burnout.mostActiveHour != null;
+
   return (
     <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -20,7 +24,10 @@ export function BurnoutPanel({ burnout }: BurnoutPanelProps) {
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Metric label="Touch Grass Score" value={`${burnout.touchGrassScore}/100`} />
-        <Metric label="Night owl score" value={`${burnout.nightOwlScore}%`} />
+        <Metric
+          label="Night owl score"
+          value={hasTimestamps ? `${burnout.nightOwlScore}%` : "—"}
+        />
         <Metric
           label="Social battery drain"
           value={`${burnout.socialBatteryDrain}/100`}
@@ -36,9 +43,15 @@ export function BurnoutPanel({ burnout }: BurnoutPanelProps) {
           <Metric label="Most active day" value={burnout.mostActiveDay} />
         )}
         {burnout.peakDoomscrollMonth && (
-          <Metric label="Peak month" value={burnout.peakDoomscrollMonth} />
+          <Metric
+            label="Peak DM month"
+            value={formatMonthLabel(burnout.peakDoomscrollMonth)}
+          />
         )}
-        <Metric label="Weekend vs weekday" value={burnout.weekendVsWeekday} />
+        <Metric
+          label="Weekend vs weekday"
+          value={hasTimestamps ? burnout.weekendVsWeekday : "—"}
+        />
       </div>
       <div className="mt-3">
         <ExplainTooltip

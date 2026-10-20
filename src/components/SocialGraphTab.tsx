@@ -1,10 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users, Trash2, Heart, Trophy, Search, ChevronDown } from "lucide-react";
+import { Users, Trash2, Heart, Trophy, Search } from "lucide-react";
 import type { InsightsBundle } from "@/types/insights";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
-import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
+import { getSecondaryLabel } from "@/lib/accountIdentity";
 import type { NetworkStats } from "@/types/instagram";
 import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 import { UnfollowImpactPanel } from "@/components/UnfollowImpactPanel";
@@ -34,34 +35,34 @@ export function SocialGraphTab({
 }: SocialGraphTabProps) {
   const [subTab, setSubTab] = useState<SubTab>(defaultSubTab);
   const [query, setQuery] = useState("");
-  const [clusterFilter, setClusterFilter] = useState<string | null>(null);
-  const [mapOpen, setMapOpen] = useState(false);
   const { presentationMode } = usePresentationMode();
   const showNames = !presentationMode;
+  // A typed query can be a name, so it is neither shown nor applied while presenting.
+  const activeQuery = showNames ? query.trim().toLowerCase() : "";
 
   const filteredCleanup = useMemo(() => {
     if (!insights) return [];
-    const q = query.trim().toLowerCase();
+    const q = activeQuery;
     return insights.cleanup.filter(
       (c) =>
         !q ||
         c.displayName.toLowerCase().includes(q) ||
-        c.username.includes(q)
+        c.username.toLowerCase().includes(q)
     );
-  }, [insights, query]);
+  }, [insights, activeQuery]);
 
   const filteredRealOnes = useMemo(() => {
     if (!insights) return [];
-    const q = query.trim().toLowerCase();
+    const q = activeQuery;
     return insights.realOnes
       .filter((c) => !c.isSilentMutual && c.dmMessageCount > 0)
       .filter(
         (c) =>
           !q ||
           c.displayName.toLowerCase().includes(q) ||
-          c.username.includes(q)
+          c.username.toLowerCase().includes(q)
       );
-  }, [insights, query]);
+  }, [insights, activeQuery]);
 
   if (!insights) {
     return (
@@ -119,19 +120,9 @@ export function SocialGraphTab({
           <h3 className="mb-3 font-semibold text-white">Network clusters</h3>
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
             {insights.networkClusters!.map((cluster) => (
-              <button
+              <div
                 key={cluster.id}
-                type="button"
-                onClick={() =>
-                  setClusterFilter(
-                    clusterFilter === cluster.id ? null : cluster.id
-                  )
-                }
-                className={`rounded-xl border p-3 text-left transition ${
-                  clusterFilter === cluster.id
-                    ? "border-[#DD2A7B]/40 bg-[#DD2A7B]/10"
-                    : "border-white/10 bg-white/[0.03] hover:border-white/15"
-                }`}
+                className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-sm font-medium text-white">{cluster.title}</p>
@@ -139,7 +130,7 @@ export function SocialGraphTab({
                 </div>
                 <p className="mt-1 text-2xl font-bold text-white">{cluster.count}</p>
                 <p className="mt-1 text-xs text-white/40">{cluster.description}</p>
-              </button>
+              </div>
             ))}
           </div>
         </div>
@@ -147,13 +138,15 @@ export function SocialGraphTab({
 
       {(subTab === "cleanup" || subTab === "realones") && (
         <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden />
           <input
             type="search"
-            value={query}
+            aria-label="Search accounts"
+            value={showNames ? query : ""}
+            disabled={!showNames}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search accounts…"
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/30"
+            placeholder={showNames ? "Search accounts…" : "Search hidden while presenting"}
+            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/30 disabled:opacity-60"
           />
         </div>
       )}
@@ -169,7 +162,7 @@ export function SocialGraphTab({
         <AccountTable
           rows={filteredCleanup.slice(0, 50).map((c) => ({
             username: c.username,
-            name: formatAccountDisplayName(c.displayName),
+            name: redactNameLabel(c.displayName, showNames),
             score: c.cleanupPriorityScore,
             label: c.label,
             action: c.recommendedAction,
@@ -177,6 +170,7 @@ export function SocialGraphTab({
           }))}
           scoreLabel="Priority"
           onOpen={onOpenAccount}
+          showNames={showNames}
         />
       )}
 
@@ -184,7 +178,7 @@ export function SocialGraphTab({
         <AccountTable
           rows={filteredRealOnes.slice(0, 30).map((c) => ({
             username: c.username,
-            name: formatAccountDisplayName(c.displayName),
+            name: redactNameLabel(c.displayName, showNames),
             score: c.realOnesScore,
             label: c.isSilentMutual ? "Silent mutual" : c.relationshipLabel,
             action: c.rankReason ?? `${c.dmMessageCount} direct DMs`,
@@ -193,6 +187,7 @@ export function SocialGraphTab({
           }))}
           scoreLabel="Real Ones"
           onOpen={onOpenAccount}
+          showNames={showNames}
         />
       )}
 
@@ -212,23 +207,11 @@ export function SocialGraphTab({
               />
             ))}
           </div>
-          <button
-            type="button"
-            onClick={() => setMapOpen((o) => !o)}
-            className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-left text-sm text-white/60"
-          >
-            Show relationship map
-            <ChevronDown
-              className={`h-4 w-4 transition ${mapOpen ? "rotate-180" : ""}`}
-            />
-          </button>
-          {mapOpen && (
           <SocialGraphMap
             accounts={insights.accounts}
             showNames={showNames}
             onOpenAccount={onOpenAccount}
           />
-          )}
         </div>
       )}
     </div>
@@ -239,6 +222,7 @@ function AccountTable({
   rows,
   scoreLabel,
   onOpen,
+  showNames,
 }: {
   rows: {
     username: string;
@@ -251,6 +235,7 @@ function AccountTable({
   }[];
   scoreLabel: string;
   onOpen?: (username: string) => void;
+  showNames: boolean;
 }) {
   if (!rows.length) {
     return (
@@ -282,11 +267,13 @@ function AccountTable({
                 >
                   {row.name}
                 </button>
-                <p className="text-xs text-white/35">
-                  {!row.username.startsWith("unknown:")
-                    ? `@${row.username}`
-                    : "Deleted / unavailable in export"}
-                </p>
+                {showNames && (
+                  <p className="text-xs text-white/35">
+                    {row.username.startsWith("unknown:")
+                      ? "Deleted / unavailable in export"
+                      : getSecondaryLabel({ username: row.username })}
+                  </p>
+                )}
               </td>
               <td className="px-4 py-3 font-semibold text-white">
                 {row.score}

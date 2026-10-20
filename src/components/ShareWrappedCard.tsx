@@ -1,10 +1,37 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sparkles, Copy, Check, Download } from "lucide-react";
 import { toPng } from "html-to-image";
 import type { ShareCardData } from "@/types/insights";
 import { renderShareCardLines } from "@/lib/shareCard";
+
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall back to the legacy copy path below
+  }
+  const active = document.activeElement as HTMLElement | null;
+  const el = document.createElement("textarea");
+  try {
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    el.remove();
+    active?.focus();
+  }
+}
 
 interface ShareWrappedCardProps {
   card: ShareCardData;
@@ -22,23 +49,44 @@ export function ShareWrappedCard({
   const ref = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = useState(false);
   const [downloading, setDownloading] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const timerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
   const lines = renderShareCardLines(card, hideNames);
   const isHero = variant === "hero" || card.id === "overall";
 
+  const flash = (update: () => void, reset: () => void, ms: number) => {
+    update();
+    window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(reset, ms);
+  };
+
   const copyStats = async () => {
-    try {
-      await navigator.clipboard.writeText(lines.join("\n"));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // ignore
+    const ok = await copyText(lines.join("\n"));
+    if (ok) {
+      flash(
+        () => {
+          setNotice(null);
+          setCopied(true);
+        },
+        () => setCopied(false),
+        2000
+      );
+    } else {
+      flash(
+        () => setNotice("Couldn't copy — your browser blocked clipboard access."),
+        () => setNotice(null),
+        4000
+      );
     }
   };
 
   const downloadPng = async () => {
     if (!ref.current) return;
     setDownloading(true);
+    setNotice(null);
     try {
       const dataUrl = await toPng(ref.current, {
         cacheBust: true,
@@ -49,8 +97,14 @@ export function ShareWrappedCard({
       link.download = `ig-wrapped-${card.id}.png`;
       link.href = dataUrl;
       link.click();
-    } catch {
-      // ignore
+    } catch (err) {
+      console.error("Share card PNG export failed", err);
+      flash(
+        () =>
+          setNotice("Couldn't create the PNG. Try again, or take a screenshot."),
+        () => setNotice(null),
+        5000
+      );
     } finally {
       setDownloading(false);
     }
@@ -149,6 +203,11 @@ export function ShareWrappedCard({
           {downloading ? "Saving…" : "Download PNG"}
         </button>
       </div>
+      {notice && (
+        <p role="alert" className="text-xs text-amber-300/90">
+          {notice}
+        </p>
+      )}
     </div>
   );
 }

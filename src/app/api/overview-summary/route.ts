@@ -3,10 +3,20 @@ import type {
   OverviewAiSummaryResult,
   OverviewAiTone,
 } from "@/types/overviewAiSummary";
+import {
+  callChatCompletion,
+  guardAiRequest,
+  isAiConfigured,
+  isRecord,
+  jsonError,
+  sanitizeMetrics,
+} from "@/lib/aiRouteGuard";
 
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === "object" && v !== null && !Array.isArray(v);
-}
+export const maxDuration = 30;
+
+// Generous enough for "thinking" models, which count reasoning toward this cap.
+const MAX_OUTPUT_TOKENS = 8192;
+const MAX_FIELD_CHARS = 1000;
 
 function isValidTone(tone: unknown): tone is OverviewAiTone {
   return (
@@ -38,7 +48,7 @@ overallVibe, whatInstagramSays, strongestPattern, funniestCallout, privacyRecomm
 
 function buildUserPrompt(
   tone: OverviewAiTone,
-  metrics: Record<string, string | number | null>
+  metrics: Record<string, string | number>
 ): string {
   const lines = Object.entries(metrics)
     .filter(([, v]) => v !== null && v !== undefined)
@@ -64,7 +74,9 @@ function parseResult(content: string, tone: OverviewAiTone): OverviewAiSummaryRe
     const parsed = JSON.parse(json);
     if (!isRecord(parsed)) return null;
     const str = (k: string) =>
-      typeof parsed[k] === "string" ? (parsed[k] as string).trim() : "";
+      typeof parsed[k] === "string"
+        ? (parsed[k] as string).trim().slice(0, MAX_FIELD_CHARS)
+        : "";
     const result: OverviewAiSummaryResult = {
       overallVibe: str("overallVibe"),
       whatInstagramSays: str("whatInstagramSays"),
@@ -83,95 +95,45 @@ function parseResult(content: string, tone: OverviewAiTone): OverviewAiSummaryRe
 }
 
 export async function GET() {
-  return NextResponse.json({
-    configured: Boolean(process.env.AI_API_KEY?.trim()),
-  });
+  return NextResponse.json({ configured: isAiConfigured() });
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.AI_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "AI summaries are not configured yet." },
-      { status: 503 }
-    );
-  }
+  const guard = await guardAiRequest(request, {
+    route: "overview-summary",
+    perMinute: 6,
+    perHour: 30,
+  });
+  if (!guard.ok) return guard.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-
+  const body = guard.body;
   if (!isRecord(body) || !isValidTone(body.tone)) {
-    return NextResponse.json({ error: "Invalid tone." }, { status: 400 });
+    return jsonError("Invalid tone.", 400);
   }
+  const tone = body.tone;
 
-  if (!isRecord(body.metrics)) {
-    return NextResponse.json({ error: "Missing metrics." }, { status: 400 });
-  }
-
-  const metrics: Record<string, string | number | null> = {};
-  for (const [k, v] of Object.entries(body.metrics)) {
-    if (typeof v === "string" || typeof v === "number" || v === null) {
-      metrics[k] = v;
-    }
-  }
-
-  const baseUrl = (
-    process.env.AI_BASE_URL?.trim() || "https://api.openai.com/v1"
-  ).replace(/\/$/, "");
-  const model = process.env.AI_MODEL?.trim() || "gpt-4o-mini";
+  const metrics = sanitizeMetrics(body.metrics);
+  if (typeof metrics === "string") return jsonError(metrics, 400);
 
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: body.tone === "drama" ? 0.95 : 0.88,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: buildSystemPrompt() },
-          { role: "user", content: buildUserPrompt(body.tone, metrics) },
-        ],
-      }),
+    const result = await callChatCompletion(guard.config, "overview-summary", {
+      temperature: tone === "drama" ? 0.95 : 0.88,
+      maxTokens: MAX_OUTPUT_TOKENS,
+      json: true,
+      messages: [
+        { role: "system", content: buildSystemPrompt() },
+        { role: "user", content: buildUserPrompt(tone, metrics) },
+      ],
     });
+    if (!result.ok) return jsonError(result.error, result.status);
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      return NextResponse.json(
-        { error: "The AI provider returned an error. Try again later." },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      return NextResponse.json(
-        { error: "AI returned an empty response." },
-        { status: 502 }
-      );
-    }
-
-    const summary = parseResult(content, body.tone);
+    const summary = parseResult(result.content, tone);
     if (!summary) {
-      return NextResponse.json(
-        { error: "Could not parse AI response. Try again." },
-        { status: 502 }
-      );
+      return jsonError("Could not parse AI response. Try again.", 502);
     }
 
     return NextResponse.json({ summary });
   } catch {
-    return NextResponse.json(
-      { error: "Failed to generate recap. Try again later." },
-      { status: 500 }
-    );
+    return jsonError("Failed to generate recap. Try again later.", 500);
   }
 }

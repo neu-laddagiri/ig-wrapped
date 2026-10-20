@@ -153,6 +153,7 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
         <button
           type="button"
           onClick={() => setMobileOpen((o) => !o)}
+          aria-expanded={mobileOpen}
           className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white"
         >
           <span className="flex items-center gap-2">
@@ -187,13 +188,14 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
                           onTabChange(tab.id);
                           setMobileOpen(false);
                         }}
+                        aria-current={isActive ? "page" : undefined}
                         className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${
                           isActive
                             ? "tab-selected-gradient font-semibold"
                             : "text-white/55 hover:bg-white/5 hover:text-white/80"
                         }`}
                       >
-                        <Icon className="h-4 w-4 shrink-0" />
+                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
                         {tab.label}
                       </button>
                     );
@@ -240,13 +242,14 @@ export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
                 key={tab.id}
                 type="button"
                 onClick={() => onTabChange(tab.id)}
+                aria-current={isActive ? "page" : undefined}
                 className={
                   isActive
                     ? "tab-selected-gradient flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
                     : "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-white/45 transition-colors hover:text-white/70"
                 }
               >
-                <Icon className="h-4 w-4 shrink-0" />
+                <Icon className="h-4 w-4 shrink-0" aria-hidden />
                 {tab.label}
               </button>
             );

@@ -24,6 +24,8 @@ export interface DmAiSummarySaved {
   tone: DmAiSummaryTone;
   generatedAt: string;
   summary: DmAiSummaryResult;
+  /** Whether real names were sent to the AI (so the text may contain them). Unknown on older saves. */
+  usedRealNames?: boolean;
 }
 
 export type DmAiSummariesMap = Record<string, DmAiSummarySaved>;

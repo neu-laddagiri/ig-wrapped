@@ -181,7 +181,7 @@ function directRecordToCanonical(
       ? instagramProfileUrl(username)
       : "#",
     sourceNotes: [
-      `DM source of truth: ${dm.totalMessages.toLocaleString()} direct messages`,
+      `DM source of truth: ${dm.totalMessages.toLocaleString()} direct message${dm.totalMessages === 1 ? "" : "s"}`,
     ],
   };
 }

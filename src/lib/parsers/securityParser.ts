@@ -62,25 +62,42 @@ function pickString(obj: JsonRecord, keys: string[]): string | undefined {
   return undefined;
 }
 
-function extractFromStringMap(
-  map: unknown
-): { device?: string; location?: string; ip?: string; label?: string } {
+const TIME_KEYS = new Set(["time", "timestamp", "date", "date_and_time"]);
+const IGNORED_MAP_KEYS = new Set(["cookie_name", "language_code"]);
+
+/**
+ * Login/logout records look like
+ * { title: "2024-01-01T10:00:00+00:00", string_map_data: { "IP Address": {value},
+ *   "User Agent": {value}, "Time": {timestamp}, "Cookie Name": {value} } }.
+ */
+function extractFromStringMap(map: unknown): {
+  device?: string;
+  location?: string;
+  ip?: string;
+  label?: string;
+  timestamp?: number;
+} {
   if (!isRecord(map)) return {};
   const result: {
     device?: string;
     location?: string;
     ip?: string;
     label?: string;
+    timestamp?: number;
   } = {};
 
   for (const [key, entry] of Object.entries(map)) {
     if (!isRecord(entry)) continue;
+    const lower = key.trim().toLowerCase().replace(/[\s-]+/g, "_");
+    const ts = parseTimestamp(entry.timestamp);
+    if (ts && (TIME_KEYS.has(lower) || !result.timestamp)) {
+      result.timestamp = ts;
+    }
     const value =
       typeof entry.value === "string" ? entry.value.trim() : undefined;
-    if (!value) continue;
-    const lower = key.toLowerCase();
+    if (!value || IGNORED_MAP_KEYS.has(lower) || TIME_KEYS.has(lower)) continue;
     if (DEVICE_KEYS.some((k) => lower.includes(k))) result.device = value;
-    else if (lower.includes("ip")) result.ip = value;
+    else if (lower === "ip" || lower.startsWith("ip_")) result.ip = value;
     else if (LOCATION_KEYS.some((k) => lower.includes(k))) {
       result.location = result.location ? `${result.location}, ${value}` : value;
     } else if (lower.includes("user") || lower.includes("name")) {
@@ -88,6 +105,12 @@ function extractFromStringMap(
     }
   }
   return result;
+}
+
+/** Login records use the ISO date as their title. */
+function timestampFromTitle(title: string | undefined): number | undefined {
+  if (!title || !/^\d{4}-\d{2}-\d{2}/.test(title)) return undefined;
+  return parseTimestamp(title);
 }
 
 function buildLocation(parts: (string | undefined)[]): string | undefined {
@@ -103,23 +126,23 @@ function eventFromRecord(
   index: number
 ): SecurityEvent | null {
   const title = typeof item.title === "string" ? item.title.trim() : undefined;
+  const titleTimestamp = timestampFromTitle(title);
   const label =
-    title ||
+    (titleTimestamp ? undefined : title) ||
     pickString(item, ["label", "name", "value", "action", "description"]) ||
     defaultLabel;
 
-  let timestamp = parseTimestamp(
-    item.timestamp ?? item.timestamp_ms ?? item.creation_timestamp
-  );
-  let device: string | undefined;
-  let location: string | undefined;
-  let ipAddress: string | undefined;
-  const notes: string[] = [];
-
   const mapData = extractFromStringMap(item.string_map_data);
-  device = mapData.device;
-  location = mapData.location;
-  ipAddress = mapData.ip;
+  let timestamp =
+    parseTimestamp(
+      item.timestamp ?? item.timestamp_ms ?? item.creation_timestamp
+    ) ??
+    mapData.timestamp ??
+    titleTimestamp;
+  let device = mapData.device;
+  let location = mapData.location;
+  let ipAddress = mapData.ip;
+  const notes: string[] = [];
   if (mapData.label && mapData.label !== label) notes.push(mapData.label);
 
   const stringList = item.string_list_data;
@@ -212,8 +235,9 @@ function extractEventsFromData(
             sourcePath,
             index++
           );
+          // An item's own string_list_data entries are part of that event.
           if (event) events.push(event);
-          walk(item);
+          else walk(item);
         }
       }
       return;

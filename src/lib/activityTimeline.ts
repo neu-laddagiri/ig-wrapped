@@ -1,4 +1,4 @@
-import { formatMonthLabel } from "@/lib/formatters";
+import { formatMonthKey, formatMonthLabel } from "@/lib/formatters";
 import type { ParsedExportData, MostActiveEraData } from "@/types/instagram";
 import type { EraLabel, ErasTimeline } from "@/types/insights";
 import type { SearchWrappedResult } from "@/types/insights";
@@ -10,16 +10,24 @@ import {
   topGroupsForMonth,
 } from "@/lib/monthlyActivityBreakdown";
 
-export const ERAS_TIMELINE_VERSION = 2;
+export const ERAS_TIMELINE_VERSION = 3;
 
 function buildEraLabelForMonth(
   month: string,
   count: number,
   groups: Map<import("@/lib/monthlyActivityBreakdown").EraGroupKey, number>
 ): EraLabel {
-  const inferred = inferEraFromGroups(groups);
   const topRanked = topGroupsForMonth(groups, 3);
   const topDisplay = topRanked[0];
+  // A saved analysis without its ZIP can know a month's total but not its mix.
+  const inferred =
+    monthTotal(groups) === 0 && count > 0
+      ? {
+          eraName: "Peak Activity Era",
+          caption: "Lots of tracked activity — re-upload your export to see the breakdown.",
+          dominanceLine: undefined,
+        }
+      : inferEraFromGroups(groups);
 
   return {
     month,
@@ -54,27 +62,12 @@ export function buildErasTimeline(
     ? era.topMonths
     : [...era.monthlyTotals].sort((a, b) => b.count - a.count).slice(0, 3);
 
-  const eraLabels: EraLabel[] = topMonths.map((m) => {
-    const groups = groupMap.get(m.month) ?? new Map();
-    const total = monthTotal(groups) || m.count;
-    return buildEraLabelForMonth(m.month, total, groups);
-  });
+  // Counts come from the same totals as the chart so the screen shows one number.
+  const eraLabels: EraLabel[] = topMonths.map((m) =>
+    buildEraLabelForMonth(m.month, m.count, groupMap.get(m.month) ?? new Map())
+  );
 
   const monthlyTotals = era.monthlyTotals;
-
-  let trend: ErasTimeline["trend"] = "unknown";
-  if (monthlyTotals.length >= 3) {
-    const recent = monthlyTotals.slice(-3).map((m) => m.count);
-    const older = monthlyTotals.slice(-6, -3).map((m) => m.count);
-    const recentAvg = recent.reduce((a, b) => a + b, 0) / recent.length;
-    const olderAvg =
-      older.length > 0
-        ? older.reduce((a, b) => a + b, 0) / older.length
-        : recentAvg;
-    if (recentAvg > olderAvg * 1.15) trend = "rising";
-    else if (recentAvg < olderAvg * 0.85) trend = "falling";
-    else trend = "stable";
-  }
 
   return {
     version: ERAS_TIMELINE_VERSION,
@@ -82,8 +75,41 @@ export function buildErasTimeline(
     topMonths,
     peakMonth: topMonths[0],
     eraLabels,
-    trend,
+    trend: computeTrend(monthlyTotals),
   };
+}
+
+function shiftMonthKey(month: string, delta: number): string {
+  const [y, m] = month.split("-").map(Number);
+  const index = y * 12 + (m - 1) + delta;
+  const year = Math.floor(index / 12);
+  return `${year}-${String((index % 12) + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Last 3 complete calendar months vs the 3 before, with empty months as 0.
+ * The current month is still in progress, so it is left out.
+ */
+function computeTrend(
+  monthlyTotals: { month: string; count: number }[]
+): ErasTimeline["trend"] {
+  const currentMonth = formatMonthKey(Math.floor(Date.now() / 1000));
+  const complete = monthlyTotals.filter(
+    (m) => /^\d{4}-\d{2}$/.test(m.month) && m.month < currentMonth
+  );
+  if (complete.length < 3) return "unknown";
+
+  const counts = new Map(complete.map((m) => [m.month, m.count]));
+  const last = complete[complete.length - 1].month;
+  const window = Array.from({ length: 6 }, (_, i) => shiftMonthKey(last, i - 5));
+  const avg = (keys: string[]) =>
+    keys.reduce((sum, k) => sum + (counts.get(k) ?? 0), 0) / keys.length;
+  const olderAvg = avg(window.slice(0, 3));
+  const recentAvg = avg(window.slice(3));
+
+  if (recentAvg > olderAvg * 1.15) return "rising";
+  if (recentAvg < olderAvg * 0.85) return "falling";
+  return "stable";
 }
 
 /** True when saved insights lack per-month era breakdown (pre-fix saves). */

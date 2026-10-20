@@ -9,14 +9,16 @@ import { computeHallOfFame } from "@/lib/hallOfFame";
 import { computeYearbook } from "@/lib/yearbook";
 import { computeAdRoast } from "@/lib/adRoast";
 import { computeSocialAudit } from "@/lib/socialAudit";
+import type { ExportOwnerIdentity } from "@/lib/exportOwnerIdentity";
 
 export function enrichInsightsBundle(
   bundle: InsightsBundle,
-  parsed: ParsedExportData
+  parsed: ParsedExportData,
+  options?: { owner?: ExportOwnerIdentity }
 ): InsightsBundle {
   const dmHeatmap = bundle.dmHeatmap ?? computeDmHeatmap(parsed.messages);
   const replyPatterns =
-    bundle.replyPatterns ?? computeReplyPatterns(parsed.messages);
+    bundle.replyPatterns ?? computeReplyPatterns(parsed.messages, options?.owner);
   const networkClusters =
     bundle.networkClusters ??
     computeNetworkClusters(bundle.accounts, bundle.cleanup, bundle.realOnes);

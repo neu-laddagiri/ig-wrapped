@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { BookOpen, Copy, Check, Shield } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BookOpen, Copy, Check, Shield, AlertCircle } from "lucide-react";
 import type { YearbookCard, YearbookCategory } from "@/types/insights";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import { ConfidencePill } from "@/components/ConfidencePill";
@@ -56,14 +56,46 @@ function cardCopyText(card: YearbookCard, showNames: boolean): string {
   return `${card.superlative}\n${name}\n${card.caption}`;
 }
 
+async function copyText(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall back to the legacy copy path below
+  }
+  const active = document.activeElement as HTMLElement | null;
+  const el = document.createElement("textarea");
+  try {
+    el.value = text;
+    el.setAttribute("readonly", "");
+    el.style.position = "fixed";
+    el.style.opacity = "0";
+    document.body.appendChild(el);
+    el.select();
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    el.remove();
+    active?.focus();
+  }
+}
+
 export function YearbookTab({
   cards,
   showNames: showNamesProp = true,
   onOpenAccount,
 }: YearbookTabProps) {
   const { presentationMode } = usePresentationMode();
-  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
-  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(true);
+  const [copyState, setCopyState] = useState<{ id: string; ok: boolean } | null>(
+    null
+  );
+  const copyTimerRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(copyTimerRef.current), []);
 
   const showNames =
     showNamesProp && !presentationMode && !hideShareNamesLocal;
@@ -79,14 +111,13 @@ export function YearbookTab({
   }, [cards]);
 
   const handleCopy = async (card: YearbookCard) => {
-    const text = cardCopyText(card, showNames);
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopiedId(card.id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      // ignore
-    }
+    const ok = await copyText(cardCopyText(card, showNames));
+    setCopyState({ id: card.id, ok });
+    window.clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = window.setTimeout(
+      () => setCopyState(null),
+      ok ? 2000 : 4000
+    );
   };
 
   if (!cards.length) {
@@ -203,10 +234,15 @@ export function YearbookTab({
                 onClick={() => handleCopy(card)}
                 className="mt-4 inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] py-2 text-xs font-medium text-white/55 transition hover:border-white/20 hover:bg-white/[0.06] hover:text-white/75"
               >
-                {copiedId === card.id ? (
+                {copyState?.id === card.id && copyState.ok ? (
                   <>
                     <Check className="h-3.5 w-3.5 text-emerald-400" />
                     Copied
+                  </>
+                ) : copyState?.id === card.id ? (
+                  <>
+                    <AlertCircle className="h-3.5 w-3.5 text-amber-400" />
+                    Copy failed — select the text manually
                   </>
                 ) : (
                   <>

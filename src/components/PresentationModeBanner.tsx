@@ -14,7 +14,8 @@ export function PresentationModeBanner() {
         <p className="text-sm text-white/80">
           <span className="font-semibold text-white">Presentation Mode on</span>
           {" — "}
-          sensitive details hidden across all tabs.
+          names, handles, message previews, search history, ad interests and
+          login details are hidden. Check each tab before sharing your screen.
         </p>
       </div>
       <button

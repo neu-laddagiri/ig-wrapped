@@ -1,22 +1,13 @@
 import {
-  formatAccountDisplayName,
-  isInstagramPlaceholderName,
-  pickBestDisplayName,
-  UNKNOWN_ACCOUNT_LABEL,
-} from "@/lib/accountNameFilter";
-import {
-  getCanonicalAccountKey,
-  isLikelyInstagramUsername,
+  buildNetworkUsernameIndex,
   normalizeUsername as identityNormalizeUsername,
-  rawFolderSegment,
-  usernameFromFolderPath,
 } from "@/lib/accountIdentity";
 import { normalizeIdentityKey } from "@/lib/identityResolver";
 import {
   resolveExportOwnerIdentity,
-  isExportOwnerName,
   type ExportOwnerIdentity,
 } from "@/lib/exportOwnerIdentity";
+import { resolveDirectThreadAccount } from "@/lib/insights/coreAnalytics";
 import {
   isDirectDmThread,
   normalizeDmThreadList,
@@ -49,103 +40,23 @@ export interface DirectDmIndex {
   records: DirectDmRecord[];
 }
 
-function inferOtherName(
-  thread: NormalizedDmThread,
-  owner?: ExportOwnerIdentity
-): string | null {
-  const candidates: string[] = [];
-  const folderRaw = rawFolderSegment(thread.sourcePath);
-  if (folderRaw) candidates.push(folderRaw);
-
-  for (const p of thread.participants ?? []) {
-    if (!owner || !isExportOwnerName(p, owner)) candidates.push(p);
-  }
-  for (const sender of Object.keys(thread.messagesBySender ?? {})) {
-    if (!owner || !isExportOwnerName(sender, owner)) candidates.push(sender);
-  }
-  if (
-    thread.title &&
-    !thread.isGroup &&
-    !thread.title.startsWith("Group chat")
-  ) {
-    if (!owner || !isExportOwnerName(thread.title, owner)) {
-      candidates.push(thread.title);
-    }
-  }
-
-  const best = pickBestDisplayName(candidates) ?? candidates[0];
-  return best?.trim() || null;
-}
-
 function threadToRecord(
   thread: NormalizedDmThread,
   network?: NetworkStats | null,
   owner?: ExportOwnerIdentity
 ): DirectDmRecord | null {
-  const folderUser = usernameFromFolderPath(thread.sourcePath);
-  const otherName = inferOtherName(thread, owner);
-
-  let accountKey = getCanonicalAccountKey({
-    folderPath: thread.sourcePath,
-    threadId: thread.id,
-  });
-  let displayName = formatAccountDisplayName(
-    thread.displayTitle || thread.title || UNKNOWN_ACCOUNT_LABEL
+  const account = resolveDirectThreadAccount(
+    thread,
+    owner,
+    buildNetworkUsernameIndex(network)
   );
-  let username: string | undefined;
+  const accountKey = account.canonicalKey;
+  const username = account.hasHandle ? account.username : undefined;
   const aliases = new Set<string>();
 
-  if (folderUser) {
-    accountKey = folderUser;
-    username = folderUser;
-    aliases.add(folderUser);
-    displayName =
-      otherName && !isInstagramPlaceholderName(otherName)
-        ? formatAccountDisplayName(otherName)
-        : folderUser;
-  } else if (otherName && isLikelyInstagramUsername(otherName)) {
-    accountKey = identityNormalizeUsername(otherName);
-    username = accountKey;
-    aliases.add(accountKey);
-    displayName = isInstagramPlaceholderName(otherName)
-      ? UNKNOWN_ACCOUNT_LABEL
-      : formatAccountDisplayName(otherName);
-  } else if (otherName && network) {
-    const norm = identityNormalizeUsername(otherName);
-    let matched = false;
-    for (const acc of [
-      ...network.followers,
-      ...network.following,
-      ...network.mutuals,
-    ]) {
-      if (identityNormalizeUsername(acc.username) === norm) {
-        accountKey = norm;
-        username = norm;
-        aliases.add(norm);
-        displayName = formatAccountDisplayName(
-          acc.displayUsername || otherName
-        );
-        matched = true;
-        break;
-      }
-    }
-    if (!matched) {
-      username = undefined;
-      displayName = isInstagramPlaceholderName(otherName)
-        ? UNKNOWN_ACCOUNT_LABEL
-        : formatAccountDisplayName(otherName);
-    }
-  } else if (otherName) {
-    displayName = isInstagramPlaceholderName(otherName)
-      ? UNKNOWN_ACCOUNT_LABEL
-      : formatAccountDisplayName(otherName);
-  } else {
-    displayName = formatAccountDisplayName(thread.displayTitle || thread.title);
-  }
-
-  if (otherName) {
-    aliases.add(otherName);
-    aliases.add(normalizeIdentityKey(otherName));
+  if (!account.isUnknown && account.displayName) {
+    aliases.add(account.displayName);
+    aliases.add(normalizeIdentityKey(account.displayName));
   }
   if (username) aliases.add(username);
   aliases.add(accountKey);
@@ -155,7 +66,7 @@ function threadToRecord(
   return {
     threadId: thread.id,
     accountKey,
-    displayName,
+    displayName: account.displayName,
     username,
     aliases: [...aliases],
     totalMessages: thread.totalMessages,
@@ -223,6 +134,8 @@ export function buildDirectDmIndexFromMessages(
   options?: {
     network?: NetworkStats | null;
     files?: Map<string, string>;
+    /** Reuse an already-resolved owner so this index and core analytics agree. */
+    owner?: ExportOwnerIdentity;
   }
 ): DirectDmIndex {
   const threads = normalizeDmThreadList(messages);
@@ -230,6 +143,7 @@ export function buildDirectDmIndexFromMessages(
     network: options?.network,
     messages: messages ?? null,
     files: options?.files,
+    owner: options?.owner,
   });
 }
 
@@ -303,7 +217,9 @@ export function directDmRankReason(
       ? "Network only · mutual · no direct DMs"
       : "Network only · no direct DMs";
   }
-  const parts = [`${record.totalMessages.toLocaleString()} direct DMs`];
+  const parts = [
+    `${record.totalMessages.toLocaleString()} direct DM${record.totalMessages === 1 ? "" : "s"}`,
+  ];
   if (record.lastDmAt) {
     const label = formatTimestamp(record.lastDmAt);
     if (label !== "—") parts.push(`active ${label}`);

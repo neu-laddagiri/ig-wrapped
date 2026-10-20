@@ -1,4 +1,5 @@
 import { isInstagramPlaceholderName } from "@/lib/accountNameFilter";
+import { adClickStats } from "@/lib/adsPrivacyInsights";
 import type { ParsedExportData } from "@/types/instagram";
 import type {
   ContentDietResult,
@@ -15,13 +16,16 @@ export function buildShareCards(
   insights?: Pick<
     InsightsBundle,
     "accounts" | "cleanup" | "realOnes" | "dmAwards" | "adsInsights" | "exportCompleteness"
-  >
+  > &
+    Partial<Pick<InsightsBundle, "eras">>
 ): ShareCardData[] {
   const network = parsed.network;
   const messages = parsed.messages;
   const ads = parsed.ads;
   const wrapped = parsed.wrapped;
-  const era = parsed.mostActiveEra;
+  // Same peak as the Eras tab when the timeline is available.
+  const peakEraLabel =
+    insights?.eras?.peakMonth?.label ?? parsed.mostActiveEra?.mostActiveMonthLabel;
   const completeness = insights?.exportCompleteness ?? {
     score: 0,
     detectedCount: 0,
@@ -56,11 +60,15 @@ export function buildShareCards(
     return name;
   };
 
-  const biggestChatName = topDirect
-    ? formatChatLabel(topDirect.displayName, topDirect.isUnknownAccount)
+  // Name and count always come from the same account (or the same thread).
+  const biggestChat = topDirect
+    ? {
+        name: formatChatLabel(topDirect.displayName, topDirect.isUnknownAccount),
+        count: topDirect.dmMessageCount,
+      }
     : topThread
-      ? formatChatLabel(topThread.threadName)
-      : "your top chat";
+      ? { name: formatChatLabel(topThread.threadName), count: topThread.messageCount }
+      : null;
 
   cards.push({
     id: "overall",
@@ -77,11 +85,11 @@ export function buildShareCards(
       `DM messages: ${messages?.totalMessages.toLocaleString() ?? "—"}`,
       `Ads viewed: ${ads?.adsViewed.toLocaleString() ?? "—"}`,
       personality ? `Personality: ${personality.title}` : "",
-      era?.mostActiveMonthLabel ? `Peak era: ${era.mostActiveMonthLabel}` : "",
+      peakEraLabel ? `Peak era: ${peakEraLabel}` : "",
       `Export quality: ${completeness.score}/100`,
     ].filter(Boolean),
-    sensitiveLines: topDirect
-      ? [`Biggest 1-on-1: ${biggestChatName}`]
+    sensitiveLines: biggestChat
+      ? [`Biggest 1-on-1: ${biggestChat.name}`]
       : undefined,
   });
 
@@ -126,13 +134,16 @@ export function buildShareCards(
           ? `Top award: ${insights.dmAwards[0].title}`
           : "",
       ].filter(Boolean),
-      sensitiveLines: topThread
-        ? [`Biggest 1-on-1: ${biggestChatName} (${topThread.messageCount.toLocaleString()} msgs)`]
+      sensitiveLines: biggestChat
+        ? [
+            `Biggest 1-on-1: ${biggestChat.name} (${biggestChat.count.toLocaleString()} msg${biggestChat.count === 1 ? "" : "s"})`,
+          ]
         : undefined,
     });
   }
 
   if (ads) {
+    const resistance = adClickStats(ads).resistance;
     cards.push({
       id: "ads",
       title: "Ads & Privacy Wrapped",
@@ -140,11 +151,9 @@ export function buildShareCards(
       lines: [
         `Advertisers: ${ads.advertisersCount}`,
         `Ad categories: ${ads.adCategoriesCount}`,
-        contentDiet
-          ? `Ad resistance: ${contentDiet.adClickResistance}%`
-          : "",
+        resistance !== null ? `Ad resistance: ${resistance}%` : "",
         insights?.adsInsights
-          ? `Privacy score: ${insights.adsInsights.privacyCreepScore}/100`
+          ? `Privacy creep score: ${insights.adsInsights.privacyCreepScore}/100`
           : "",
       ].filter(Boolean),
     });

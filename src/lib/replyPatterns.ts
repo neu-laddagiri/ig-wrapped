@@ -1,8 +1,16 @@
 import type { DmAnalytics } from "@/types/instagram";
 import type { ReplyPatternResult, ThreadReplyPattern } from "@/types/insights";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import {
+  isExportOwnerName,
+  resolveExportOwnerIdentity,
+  type ExportOwnerIdentity,
+} from "@/lib/exportOwnerIdentity";
 
 const MAX_REPLY_MS = 7 * 86400000;
+/** A message after this much silence starts a new conversation. */
+const CONVERSATION_GAP_MS = 6 * 3600000;
+const OWNER_LABEL = "You";
 
 function median(nums: number[]): number | undefined {
   if (!nums.length) return undefined;
@@ -17,13 +25,27 @@ function avg(nums: number[]): number | undefined {
 }
 
 export function computeReplyPatterns(
-  messages: DmAnalytics | null
+  messages: DmAnalytics | null,
+  ownerIdentity?: ExportOwnerIdentity
 ): ReplyPatternResult {
   const empty: ReplyPatternResult = {
     threads: [],
     available: false,
   };
   if (!messages?.threads?.length) return empty;
+
+  const owner = ownerIdentity ?? resolveExportOwnerIdentity({ messages });
+  // Without a known owner there is no "you" side to measure.
+  if (owner.keys.size === 0) return empty;
+  const meBySender = new Map<string, boolean>();
+  const isMe = (name: string) => {
+    let me = meBySender.get(name);
+    if (me === undefined) {
+      me = isExportOwnerName(name, owner);
+      meBySender.set(name, me);
+    }
+    return me;
+  };
 
   const threads: ThreadReplyPattern[] = [];
 
@@ -42,41 +64,43 @@ export function computeReplyPatterns(
     let lastYou = 0;
     let lastThem = 0;
 
-    let prevSender = samples[0].sender_name;
-    let prevTs = samples[0].timestamp_ms!;
-    if (prevSender === "You") startsYou++;
-    else startsThem++;
+    const countStart = (sender: string) => {
+      if (isMe(sender)) startsYou++;
+      else startsThem++;
+    };
+    const countEnd = (sender: string) => {
+      if (isMe(sender)) lastYou++;
+      else lastThem++;
+    };
 
+    countStart(samples[0].sender_name);
     for (let i = 1; i < samples.length; i++) {
+      const prev = samples[i - 1];
       const s = samples[i];
-      const ts = s.timestamp_ms!;
-      const gap = ts - prevTs;
-      if (s.sender_name !== prevSender) {
+      const gap = s.timestamp_ms - prev.timestamp_ms;
+      const sameSide = isMe(s.sender_name) === isMe(prev.sender_name);
+      if (!sameSide) {
         if (gap <= MAX_REPLY_MS) {
-          if (s.sender_name === "You") youReplies.push(gap);
+          if (isMe(s.sender_name)) youReplies.push(gap);
           else themReplies.push(gap);
         } else {
           ghostMax = Math.max(ghostMax, gap / 86400000);
         }
-        if (samples[i - 1]?.sender_name !== s.sender_name) {
-          if (s.sender_name === "You") startsYou++;
-          else startsThem++;
-        }
       }
-      prevSender = s.sender_name;
-      prevTs = ts;
+      if (gap >= CONVERSATION_GAP_MS) {
+        countEnd(prev.sender_name);
+        countStart(s.sender_name);
+      }
     }
-
-    const last = samples[samples.length - 1];
-    if (last.sender_name === "You") lastYou = 1;
-    else lastThem = 1;
+    countEnd(samples[samples.length - 1].sender_name);
 
     const partner =
-      thread.participants.find((p) => p !== "You") ??
-      thread.threadName;
+      thread.participants.find((p) => !isMe(p)) ?? thread.threadName;
     const partnerLabel = formatAccountDisplayName(partner);
-    const youCount = thread.messagesBySender["You"] ?? 0;
-    const themCount = thread.messageCount - youCount;
+    let youCount = 0;
+    for (const [sender, count] of Object.entries(thread.messagesBySender ?? {})) {
+      if (isMe(sender)) youCount += count;
+    }
     const balance =
       thread.messageCount > 0
         ? 100 - Math.abs(50 - (youCount / thread.messageCount) * 100) * 2
@@ -102,14 +126,12 @@ export function computeReplyPatterns(
 
   if (!threads.length) return empty;
 
-  const allResponders = threads.flatMap((t) => {
-    const items: { label: string; avgMs: number }[] = [];
-    if (t.avgReplyMsYou != null)
-      items.push({ label: "You", avgMs: t.avgReplyMsYou });
-    if (t.avgReplyMsThem != null)
-      items.push({ label: t.partnerLabel, avgMs: t.avgReplyMsThem });
-    return items;
-  });
+  // Responder awards are about the people you talk to, not you.
+  const allResponders = threads.flatMap((t) =>
+    t.avgReplyMsThem != null
+      ? [{ label: t.partnerLabel, avgMs: t.avgReplyMsThem }]
+      : []
+  );
 
   const fastest = [...allResponders].sort((a, b) => a.avgMs - b.avgMs)[0];
   const slowest = [...allResponders].sort((a, b) => b.avgMs - a.avgMs)[0];
@@ -143,7 +165,7 @@ export function computeReplyPatterns(
           label:
             topStarterThread.conversationStartsYou >=
             topStarterThread.conversationStartsThem
-              ? "You"
+              ? OWNER_LABEL
               : topStarterThread.partnerLabel,
           count: Math.max(
             topStarterThread.conversationStartsYou,
@@ -155,7 +177,7 @@ export function computeReplyPatterns(
       ? {
           label:
             topEnderThread.lastMessagesYou >= topEnderThread.lastMessagesThem
-              ? "You"
+              ? OWNER_LABEL
               : topEnderThread.partnerLabel,
           count: Math.max(
             topEnderThread.lastMessagesYou,

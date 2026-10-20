@@ -96,7 +96,7 @@ const CATEGORIES: CategoryRule[] = [
     id: "messages",
     label: "Messages",
     description: "DM threads and message requests",
-    patterns: ["/messages/", "message_1.json"],
+    patterns: ["/messages/inbox/", "/messages/message_requests/"],
   },
   {
     id: "login_activity",
@@ -114,11 +114,7 @@ const CATEGORIES: CategoryRule[] = [
     id: "security_changes",
     label: "Security Changes",
     description: "Password and privacy setting changes",
-    patterns: [
-      "password_change",
-      "profile_privacy_changes",
-      "security_and_login",
-    ],
+    patterns: ["password_change", "privacy_changes", "two_factor"],
   },
   {
     id: "personal_information",
@@ -136,7 +132,8 @@ const CATEGORIES: CategoryRule[] = [
 ];
 
 function pathMatches(path: string, patterns: string[]): boolean {
-  const lower = path.toLowerCase().replace(/\\/g, "/");
+  // Leading "/" so "/messages/…" also matches legacy exports rooted at messages/.
+  const lower = `/${path.toLowerCase().replace(/\\/g, "/")}`;
   return patterns.some((p) => lower.includes(p.toLowerCase()));
 }
 

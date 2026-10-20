@@ -12,7 +12,7 @@ interface PersonalityTabProps {
 
 export function PersonalityTab({ insights }: PersonalityTabProps) {
   const { presentationMode } = usePresentationMode();
-  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(false);
+  const [hideShareNamesLocal, setHideShareNamesLocal] = useState(true);
   const hideNames = presentationMode || hideShareNamesLocal;
 
   const personality = insights?.personality;
@@ -61,10 +61,17 @@ export function PersonalityTab({ insights }: PersonalityTabProps) {
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="font-semibold text-white">Shareable cards</h3>
-          <label className="flex items-center gap-2 text-xs text-white/60">
+          <label
+            className="flex items-center gap-2 text-xs text-white/60"
+            title={
+              presentationMode
+                ? "Names stay hidden while Presentation Mode is on"
+                : undefined
+            }
+          >
             <input
               type="checkbox"
-              checked={hideShareNamesLocal}
+              checked={hideNames}
               onChange={(e) => setHideShareNamesLocal(e.target.checked)}
               disabled={presentationMode}
               className="accent-[#DD2A7B]"

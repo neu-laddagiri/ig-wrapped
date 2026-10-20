@@ -55,7 +55,6 @@ const listConfig: {
 
 export function NetworkManagerTab({
   network,
-  linkedinProgress = [],
   onOpenAccount,
 }: NetworkManagerTabProps) {
   const [activeList, setActiveList] = useState<NetworkListKey>("dontFollowMeBack");
@@ -165,6 +164,7 @@ export function NetworkManagerTab({
               key={item.key}
               type="button"
               onClick={() => setActiveList(item.key)}
+              aria-pressed={activeList === item.key}
               className={
                 activeList === item.key
                   ? `${TAB_SELECTED} text-xs`
@@ -178,6 +178,7 @@ export function NetworkManagerTab({
       </div>
 
       <AccountTable
+        key={activeList}
         accounts={activeAccounts}
         title={activeConfig.label}
         exportFilename={activeConfig.exportName}

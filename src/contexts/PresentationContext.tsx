@@ -13,8 +13,9 @@ interface PresentationContextValue {
   presentationMode: boolean;
   setPresentationMode: (v: boolean) => void;
   togglePresentationMode: () => void;
-  /** Effective: hide names when presentation mode OR story mode public-safe */
+  /** Same as presentationMode: true while names and other sensitive details must be hidden. */
   hideSensitiveDetails: boolean;
+  /** Not consumed yet — Story Mode's toggle lives in page state (storyHideNames). */
   storyPublicSafe: boolean;
   setStoryPublicSafe: (v: boolean) => void;
 }

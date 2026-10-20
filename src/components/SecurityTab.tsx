@@ -27,6 +27,7 @@ import {
   formatSecurityEventTime,
   resolveSuspiciousLoginAnalysis,
 } from "@/lib/securityAnalysis";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface SecurityTabProps {
   security: SecurityData | null;
@@ -69,9 +70,16 @@ function matchesFilter(event: SecurityEvent, filter: TimelineFilter): boolean {
   return event.type === filter;
 }
 
-function TimelineEventRow({ event }: { event: SecurityEvent }) {
+function TimelineEventRow({
+  event,
+  hideDetails,
+}: {
+  event: SecurityEvent;
+  hideDetails: boolean;
+}) {
   const Icon = EVENT_ICONS[event.type] ?? Clock;
   const color = EVENT_COLORS[event.type] ?? EVENT_COLORS.unknown;
+  const hasDetails = Boolean(event.device || event.location || event.ipAddress);
 
   return (
     <li className="flex gap-3 rounded-xl border border-white/8 bg-white/[0.03] p-3">
@@ -87,29 +95,38 @@ function TimelineEventRow({ event }: { event: SecurityEvent }) {
             {formatSecurityEventTime(event)}
           </span>
         </div>
-        <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/45">
-          {event.device && (
-            <span className="inline-flex items-center gap-1">
-              <Monitor className="h-3 w-3" />
-              {event.device}
-            </span>
-          )}
-          {event.location && (
-            <span className="inline-flex items-center gap-1">
-              <MapPin className="h-3 w-3" />
-              {event.location}
-            </span>
-          )}
-          {event.ipAddress && (
-            <span className="text-white/35">IP: {event.ipAddress}</span>
-          )}
-        </div>
+        {hideDetails ? (
+          hasDetails && (
+            <p className="mt-1.5 text-xs text-white/35">
+              Device, location and IP hidden in Presentation Mode
+            </p>
+          )
+        ) : (
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-xs text-white/45">
+            {event.device && (
+              <span className="inline-flex items-center gap-1">
+                <Monitor className="h-3 w-3" />
+                {event.device}
+              </span>
+            )}
+            {event.location && (
+              <span className="inline-flex items-center gap-1">
+                <MapPin className="h-3 w-3" />
+                {event.location}
+              </span>
+            )}
+            {event.ipAddress && (
+              <span className="text-white/35">IP: {event.ipAddress}</span>
+            )}
+          </div>
+        )}
       </div>
     </li>
   );
 }
 
 export function SecurityTab({ security, securityAudit }: SecurityTabProps) {
+  const { presentationMode } = usePresentationMode();
   const [filter, setFilter] = useState<TimelineFilter>("all");
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const [showAllFlagged, setShowAllFlagged] = useState(false);
@@ -214,7 +231,11 @@ export function SecurityTab({ security, securityAudit }: SecurityTabProps) {
           <>
             <ul className="mt-4 space-y-2">
               {visibleEvents.map((event) => (
-                <TimelineEventRow key={event.id} event={event} />
+                <TimelineEventRow
+                  key={event.id}
+                  event={event}
+                  hideDetails={presentationMode}
+                />
               ))}
             </ul>
             {visibleCount < filteredEvents.length && (
@@ -344,19 +365,27 @@ export function SecurityTab({ security, securityAudit }: SecurityTabProps) {
           <p className="mt-1 text-xs text-white/40">
             Apps and websites connected to your Instagram account.
           </p>
-          <ul className="mt-4 space-y-2">
-            {securityAudit.connectedApps.slice(0, 20).map((app) => (
-              <li
-                key={app.name}
-                className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm"
-              >
-                <span className="text-white/75">{app.name}</span>
-                {app.isStale && (
-                  <span className="text-xs text-amber-400/80">Stale</span>
-                )}
-              </li>
-            ))}
-          </ul>
+          {presentationMode ? (
+            <p className="mt-4 text-sm text-white/55">
+              {formatNumber(securityAudit.connectedApps.length)} connected app
+              {securityAudit.connectedApps.length === 1 ? "" : "s"} — names
+              hidden in Presentation Mode.
+            </p>
+          ) : (
+            <ul className="mt-4 space-y-2">
+              {securityAudit.connectedApps.slice(0, 20).map((app) => (
+                <li
+                  key={app.name}
+                  className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2 text-sm"
+                >
+                  <span className="text-white/75">{app.name}</span>
+                  {app.isStale && (
+                    <span className="text-xs text-amber-400/80">Stale</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
           {securityAudit.staleApps.length > 0 && (
             <p className="mt-3 text-xs text-white/40">
               {securityAudit.staleApps.length} app(s) may be worth disconnecting.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useId, useState } from "react";
 import {
   loadAccountCrm,
   saveAccountCrmEntry,
@@ -13,20 +13,16 @@ interface AccountCrmPanelProps {
   username: string;
 }
 
+/** Remount (via `key`) when fingerprint or username changes so state reloads. */
 export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps) {
-  const [note, setNote] = useState("");
-  const [status, setStatus] = useState<AccountCrmStatus>("not-reviewed");
-
-  useEffect(() => {
-    const entry = loadAccountCrm(fingerprint)[username];
-    if (entry) {
-      setNote(entry.note ?? "");
-      setStatus(entry.status);
-    } else {
-      setNote("");
-      setStatus("not-reviewed");
-    }
-  }, [fingerprint, username]);
+  const [note, setNote] = useState(
+    () => loadAccountCrm(fingerprint)[username]?.note ?? ""
+  );
+  const [status, setStatus] = useState<AccountCrmStatus>(
+    () => loadAccountCrm(fingerprint)[username]?.status ?? "not-reviewed"
+  );
+  const noteId = useId();
+  const statusId = useId();
 
   const persist = (nextNote: string, nextStatus: AccountCrmStatus) => {
     saveAccountCrmEntry(fingerprint, {
@@ -40,10 +36,14 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
 
   return (
     <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
+      <label
+        htmlFor={noteId}
+        className="block text-[10px] font-semibold uppercase tracking-wider text-white/35"
+      >
         Private notes
-      </p>
+      </label>
       <textarea
+        id={noteId}
         value={note}
         onChange={(e) => {
           setNote(e.target.value);
@@ -53,8 +53,11 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
         placeholder="Your private note…"
         className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white outline-none placeholder:text-white/30"
       />
-      <label className="mt-2 block text-[10px] text-white/40">Status</label>
+      <label htmlFor={statusId} className="mt-2 block text-[10px] text-white/40">
+        Status
+      </label>
       <select
+        id={statusId}
         value={status}
         onChange={(e) => {
           const v = e.target.value as AccountCrmStatus;

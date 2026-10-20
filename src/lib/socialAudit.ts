@@ -1,5 +1,6 @@
 import type { InsightsBundle, SocialAuditItem } from "@/types/insights";
 import type { ParsedExportData } from "@/types/instagram";
+import { dmThreadSizes, isDmAwardMeaningful } from "@/lib/funStats";
 
 export function computeSocialAudit(
   parsed: ParsedExportData,
@@ -9,7 +10,8 @@ export function computeSocialAudit(
   const network = parsed.network;
   const ads = parsed.ads;
 
-  if (network && network.followBackRatio > 0.45) {
+  // Non-overlapping bands so the same network never gets both flags.
+  if (network && network.followBackRatio >= 0.5) {
     items.push({
       id: "strong-mutual",
       label: "Strong mutual ratio",
@@ -17,9 +19,7 @@ export function computeSocialAudit(
       explanation: `${Math.round(network.followBackRatio * 100)}% follow-back — solid reciprocity.`,
       confidence: "high",
     });
-  }
-
-  if (network && network.dontFollowMeBack.length > network.mutuals.length) {
+  } else if (network && network.dontFollowMeBack.length > network.mutuals.length) {
     items.push({
       id: "one-way-follows",
       label: "Lots of one-way follows",
@@ -44,7 +44,7 @@ export function computeSocialAudit(
       id: "late-night",
       label: "Heavy late-night usage",
       tone: "red",
-      explanation: `${bundle.burnoutMeter.lateNightScore}% of sampled DMs were late night.`,
+      explanation: `${bundle.burnoutMeter.lateNightScore}% of timestamped DMs were sent between midnight and 5am (your local time).`,
       confidence: bundle.burnoutMeter.confidence,
     });
   }
@@ -79,7 +79,9 @@ export function computeSocialAudit(
     });
   }
 
-  const balanced = bundle.dmAwards.find((a) => a.id === "balanced");
+  const balanced = bundle.dmAwards.find(
+    (a) => a.id === "balanced" && isDmAwardMeaningful(a, dmThreadSizes(parsed.messages))
+  );
   if (balanced) {
     items.push({
       id: "balanced-dm",
@@ -98,7 +100,7 @@ export function computeSocialAudit(
       id: "security-review",
       label: "Security events worth reviewing",
       tone: "red",
-      explanation: `${count} flagged items in export.`,
+      explanation: `${count} flagged item${count === 1 ? "" : "s"} in export.`,
       confidence: "medium",
     });
   }

@@ -15,6 +15,29 @@ export function friendlyAiError(
       : "Could not generate summary. Try again later.";
   }
 
+  if (msg.includes("too many ai requests")) {
+    return "You're sending AI requests too quickly. Wait a minute and try again.";
+  }
+
+  if (msg.includes("too large")) {
+    return "This request is too large for AI processing.";
+  }
+
+  if (msg.includes("sign in")) {
+    return "Sign in to use AI features.";
+  }
+
+  if (msg.includes("took too long") || msg.includes("timed out")) {
+    return "The AI provider took too long to respond. Try again.";
+  }
+
+  if (
+    msg.includes("temporarily unavailable") ||
+    msg.includes("could not reach")
+  ) {
+    return "The AI provider is unavailable right now. Try again in a few minutes.";
+  }
+
   if (
     msg.includes("rate limit") ||
     msg.includes("quota") ||

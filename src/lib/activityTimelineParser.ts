@@ -56,6 +56,21 @@ function extractTimestamps(data: unknown): number[] {
       return;
     }
 
+    // { media: [...], string_map_data: { …, Time: { timestamp } } } — one event;
+    // the attached media's creation_timestamp is not a separate activity.
+    if (isRecord(node.string_map_data)) {
+      let mapTs: number | undefined;
+      for (const [key, entry] of Object.entries(node.string_map_data)) {
+        if (!isRecord(entry)) continue;
+        const ts = parseTimestamp(entry.timestamp);
+        if (ts && (key.toLowerCase() === "time" || !mapTs)) mapTs = ts;
+      }
+      if (mapTs) {
+        timestamps.push(mapTs);
+        return;
+      }
+    }
+
     for (const value of Object.values(node)) {
       if (Array.isArray(value)) walk(value);
       else if (isRecord(value)) walk(value);
@@ -71,11 +86,9 @@ function addTimestampsToMap(
   type: ActivityTypeKey,
   timestamps: number[]
 ): void {
+  // No same-second dedupe: distinct events can share a timestamp.
   const monthCounts = new Map<string, number>();
-  const seen = new Set<number>();
   for (const ts of timestamps) {
-    if (seen.has(ts)) continue;
-    seen.add(ts);
     const month = formatMonthKey(ts);
     monthCounts.set(month, (monthCounts.get(month) ?? 0) + 1);
   }

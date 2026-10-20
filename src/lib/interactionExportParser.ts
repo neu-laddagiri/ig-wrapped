@@ -111,6 +111,14 @@ function registerKey(
   return added;
 }
 
+/** string_map_data labels that name the account an interaction belongs to. */
+const ACCOUNT_LABEL = /^(media owner|owner|username|account)$/i;
+
+/**
+ * One account key per export item. Items name the account in `title` (likes, story
+ * likes, older comments) or `string_map_data["Media Owner"]` (post_comments_N.json).
+ * `string_list_data[].value` is the 👍 reaction or the comment text, never an account.
+ */
 function extractAccountKeys(data: unknown, onKey: (key: string) => void): void {
   if (Array.isArray(data)) {
     data.forEach((item) => extractAccountKeys(item, onKey));
@@ -119,26 +127,44 @@ function extractAccountKeys(data: unknown, onKey: (key: string) => void): void {
   if (typeof data !== "object" || data === null) return;
   const obj = data as Record<string, unknown>;
 
+  let account: string | null = null;
   if (typeof obj.title === "string" && obj.title.trim()) {
     const title = cleanRawDisplayName(obj.title.trim());
-    if (isValidAccountName(title) && !title.includes("http")) {
-      onKey(title);
+    if (isValidAccountName(title) && !title.includes("http")) account = title;
+  }
+
+  const stringMap = obj.string_map_data;
+  if (!account && typeof stringMap === "object" && stringMap !== null && !Array.isArray(stringMap)) {
+    for (const [label, entry] of Object.entries(stringMap as Record<string, unknown>)) {
+      if (!ACCOUNT_LABEL.test(label.trim())) continue;
+      const value =
+        typeof entry === "object" && entry !== null
+          ? (entry as Record<string, unknown>).value
+          : undefined;
+      if (typeof value !== "string" || !value.trim() || value.includes("http")) continue;
+      const v = cleanRawDisplayName(value.trim());
+      if (isValidAccountName(v)) {
+        account = v;
+        break;
+      }
     }
   }
 
-  if (Array.isArray(obj.string_list_data)) {
+  if (!account && Array.isArray(obj.string_list_data)) {
     for (const entry of obj.string_list_data) {
       if (typeof entry !== "object" || entry === null) continue;
-      const row = entry as Record<string, unknown>;
-      if (typeof row.href === "string") {
-        const fromHref = usernameFromHref(row.href);
-        if (fromHref) onKey(fromHref);
-      }
-      if (typeof row.value === "string" && row.value.trim() && !row.value.includes("http")) {
-        const v = cleanRawDisplayName(row.value.trim());
-        if (isValidAccountName(v)) onKey(v);
+      const href = (entry as Record<string, unknown>).href;
+      const fromHref = typeof href === "string" ? usernameFromHref(href) : null;
+      if (fromHref) {
+        account = fromHref;
+        break;
       }
     }
+  }
+
+  if (account) {
+    onKey(account);
+    return;
   }
 
   for (const val of Object.values(obj)) {
@@ -267,6 +293,8 @@ export function resolveInteractionsForAliases(
       if (sanitized) keys.add(sanitized);
     }
 
+    // registerKey stores the compact form of every account too, so these direct
+    // lookups already cover compact matching — no scan over the whole map needed.
     for (const key of keys) {
       const direct = interactionCounts.get(key);
       if (direct && direct[field] > 0) {
@@ -275,17 +303,6 @@ export function resolveInteractionsForAliases(
             ? "high"
             : "medium";
         return { count: direct[field], status: "attributed", confidence };
-      }
-    }
-
-    for (const [mapKey, val] of interactionCounts) {
-      for (const key of keys) {
-        if (
-          compactIdentityKey(mapKey) === compactIdentityKey(key) &&
-          val[field] > 0
-        ) {
-          return { count: val[field], status: "attributed", confidence: "medium" };
-        }
       }
     }
 

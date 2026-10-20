@@ -5,15 +5,21 @@ import { GitCompare, Upload } from "lucide-react";
 import type { ParsedExportData } from "@/types/instagram";
 import { compareParsedExports } from "@/lib/accountInsights";
 import { parseInstagramZip } from "@/lib/zipParser";
-import type { SavedAnalysisRow } from "@/types/analysis";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
-import { loadSavedAnalyses, loadSavedAnalysisById } from "@/lib/cloudSave";
+import {
+  isSupabaseConfigured,
+  loadSavedAnalyses,
+  loadSavedAnalysisById,
+} from "@/lib/cloudSave";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface CompareTabProps {
   current: ParsedExportData;
 }
 
 export function CompareTab({ current }: CompareTabProps) {
+  const { user } = useAuth();
+  const userId = user?.id;
   const [baseline, setBaseline] = useState<ParsedExportData | null>(null);
   const [baselineLabel, setBaselineLabel] = useState("Earlier export");
   const [loading, setLoading] = useState(false);
@@ -24,8 +30,11 @@ export function CompareTab({ current }: CompareTabProps) {
   >([]);
 
   useEffect(() => {
+    if (!userId || !isSupabaseConfigured()) return;
+    let cancelled = false;
     void (async () => {
       const { data } = await loadSavedAnalyses();
+      if (cancelled) return;
       setSavedOptions(
         data.map((s) => ({
           id: s.id,
@@ -33,7 +42,10 @@ export function CompareTab({ current }: CompareTabProps) {
         }))
       );
     })();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
 
   const comparison = useMemo(() => {
     if (!baseline) return null;
@@ -55,16 +67,25 @@ export function CompareTab({ current }: CompareTabProps) {
   };
 
   const pickSaved = async (id: string, label: string) => {
-    const { data: row } = await loadSavedAnalysisById(id);
-    const parsed = row?.full_analysis_json?.parsed;
-    if (!parsed) return;
-    setBaseline({
-      ...parsed,
-      filePaths: [],
-      mostActiveEra: parsed.mostActiveEra ?? null,
-      insights: parsed.insights ?? null,
-    });
-    setBaselineLabel(label);
+    setLoading(true);
+    setError(null);
+    try {
+      const { data: row, error: loadError } = await loadSavedAnalysisById(id);
+      const parsed = row?.full_analysis_json?.parsed;
+      if (!parsed) {
+        setError(loadError ?? "Could not load that saved analysis.");
+        return;
+      }
+      setBaseline({
+        ...parsed,
+        filePaths: [],
+        mostActiveEra: parsed.mostActiveEra ?? null,
+        insights: parsed.insights ?? null,
+      });
+      setBaselineLabel(label);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const renderList = (title: string, items: string[]) => {
@@ -112,7 +133,7 @@ export function CompareTab({ current }: CompareTabProps) {
             />
           </label>
         </div>
-        {savedOptions.length > 0 && (
+        {userId && savedOptions.length > 0 && (
           <div className="mt-4">
             <p className="text-xs text-white/40">Or compare with a saved analysis:</p>
             <div className="mt-2 flex flex-wrap gap-2">
@@ -121,7 +142,8 @@ export function CompareTab({ current }: CompareTabProps) {
                   key={row.id}
                   type="button"
                   onClick={() => void pickSaved(row.id, row.label)}
-                  className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60 hover:bg-white/5"
+                  disabled={loading}
+                  className="rounded-full border border-white/10 px-3 py-1 text-xs text-white/60 hover:bg-white/5 disabled:opacity-40"
                 >
                   {row.label}
                 </button>
@@ -131,7 +153,7 @@ export function CompareTab({ current }: CompareTabProps) {
         )}
         {error && <p className="mt-3 text-sm text-red-300/90">{error}</p>}
         {loading && (
-          <p className="mt-3 text-sm text-white/45">Parsing comparison ZIP…</p>
+          <p className="mt-3 text-sm text-white/45">Loading comparison…</p>
         )}
       </div>
 

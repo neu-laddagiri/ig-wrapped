@@ -17,13 +17,14 @@ import type {
   DmAiSummaryResult,
 } from "@/types/dmAiSummary";
 import { formatTimestamp } from "@/lib/formatters";
-import type { NormalizedDmThread } from "@/lib/dmThreads";
+import { computeDisplayTitle, type NormalizedDmThread } from "@/lib/dmThreads";
 import {
   formatSenderStats,
   resolveAiReadyMessages,
   threadHasAiSample,
 } from "@/lib/dmMessageSampling";
 import { friendlyAiError } from "@/lib/aiErrorMessages";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 const TONE_OPTIONS: { value: DmAiSummaryTone; label: string; hint: string }[] =
   [
@@ -213,6 +214,7 @@ export function DmAiSummarySection({
   embedded = false,
   isLoadedFromCloud = false,
 }: DmAiSummarySectionProps) {
+  const { presentationMode } = usePresentationMode();
   const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
   const [tone, setTone] = useState<DmAiSummaryTone>(saved?.tone ?? "wrapped");
   const [useRealNames, setUseRealNames] = useState(showThreadNames);
@@ -227,10 +229,12 @@ export function DmAiSummarySection({
   const hasSample = threadHasAiSample(thread);
   const missingCloudSample = isLoadedFromCloud && !hasSample;
 
-  useEffect(() => {
-    if (!showThreadNames) setUseRealNames(false);
-    else setUseRealNames(true);
-  }, [showThreadNames]);
+  // Follow the thread-name toggle whenever it changes.
+  const [lastShowThreadNames, setLastShowThreadNames] = useState(showThreadNames);
+  if (showThreadNames !== lastShowThreadNames) {
+    setLastShowThreadNames(showThreadNames);
+    setUseRealNames(showThreadNames);
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -247,11 +251,13 @@ export function DmAiSummarySection({
     };
   }, []);
 
+  const sendRealNames = showThreadNames && useRealNames && !presentationMode;
+
   const buildPayload = useCallback(() => {
-    const realNames = showThreadNames && useRealNames;
+    const realNames = sendRealNames;
     const selectedMessages = resolveAiReadyMessages(thread, realNames);
     return {
-      threadTitle: thread.title,
+      threadTitle: realNames ? thread.title : computeDisplayTitle(thread, false),
       participantCount: thread.participantCount,
       isGroup: thread.isGroup,
       useRealNames: realNames,
@@ -278,7 +284,7 @@ export function DmAiSummarySection({
       },
       selectedMessages,
     };
-  }, [thread, tone, showThreadNames, useRealNames]);
+  }, [thread, tone, sendRealNames]);
 
   const generate = async () => {
     setError(null);
@@ -292,7 +298,7 @@ export function DmAiSummarySection({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const data = await res.json();
+      const data = await res.json().catch(() => ({}));
 
       if (!res.ok) {
         setError(friendlyAiError(
@@ -312,6 +318,7 @@ export function DmAiSummarySection({
         tone: tone === "funny" ? "wrapped" : tone,
         generatedAt: new Date().toISOString(),
         summary: data.summary as DmAiSummaryResult,
+        usedRealNames: payload.useRealNames,
       });
     } catch {
       setError(friendlyAiError("network fetch failed", "summary"));
@@ -356,7 +363,17 @@ export function DmAiSummarySection({
         </div>
       ) : saved ? (
         <div className="space-y-3">
-          <SummaryCards summary={saved.summary} />
+          {presentationMode ? (
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-5 text-center text-xs text-white/45">
+              AI summary hidden while presenting.
+            </p>
+          ) : !showThreadNames && saved.usedRealNames !== false ? (
+            <p className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-5 text-center text-xs text-white/45">
+              This summary may mention names — turn on “Show thread names” to view it.
+            </p>
+          ) : (
+            <SummaryCards summary={saved.summary} />
+          )}
           <div className="flex flex-wrap gap-2">
             <button
               type="button"
@@ -370,14 +387,16 @@ export function DmAiSummarySection({
               <RefreshCw className="h-3.5 w-3.5" />
               Regenerate
             </button>
-            <button
-              type="button"
-              onClick={copySummary}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/10"
-            >
-              <Copy className="h-3.5 w-3.5" />
-              {copied ? "Copied!" : "Copy summary"}
-            </button>
+            {!presentationMode && (
+              <button
+                type="button"
+                onClick={copySummary}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/5 px-3 py-1.5 text-xs text-white/70 transition hover:bg-white/10"
+              >
+                <Copy className="h-3.5 w-3.5" />
+                {copied ? "Copied!" : "Copy summary"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => onSummaryChange(thread.id, null)}
@@ -411,9 +430,9 @@ export function DmAiSummarySection({
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
                 <p className="text-xs text-amber-100/90">
                   This sends selected message text
-                  {showThreadNames && useRealNames
+                  {sendRealNames
                     ? " and participant names"
-                    : ""}{" "}
+                    : " with anonymized sender labels"}{" "}
                   from this thread to the AI provider. Do not generate summaries
                   for chats you are not comfortable processing.
                 </p>
@@ -461,7 +480,7 @@ export function DmAiSummarySection({
                   </p>
                 </div>
 
-                {showThreadNames && (
+                {showThreadNames && !presentationMode && (
                   <div className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2">
                     <label className="flex items-center gap-2 text-xs text-white/70">
                       <input

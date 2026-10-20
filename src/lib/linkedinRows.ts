@@ -3,6 +3,7 @@ import {
   getDisplayLabel,
   getSecondaryLabel,
   isLikelyInstagramUsername,
+  isSyntheticCanonicalKey,
   normalizeUsername,
 } from "@/lib/accountIdentity";
 import type { CanonicalAccount } from "@/lib/canonicalAccounts";
@@ -93,6 +94,19 @@ function lookupStoredEntry(
   return undefined;
 }
 
+/** Profile link only for real handles — synthetic keys like `thread:…` have none. */
+function profileHref(
+  progressKey: string,
+  networkAccount?: InstagramAccount
+): string | undefined {
+  if (networkAccount?.href) return networkAccount.href;
+  const handle = networkAccount?.username ?? progressKey;
+  if (isSyntheticCanonicalKey(handle) || !isLikelyInstagramUsername(handle)) {
+    return undefined;
+  }
+  return instagramProfileUrl(normalizeUsername(handle));
+}
+
 function defaultEntry(
   progressKey: string,
   displayUsername: string,
@@ -101,8 +115,7 @@ function defaultEntry(
   return {
     username: progressKey,
     displayUsername,
-    instagramHref:
-      networkAccount?.href ?? instagramProfileUrl(progressKey),
+    instagramHref: profileHref(progressKey, networkAccount),
     status: "not-reviewed",
     notes: "",
     category: networkAccount?.category,
@@ -118,7 +131,12 @@ function mergeEntry(
 ): LinkedInHelperEntry {
   const stored = lookupStoredEntry(progressKey, legacyKeys, entryByKey);
   if (stored) {
-    return { ...stored, username: progressKey };
+    // Older saves stored instagram.com links built from synthetic keys.
+    return {
+      ...stored,
+      username: progressKey,
+      instagramHref: profileHref(progressKey, networkAccount),
+    };
   }
   return defaultEntry(
     progressKey,
@@ -181,9 +199,10 @@ function buildDmRow(
     dmRecord,
     ...net,
     isSilentMutual: false,
+    // A DM contact we can't tie to a real handle counts as unknown for filtering.
     isUnknown:
       displayName === UNKNOWN_ACCOUNT_LABEL ||
-      progressKey.startsWith("unknown:"),
+      (!networkAccount && isSyntheticCanonicalKey(progressKey)),
   };
 }
 

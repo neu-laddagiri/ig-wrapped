@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Database, AlertTriangle, ChevronDown } from "lucide-react";
+import { Database, ChevronDown, EyeOff } from "lucide-react";
 import type {
   DmThreadDebugEntry,
   IdentityResolutionDebug,
@@ -14,6 +14,7 @@ import {
   resolveAccountIdentity,
 } from "@/lib/canonicalAccount";
 import type { UnifiedAccount } from "@/types/insights";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface DataExplorerTabProps {
   insights: InsightsBundle | null;
@@ -60,7 +61,7 @@ function inferConfidence(
 }
 
 export function DataExplorerTab({ insights }: DataExplorerTabProps) {
-  const [showRaw, setShowRaw] = useState(false);
+  const { presentationMode } = usePresentationMode();
   const [advancedOpen, setAdvancedOpen] = useState(false);
 
   if (!insights) {
@@ -152,38 +153,62 @@ export function DataExplorerTab({ insights }: DataExplorerTabProps) {
         )}
 
       {dataExplorer.coreAnalytics && (
-        <CoreAnalyticsPanel data={dataExplorer.coreAnalytics} />
+        <CoreAnalyticsPanel
+          data={dataExplorer.coreAnalytics}
+          hideDetails={presentationMode}
+        />
       )}
 
       {dataExplorer.identityResolution && (
-        <IdentityResolutionPanel debug={dataExplorer.identityResolution} />
+        <IdentityResolutionPanel
+          debug={dataExplorer.identityResolution}
+          hideDetails={presentationMode}
+        />
       )}
 
-      {insights.accounts.length > 0 && (
-        <IdentityLookupPanel accounts={insights.accounts} />
-      )}
+      {presentationMode ? (
+        <div className="flex items-start gap-3 rounded-2xl border border-[#515BD4]/25 bg-[#515BD4]/10 px-5 py-4">
+          <EyeOff className="mt-0.5 h-4 w-4 shrink-0 text-[#818cf8]" />
+          <p className="text-sm text-white/60">
+            Account lookup, identity matches, DM thread diagnostics and file
+            paths are hidden in Presentation Mode.
+          </p>
+        </div>
+      ) : (
+        <>
+          {insights.accounts.length > 0 && (
+            <IdentityLookupPanel accounts={insights.accounts} />
+          )}
 
-      {dataExplorer.dmThreadDebug && dataExplorer.dmThreadDebug.length > 0 && (
-        <DmThreadDebugPanel entries={dataExplorer.dmThreadDebug} />
+          {dataExplorer.dmThreadDebug &&
+            dataExplorer.dmThreadDebug.length > 0 && (
+              <DmThreadDebugPanel entries={dataExplorer.dmThreadDebug} />
+            )}
+        </>
       )}
 
       <div className="rounded-2xl border border-white/10 bg-white/[0.04] overflow-hidden">
         <button
           type="button"
           onClick={() => setAdvancedOpen((o) => !o)}
+          aria-expanded={advancedOpen}
           className="flex w-full items-center justify-between px-5 py-4 text-left"
         >
           <div>
             <h3 className="font-semibold text-white">Advanced</h3>
-            <p className="mt-1 text-xs text-white/40">
-              Raw file index and JSON preview
-            </p>
+            <p className="mt-1 text-xs text-white/40">Raw file index</p>
           </div>
           <ChevronDown
             className={`h-5 w-5 text-white/40 transition ${advancedOpen ? "rotate-180" : ""}`}
           />
         </button>
-        {advancedOpen && (
+        {advancedOpen && presentationMode && (
+          <p className="border-t border-white/8 px-5 py-4 text-xs text-white/45">
+            File paths can contain usernames, so the file index is hidden in
+            Presentation Mode.
+          </p>
+        )}
+        {advancedOpen && !presentationMode && (
           <div className="border-t border-white/8 px-5 pb-5">
             <div className="mt-4 max-h-96 overflow-y-auto rounded-xl border border-white/8">
               <table className="w-full text-left text-xs">
@@ -209,22 +234,11 @@ export function DataExplorerTab({ insights }: DataExplorerTabProps) {
                 </tbody>
               </table>
             </div>
-
-            <label className="mt-4 flex items-center gap-2 text-sm text-white/55">
-              <input
-                type="checkbox"
-                checked={showRaw}
-                onChange={(e) => setShowRaw(e.target.checked)}
-                className="accent-[#DD2A7B]"
-              />
-              Show raw JSON preview
-            </label>
-            {showRaw && (
-              <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-100/80">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                Raw JSON may contain private content. Use the file index for
-                transparency without exposing message bodies.
-              </div>
+            {dataExplorer.files.length > 200 && (
+              <p className="mt-2 text-[11px] text-white/35">
+                Showing the first 200 of {dataExplorer.files.length} indexed
+                files.
+              </p>
             )}
           </div>
         )}
@@ -235,27 +249,36 @@ export function DataExplorerTab({ insights }: DataExplorerTabProps) {
 
 function CoreAnalyticsPanel({
   data,
+  hideDetails,
 }: {
   data: NonNullable<InsightsBundle["dataExplorer"]["coreAnalytics"]>;
+  hideDetails: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const showDetails = expanded && !hideDetails;
 
   return (
     <div className="rounded-2xl border border-[#DD2A7B]/20 bg-[#DD2A7B]/5 p-5">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center justify-between text-left"
+        disabled={hideDetails}
+        aria-expanded={showDetails}
+        className="flex w-full items-center justify-between text-left disabled:cursor-default"
       >
         <div>
           <h3 className="font-semibold text-white">Canonical DM analytics</h3>
           <p className="mt-1 text-xs text-white/40">
-            Same normalized threads as the DMs tab — used by leaderboards, Real Ones, LinkedIn
+            {hideDetails
+              ? "Per-person rankings hidden in Presentation Mode"
+              : "Same normalized threads as the DMs tab — used by leaderboards, Real Ones, LinkedIn"}
           </p>
         </div>
-        <ChevronDown
-          className={`h-5 w-5 text-white/40 transition ${expanded ? "rotate-180" : ""}`}
-        />
+        {!hideDetails && (
+          <ChevronDown
+            className={`h-5 w-5 text-white/40 transition ${expanded ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
@@ -263,7 +286,7 @@ function CoreAnalyticsPanel({
         <Stat label="Group threads" value={data.groupDmThreadCount} />
       </div>
 
-      {expanded && (
+      {showDetails && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
@@ -396,25 +419,38 @@ function CoreAnalyticsPanel({
   );
 }
 
-function IdentityResolutionPanel({ debug }: { debug: IdentityResolutionDebug }) {
+function IdentityResolutionPanel({
+  debug,
+  hideDetails,
+}: {
+  debug: IdentityResolutionDebug;
+  hideDetails: boolean;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const showDetails = expanded && !hideDetails;
 
   return (
     <div className="rounded-2xl border border-[#515BD4]/20 bg-[#515BD4]/5 p-5">
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
-        className="flex w-full items-center justify-between text-left"
+        disabled={hideDetails}
+        aria-expanded={showDetails}
+        className="flex w-full items-center justify-between text-left disabled:cursor-default"
       >
         <div>
           <h3 className="font-semibold text-white">Identity resolution</h3>
           <p className="mt-1 text-xs text-white/40">
-            How network accounts are matched to DM threads and interactions
+            {hideDetails
+              ? "Matched names hidden in Presentation Mode"
+              : "How network accounts are matched to DM threads and interactions"}
           </p>
         </div>
-        <ChevronDown
-          className={`h-5 w-5 text-white/40 transition ${expanded ? "rotate-180" : ""}`}
-        />
+        {!hideDetails && (
+          <ChevronDown
+            className={`h-5 w-5 text-white/40 transition ${expanded ? "rotate-180" : ""}`}
+          />
+        )}
       </button>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
@@ -425,7 +461,7 @@ function IdentityResolutionPanel({ debug }: { debug: IdentityResolutionDebug }) 
         <Stat label="Unmatched threads" value={debug.unmatchedDmThreads} />
       </div>
 
-      {expanded && (
+      {showDetails && (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           <div>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-white/40">
@@ -506,6 +542,7 @@ function DmThreadDebugPanel({ entries }: { entries: DmThreadDebugEntry[] }) {
       <button
         type="button"
         onClick={() => setExpanded((e) => !e)}
+        aria-expanded={expanded}
         className="flex w-full items-center justify-between text-left"
       >
         <div>
@@ -584,7 +621,8 @@ function IdentityLookupPanel({ accounts }: { accounts: UnifiedAccount[] }) {
         type="text"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="e.g. levinpunnoose or Corey"
+        placeholder="e.g. a username or display name"
+        aria-label="Search accounts by username or display name"
         className="mt-3 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder:text-white/30"
       />
 

@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Copy, Download, AlertTriangle } from "lucide-react";
+import { Copy, Download, AlertTriangle, Check } from "lucide-react";
 import type { CleanupAccount } from "@/types/insights";
 import type { NetworkStats } from "@/types/instagram";
 import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
+import { redactNameLabel } from "@/lib/dmDisplayLabels";
+import { usePresentationMode } from "@/contexts/PresentationContext";
 
 type Preset =
   | "high"
@@ -17,12 +19,24 @@ interface UnfollowImpactPanelProps {
   cleanup: CleanupAccount[];
 }
 
+const VISIBLE_LIMIT = 100;
+
+/** Quote a CSV cell and neutralize spreadsheet formulas. */
+function csvCell(value: string): string {
+  const safe = /^[=+\-@\t\r]/.test(value) ? `'${value}` : value;
+  return `"${safe.replace(/"/g, '""')}"`;
+}
+
 export function UnfollowImpactPanel({
   network,
   cleanup,
 }: UnfollowImpactPanelProps) {
+  const { presentationMode } = usePresentationMode();
+  const showNames = !presentationMode;
   const [preset, setPreset] = useState<Preset>("high");
-  const [selected, setSelected] = useState<Set<string>>(new Set());
+  // null = untouched preset, which defaults to every candidate selected.
+  const [picked, setPicked] = useState<{ preset: Preset; usernames: Set<string> } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const candidates = useMemo(() => {
     if (preset === "high") {
@@ -41,39 +55,61 @@ export function UnfollowImpactPanel({
     );
   }, [cleanup, preset]);
 
-  const effectiveSelected = useMemo(() => {
-    if (selected.size > 0) return selected;
-    return new Set(candidates.map((c) => c.username));
-  }, [selected, candidates]);
+  const selected = useMemo(() => {
+    const all = candidates.map((c) => c.username);
+    if (!picked || picked.preset !== preset) return new Set(all);
+    return new Set(all.filter((u) => picked.usernames.has(u)));
+  }, [candidates, picked, preset]);
+
+  const mutualUsernames = useMemo(
+    () => new Set(network?.mutuals.map((m) => m.username) ?? []),
+    [network]
+  );
+
+  const selectedMutuals = useMemo(() => {
+    let n = 0;
+    for (const u of selected) if (mutualUsernames.has(u)) n++;
+    return n;
+  }, [selected, mutualUsernames]);
 
   const following = network?.totalFollowing ?? 0;
   const mutuals = network?.mutuals.length ?? 0;
-  const removeCount = effectiveSelected.size;
+  const removeCount = selected.size;
   const newFollowing = Math.max(0, following - removeCount);
-  const newMutuals = Math.max(
-    0,
-    mutuals -
-      [...effectiveSelected].filter((u) =>
-        network?.mutuals.some((m) => m.username === u)
-      ).length
-  );
+  const newMutuals = Math.max(0, mutuals - selectedMutuals);
   const currentRatio = network?.followBackRatio ?? 0;
   const projectedRatio =
     newFollowing > 0 ? newMutuals / newFollowing : 0;
 
+  const setSelection = (usernames: Set<string>) =>
+    setPicked({ preset, usernames });
+
+  const toggle = (username: string, checked: boolean) => {
+    const next = new Set(selected);
+    if (checked) next.add(username);
+    else next.delete(username);
+    setSelection(next);
+  };
+
   const copyUsernames = async () => {
-    const text = [...effectiveSelected].map((u) => `@${u}`).join("\n");
-    await navigator.clipboard.writeText(text);
+    const text = [...selected].map((u) => `@${u}`).join("\n");
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // clipboard unavailable (permissions / insecure context)
+    }
   };
 
   const exportCsv = () => {
     const rows = [
       "username,displayName,cleanupScore",
       ...candidates
-        .filter((c) => effectiveSelected.has(c.username))
+        .filter((c) => selected.has(c.username))
         .map(
           (c) =>
-            `${c.username},"${c.displayName.replace(/"/g, '""')}",${c.cleanupPriorityScore}`
+            `${csvCell(c.username)},${csvCell(c.displayName)},${c.cleanupPriorityScore}`
         ),
     ];
     const blob = new Blob([rows.join("\n")], { type: "text/csv" });
@@ -82,7 +118,7 @@ export function UnfollowImpactPanel({
     a.href = url;
     a.download = "cleanup-selected.csv";
     a.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
   if (!network) return null;
@@ -106,9 +142,10 @@ export function UnfollowImpactPanel({
           <button
             key={id}
             type="button"
+            aria-pressed={preset === id}
             onClick={() => {
               setPreset(id);
-              setSelected(new Set());
+              setPicked(null);
             }}
             className={preset === id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL}
           >
@@ -118,7 +155,10 @@ export function UnfollowImpactPanel({
       </div>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <ImpactStat label="Selected" value={String(removeCount)} />
+        <ImpactStat
+          label="Selected"
+          value={`${removeCount} of ${candidates.length}`}
+        />
         <ImpactStat
           label="Following after"
           value={`${newFollowing} (was ${following})`}
@@ -133,46 +173,75 @@ export function UnfollowImpactPanel({
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
-          onClick={copyUsernames}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5"
+          onClick={() => setSelection(new Set(candidates.map((c) => c.username)))}
+          disabled={removeCount === candidates.length}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
         >
-          <Copy className="h-3.5 w-3.5" />
-          Copy usernames
+          Select all
         </button>
         <button
           type="button"
-          onClick={exportCsv}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5"
+          onClick={() => setSelection(new Set())}
+          disabled={removeCount === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
         >
-          <Download className="h-3.5 w-3.5" />
+          Select none
+        </button>
+        {showNames && (
+          <button
+            type="button"
+            onClick={copyUsernames}
+            disabled={removeCount === 0}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+          >
+            {copied ? (
+              <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+            ) : (
+              <Copy className="h-3.5 w-3.5" aria-hidden />
+            )}
+            {copied ? "Copied" : "Copy usernames"}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={exportCsv}
+          disabled={removeCount === 0}
+          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+        >
+          <Download className="h-3.5 w-3.5" aria-hidden />
           Export CSV
         </button>
       </div>
 
       <ul className="mt-4 max-h-48 space-y-1 overflow-y-auto">
-        {candidates.slice(0, 15).map((c) => (
+        {candidates.slice(0, VISIBLE_LIMIT).map((c) => (
           <li key={c.username}>
             <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/5">
               <input
                 type="checkbox"
-                checked={effectiveSelected.has(c.username)}
-                onChange={(e) => {
-                  const next = new Set(selected.size ? selected : candidates.map((x) => x.username));
-                  if (e.target.checked) next.add(c.username);
-                  else next.delete(c.username);
-                  setSelected(next);
-                }}
+                checked={selected.has(c.username)}
+                onChange={(e) => toggle(c.username, e.target.checked)}
                 className="accent-[#DD2A7B]"
               />
-              <span className="text-white/80">{c.displayName}</span>
-              <span className="text-xs text-white/35">@{c.username}</span>
+              <span className="text-white/80">
+                {redactNameLabel(c.displayName, showNames)}
+              </span>
+              {showNames && (
+                <span className="text-xs text-white/35">@{c.username}</span>
+              )}
             </label>
           </li>
         ))}
       </ul>
+      {candidates.length > VISIBLE_LIMIT && (
+        <p className="mt-2 text-xs text-white/40">
+          Showing {VISIBLE_LIMIT} of {candidates.length} candidates. Select
+          all / none, copy, and export apply to every candidate.
+        </p>
+      )}
 
       <p className="mt-3 flex items-start gap-2 text-xs text-amber-200/70">
-        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Open Instagram profiles manually to unfollow. This is an estimate based
         on export data.
       </p>

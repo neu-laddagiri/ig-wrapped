@@ -7,7 +7,11 @@ const IMPORTANT_LINKEDIN = new Set([
   "connected",
 ]);
 
-function cleanupLabel(score: number, keep: boolean): CleanupLabel {
+type KeepReason = "dm" | "interaction" | "linkedin" | "other";
+
+function cleanupLabel(score: number, keep: KeepReason | null): CleanupLabel {
+  if (keep === "dm") return "Keep — mutual/DM active";
+  if (keep === "linkedin") return "Keep — manually marked important";
   if (keep) return "Keep — you actually interact";
   if (score >= 70) return "High cleanup priority";
   if (score >= 45) return "Medium cleanup priority";
@@ -67,7 +71,17 @@ export function computeCleanupScores(
 
       score = Math.max(0, Math.min(100, score));
 
-      const label = cleanupLabel(score, keep);
+      const keepReason: KeepReason | null = !keep
+        ? null
+        : (account.isMutual && account.dmMessageCount > 20) ||
+            account.dmMessageCount > 100
+          ? "dm"
+          : account.likedCount + account.commentedCount + account.storyInteractionCount > 10
+            ? "interaction"
+            : account.linkedInStatus && IMPORTANT_LINKEDIN.has(account.linkedInStatus)
+              ? "linkedin"
+              : "other";
+      const label = cleanupLabel(score, keepReason);
 
       let recommendedAction = "No action needed.";
       if (label === "High cleanup priority")

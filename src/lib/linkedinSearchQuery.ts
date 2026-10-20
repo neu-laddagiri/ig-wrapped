@@ -3,6 +3,7 @@ import {
   isValidAccountName,
   UNKNOWN_ACCOUNT_LABEL,
 } from "@/lib/accountNameFilter";
+import { isSyntheticCanonicalKey } from "@/lib/accountIdentity";
 
 export interface LinkedInSearchAccount {
   username?: string;
@@ -17,8 +18,10 @@ export interface LinkedInSearchContext {
   school?: string;
 }
 
+/** Instagram handle for search, or "" for internal keys like `thread:…`. */
 function cleanUsername(username?: string): string {
-  return (username ?? "").trim().replace(/^@/, "").replace(/^dm:/, "");
+  const trimmed = (username ?? "").trim().replace(/^@/, "");
+  return isSyntheticCanonicalKey(trimmed) ? "" : trimmed;
 }
 
 function normalizeComparable(value: string): string {
@@ -98,8 +101,10 @@ export function inferLinkedInSchoolContext(
   const fromEnv = process.env.NEXT_PUBLIC_LINKEDIN_SCHOOL_CONTEXT?.trim();
   if (fromEnv) return fromEnv;
 
+  // Only an explicit search for the school counts — not "northeastern illinois"
+  // or "northeastern weather".
   const hasSchoolSignal = searchTerms.some((term) =>
-    /northeastern(\s+university)?/i.test(term)
+    /^northeastern(\s+university)?$/i.test(term.trim().replace(/\s+/g, " "))
   );
   if (hasSchoolSignal) return "Northeastern University";
 
@@ -113,8 +118,8 @@ export function buildLinkedInSearchQuery(
 ): string {
   const base = "site:linkedin.com/in";
   const username = cleanUsername(account.username);
-  const fullName = pickFullDisplayName(account);
-  const school = context?.school?.trim();
+  const fullName = pickFullDisplayName(account)?.replace(/"/g, "");
+  const school = context?.school?.trim().replace(/"/g, "");
 
   if (fullName) {
     if (school) {
@@ -131,8 +136,14 @@ export function buildLinkedInSearchQuery(
     return `${base} "${username}" LinkedIn`;
   }
 
-  const fallback = fullName ?? username ?? "LinkedIn";
-  return `${base} "${fallback}" LinkedIn`;
+  const fallback = (
+    account.displayLabel?.trim() ||
+    account.displayName?.trim() ||
+    username
+  ).replace(/"/g, "");
+  return fallback && fallback !== UNKNOWN_ACCOUNT_LABEL
+    ? `${base} "${fallback}" LinkedIn`
+    : `${base} LinkedIn`;
 }
 
 export function linkedInGoogleSearchUrl(

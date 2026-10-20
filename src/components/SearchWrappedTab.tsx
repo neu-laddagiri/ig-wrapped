@@ -9,6 +9,10 @@ interface SearchWrappedTabProps {
   hidden?: boolean;
 }
 
+// Rendered instead of the stored privacyNote: older saved snapshots carry outdated wording.
+const SEARCH_PRIVACY_NOTE =
+  "Instagram's export may only include search history retained in this download. Cloud saves keep only your top searches and counts (up to 15 each), not the full history.";
+
 export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabProps) {
   const [unlocked, setUnlocked] = useState(false);
   const search = insights?.searchWrapped;
@@ -45,8 +49,9 @@ export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabP
             <h3 className="font-semibold text-amber-50">Search history is sensitive</h3>
             <p className="mt-2 text-sm text-amber-100/80">
               Search history can be extremely private. Only open this section if
-              you are comfortable viewing it. Raw search text is not saved to
-              cloud — only parsed summaries when you save your analysis.
+              you are comfortable viewing it. If you save your analysis to the
+              cloud, the snapshot includes your top searched accounts and terms
+              (up to 15 each) with their counts — not your full search history.
             </p>
             <button
               type="button"
@@ -69,7 +74,7 @@ export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabP
           {search.filesParsed?.length ?? 0} search file
           {(search.filesParsed?.length ?? 0) === 1 ? "" : "s"}
         </p>
-        <p className="mt-2 text-xs text-white/40">{search.privacyNote}</p>
+        <p className="mt-2 text-xs text-white/40">{SEARCH_PRIVACY_NOTE}</p>
         {search.labels.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
             {search.labels.map((l) => (
@@ -111,8 +116,6 @@ export function SearchWrappedTab({ insights, hidden = false }: SearchWrappedTabP
           paths.
         </p>
       )}
-
-      <p className="text-xs text-white/35">{search.privacyNote}</p>
     </div>
   );
 }

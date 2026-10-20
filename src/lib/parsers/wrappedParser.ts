@@ -26,23 +26,25 @@ function countFromKnownKeys(data: unknown, keys: string[]): number {
   return total > 0 ? total : countArrayItems(data);
 }
 
+/** Sums every matching file — big categories are split (post_comments_1.json, _2, …). */
 function findAndCount(
   files: Map<string, string>,
   pathFragment: string,
   keys: string[] = []
 ): number {
   const fragment = pathFragment.toLowerCase();
+  let total = 0;
   for (const [path, content] of files) {
     const lower = path.toLowerCase().replace(/\\/g, "/");
     if (!lower.includes(fragment)) continue;
     try {
       const data = JSON.parse(content);
-      return keys.length > 0 ? countFromKnownKeys(data, keys) : countArrayItems(data) || countFromKnownKeys(data, []);
+      total += keys.length > 0 ? countFromKnownKeys(data, keys) : countArrayItems(data) || countFromKnownKeys(data, []);
     } catch {
       continue;
     }
   }
-  return 0;
+  return total;
 }
 
 const EMPTY: WrappedInsights = {

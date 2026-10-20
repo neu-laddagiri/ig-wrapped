@@ -83,7 +83,8 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
         <h3 className="font-semibold text-white">Export your analysis</h3>
         <p className="mt-2 text-sm text-white/45">
           Download CSV files and a summary JSON. All exports are generated
-          locally in your browser.
+          locally in your browser. CSVs include usernames and profile links;
+          the summary JSON also includes login IPs and devices.
         </p>
       </div>
 
@@ -121,7 +122,9 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
         <div>
           <p className="font-semibold text-white">Summary JSON</p>
           <p className="mt-1 text-sm text-white/45">
-            Complete analysis summary with counts and coverage
+            Counts and coverage, plus your security events (login IP addresses,
+            devices/user agents and locations) and the advertiser and ad
+            category names from your export. Treat the file as private.
           </p>
         </div>
         <FileJson className="h-6 w-6 text-[#515BD4]" />

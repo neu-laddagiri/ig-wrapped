@@ -1,13 +1,21 @@
-import { formatMonthKey, parseTimestamp } from "@/lib/formatters";
 import type { DmThreadAnalytics } from "@/types/instagram";
 import type { DmAward, DmRelationshipInsight } from "@/types/insights";
 import { normalizeDmThreadList, isDirectDmThread, normalizedThreadToAnalytics } from "@/lib/dmThreads";
 import type { DmAnalytics } from "@/types/instagram";
 import { formatDmThreadLabel } from "@/lib/dmDisplayLabels";
+import { isLateNightHour, localHourAndDay } from "@/lib/timeOfDay";
+import { MIN_SPLIT_AWARD_MESSAGES } from "@/lib/funStats";
+
+function formatReplyDuration(ms: number): string {
+  const minutes = Math.round(ms / 60000);
+  if (minutes < 90) return `~${Math.max(minutes, 1)} min`;
+  const hours = Math.round(ms / 3600000);
+  if (hours < 36) return `~${hours} hr`;
+  const days = Math.round(ms / 86400000);
+  return `~${days} day${days === 1 ? "" : "s"}`;
+}
 
 const MAX_REPLY_GAP_MS = 7 * 24 * 60 * 60 * 1000;
-const LATE_NIGHT_START = 0;
-const LATE_NIGHT_END = 5;
 const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 function median(nums: number[]): number | undefined {
@@ -40,21 +48,19 @@ function analyzeThread(thread: DmThreadAnalytics): DmRelationshipInsight {
     const hourCounts = new Map<number, number>();
     const dayCounts = new Map<string, number>();
 
-    for (let i = 1; i < sorted.length; i++) {
-      const prev = sorted[i - 1];
+    for (let i = 0; i < sorted.length; i++) {
       const curr = sorted[i];
-      if (prev.sender_name !== curr.sender_name) {
+      const prev = i > 0 ? sorted[i - 1] : undefined;
+      if (prev && prev.sender_name !== curr.sender_name) {
         const gap = curr.timestamp_ms - prev.timestamp_ms;
         if (gap > 0 && gap <= MAX_REPLY_GAP_MS) replyTimes.push(gap);
       }
-      const ts = parseTimestamp(curr.timestamp_ms);
-      if (ts) {
-        const d = new Date(ts * 1000);
-        const hour = d.getUTCHours();
+      if (curr.timestamp_ms > 0) {
+        const { hour, day: dayIndex } = localHourAndDay(curr.timestamp_ms);
         hourCounts.set(hour, (hourCounts.get(hour) ?? 0) + 1);
-        const day = DAY_NAMES[d.getUTCDay()];
+        const day = DAY_NAMES[dayIndex];
         dayCounts.set(day, (dayCounts.get(day) ?? 0) + 1);
-        if (hour >= LATE_NIGHT_START && hour <= LATE_NIGHT_END) lateNightCount++;
+        if (isLateNightHour(hour)) lateNightCount++;
       }
     }
 
@@ -116,8 +122,9 @@ export function computeDmRelationshipInsights(
   const insights = threads.map(analyzeThread);
   const awards: DmAward[] = [];
 
+  const threadById = new Map(threads.map((t) => [t.id, t]));
   const labelFor = (threadId: string) => {
-    const thread = threads.find((t) => t.id === threadId);
+    const thread = threadById.get(threadId);
     return thread ? formatDmThreadLabel(thread) : "Direct thread";
   };
 
@@ -128,12 +135,12 @@ export function computeDmRelationshipInsights(
       title: "Biggest Yapper",
       threadId: biggest.id,
       threadLabel: formatDmThreadLabel(biggest),
-      description: `${biggest.messageCount.toLocaleString()} messages`,
+      description: `${biggest.messageCount.toLocaleString()} message${biggest.messageCount === 1 ? "" : "s"}`,
     });
   }
 
   const withReply = insights.filter((i) => {
-    const thread = threads.find((t) => t.id === i.threadId);
+    const thread = threadById.get(i.threadId);
     return i.medianReplyTimeMs && thread && !thread.isGroupChat;
   });
   const fastest = [...withReply].sort(
@@ -145,7 +152,7 @@ export function computeDmRelationshipInsights(
       title: "Fastest Responder",
       threadId: fastest.threadId,
       threadLabel: labelFor(fastest.threadId),
-      description: `Median reply ~${Math.round((fastest.medianReplyTimeMs ?? 0) / 60000)} min`,
+      description: `Median reply ${formatReplyDuration(fastest.medianReplyTimeMs ?? 0)}`,
     });
   }
 
@@ -158,11 +165,15 @@ export function computeDmRelationshipInsights(
       title: "Slowest Responder",
       threadId: slowest.threadId,
       threadLabel: labelFor(slowest.threadId),
-      description: `Median reply ~${Math.round((slowest.medianReplyTimeMs ?? 0) / 3600000)} hr`,
+      description: `Median reply ${formatReplyDuration(slowest.medianReplyTimeMs ?? 0)}`,
     });
   }
 
-  const oneSided = [...directThreads].sort(
+  // A 2-message chat is trivially "balanced" or "one-sided" — skip tiny threads.
+  const splitCandidates = directThreads.filter(
+    (t) => t.messageCount >= MIN_SPLIT_AWARD_MESSAGES
+  );
+  const oneSided = [...splitCandidates].sort(
     (a, b) => oneSidedScore(b) - oneSidedScore(a)
   )[0];
   if (oneSided) {
@@ -175,7 +186,7 @@ export function computeDmRelationshipInsights(
     });
   }
 
-  const balanced = [...directThreads].sort(
+  const balanced = [...splitCandidates].sort(
     (a, b) => balanceScore(b) - balanceScore(a)
   )[0];
   if (balanced) {
@@ -194,19 +205,20 @@ export function computeDmRelationshipInsights(
       b.instagramPostLinks -
       (a.instagramReelLinks + a.instagramPostLinks)
   )[0];
-  if (reels && reels.instagramReelLinks + reels.instagramPostLinks > 0) {
+  const reelLinks = reels ? reels.instagramReelLinks + reels.instagramPostLinks : 0;
+  if (reels && reelLinks > 0) {
     awards.push({
       id: "reels-dealer",
       title: "Reels Dealer",
       threadId: reels.id,
       threadLabel: labelFor(reels.id),
-      description: `${reels.instagramReelLinks + reels.instagramPostLinks} links shared`,
+      description: `${reelLinks} link${reelLinks === 1 ? "" : "s"} shared`,
     });
   }
 
   const lateNight = [...insights]
     .filter((i) => {
-      const thread = threads.find((t) => t.id === i.threadId);
+      const thread = threadById.get(i.threadId);
       return thread && !thread.isGroupChat;
     })
     .sort((a, b) => b.lateNightCount - a.lateNightCount)[0];

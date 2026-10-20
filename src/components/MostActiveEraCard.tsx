@@ -11,12 +11,13 @@ interface MostActiveEraSectionProps {
 }
 
 function TopMonthsChart({ era }: { era: MostActiveEraData }) {
-  const max = era.topMonths[0]?.count ?? 1;
+  const max = Math.max(1, ...era.topMonths.map((m) => m.count));
+  const count = era.topMonths.length;
 
   return (
     <div className="mt-4 space-y-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-white/35">
-        Top 3 active months
+        {count === 1 ? "Top active month" : `Top ${count} active months`}
       </p>
       {era.topMonths.map((entry) => (
         <div key={entry.month}>

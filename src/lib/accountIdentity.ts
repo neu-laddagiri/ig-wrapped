@@ -3,6 +3,7 @@ import {
   isInstagramPlaceholderName,
   UNKNOWN_ACCOUNT_LABEL,
 } from "@/lib/accountNameFilter";
+import type { InstagramAccount, NetworkStats } from "@/types/instagram";
 
 /** Lowercase Instagram handle — preserves `.`, `_`, and digits. */
 export function normalizeUsername(value: string): string {
@@ -16,6 +17,93 @@ export interface AccountIdentityInput {
   threadId?: string;
   participantId?: string;
   displayName?: string;
+  /** Lets the folder slug resolve to a username, but only one that exists in the network export. */
+  networkIndex?: NetworkUsernameIndex | null;
+}
+
+const SYNTHETIC_PREFIXES = ["thread:", "dm:", "unknown:", "pid:", "group:"];
+
+/** Every username in the followers/following export, for exact joins. */
+export interface NetworkUsernameIndex {
+  exact: Set<string>;
+  /** Username with `.` and `_` removed → username; null when two handles collide. */
+  loose: Map<string, string | null>;
+  accounts: Map<string, InstagramAccount>;
+}
+
+const networkIndexCache = new WeakMap<NetworkStats, NetworkUsernameIndex>();
+
+function looseHandleKey(value: string): string {
+  return value.replace(/[._]/g, "");
+}
+
+export function buildNetworkUsernameIndex(
+  network: NetworkStats | null | undefined
+): NetworkUsernameIndex | null {
+  if (!network) return null;
+  const cached = networkIndexCache.get(network);
+  if (cached) return cached;
+
+  const exact = new Set<string>();
+  const loose = new Map<string, string | null>();
+  const accounts = new Map<string, InstagramAccount>();
+  const lists = [
+    network.followers,
+    network.following,
+    network.mutuals,
+    network.dontFollowMeBack,
+    network.iDontFollowBack,
+    network.pendingRequests,
+    network.recentFollowRequests,
+    network.recentlyUnfollowed,
+    network.blocked,
+    network.restricted,
+  ];
+  for (const list of lists) {
+    for (const acc of list ?? []) {
+      const user = normalizeUsername(acc.username);
+      if (!user || exact.has(user)) continue;
+      exact.add(user);
+      accounts.set(user, acc);
+      const key = looseHandleKey(user);
+      const existing = loose.get(key);
+      if (existing === undefined) loose.set(key, user);
+      else if (existing !== user) loose.set(key, null);
+    }
+  }
+
+  const index = { exact, loose, accounts };
+  networkIndexCache.set(network, index);
+  return index;
+}
+
+/** Exact network username, or (when `allowLoose`) the only handle equal to it once `.`/`_` are ignored. */
+export function matchNetworkUsername(
+  index: NetworkUsernameIndex | null | undefined,
+  candidate: string,
+  allowLoose = false
+): string | null {
+  if (!index || !candidate?.trim()) return null;
+  const user = normalizeUsername(candidate);
+  if (index.exact.has(user)) return user;
+  if (!allowLoose) return null;
+  return index.loose.get(looseHandleKey(user)) ?? null;
+}
+
+/**
+ * A DM participant/sender name used as a username. Plain words ("Alex", "maria")
+ * are display names unless the network export has that handle; handle-shaped
+ * names (dot, underscore or digit) are what Instagram shows for accounts with no
+ * full name, so they are kept even when the account is not in the network.
+ */
+export function resolveUsernameCandidate(
+  value: string,
+  index?: NetworkUsernameIndex | null
+): string | null {
+  const user = normalizeUsername(value);
+  if (!isLikelyInstagramUsername(user)) return null;
+  if (index?.exact.has(user)) return user;
+  return /[._\d]/.test(user) && /[a-z]/.test(user) ? user : null;
 }
 
 export interface AccountIdentity {
@@ -61,11 +149,22 @@ export function rawFolderSegment(path?: string): string | null {
   return segment;
 }
 
-export function usernameFromFolderPath(path?: string): string | null {
+/** Inbox folder name without Instagram's `_<thread id>` suffix (`janedoe_1784…` → `janedoe`). */
+export function folderSlugFromPath(path?: string): string | null {
   const segment = rawFolderSegment(path);
   if (!segment) return null;
-  const user = normalizeUsername(segment);
-  return isLikelyInstagramUsername(user) ? user : null;
+  const slug = normalizeUsername(segment.replace(/_\d{6,}$/, ""));
+  return slug || null;
+}
+
+/** Folder slug as a username — only when it matches an account in the network export. */
+export function usernameFromFolderPath(
+  path?: string,
+  index?: NetworkUsernameIndex | null
+): string | null {
+  const slug = folderSlugFromPath(path);
+  if (!slug || !index) return null;
+  return matchNetworkUsername(index, slug, true);
 }
 
 function stablePathKey(path: string): string {
@@ -81,15 +180,13 @@ export function getCanonicalAccountKey(input: AccountIdentityInput): string {
   if (input.username?.trim()) {
     const user = normalizeUsername(input.username);
     if (isLikelyInstagramUsername(user)) return user;
-    if (user.startsWith("thread:") || user.startsWith("dm:") || user.startsWith("unknown:")) {
-      return user;
-    }
+    if (isSyntheticCanonicalKey(user)) return user;
   }
 
   const fromUrl = usernameFromProfileUrl(input.profileUrl);
   if (fromUrl) return fromUrl;
 
-  const fromFolder = usernameFromFolderPath(input.folderPath);
+  const fromFolder = usernameFromFolderPath(input.folderPath, input.networkIndex);
   if (fromFolder) return fromFolder;
 
   if (input.participantId?.trim()) {
@@ -112,13 +209,8 @@ export function getDisplayLabel(account: {
   username: string;
 }): string {
   const user = normalizeUsername(account.username);
-  const isSynthetic =
-    user.startsWith("thread:") ||
-    user.startsWith("dm:") ||
-    user.startsWith("unknown:") ||
-    user.startsWith("pid:");
 
-  if (isSynthetic) {
+  if (isSyntheticCanonicalKey(user)) {
     const display = account.displayName?.trim();
     if (display && display !== UNKNOWN_ACCOUNT_LABEL) {
       return formatAccountDisplayName(display);
@@ -144,12 +236,8 @@ export function getDisplayLabel(account: {
 
 export function getSecondaryLabel(account: { username: string }): string {
   const user = normalizeUsername(account.username);
-  if (
-    user.startsWith("thread:") ||
-    user.startsWith("dm:") ||
-    user.startsWith("unknown:") ||
-    user.startsWith("pid:")
-  ) {
+  if (isSyntheticCanonicalKey(user)) {
+    if (user.startsWith("group:")) return "group chats";
     if (user.startsWith("thread:")) return user.replace("thread:", "thread ");
     if (user.startsWith("unknown:")) {
       const path = user.slice("unknown:".length);
@@ -162,12 +250,7 @@ export function getSecondaryLabel(account: { username: string }): string {
 
 export function isSyntheticCanonicalKey(key: string): boolean {
   const k = key.toLowerCase();
-  return (
-    k.startsWith("thread:") ||
-    k.startsWith("dm:") ||
-    k.startsWith("unknown:") ||
-    k.startsWith("pid:")
-  );
+  return SYNTHETIC_PREFIXES.some((prefix) => k.startsWith(prefix));
 }
 
 /** Dedupe records by canonical key only — never merge by display name. */

@@ -53,20 +53,22 @@ export function DmThreadPagination({
             type="button"
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
+            aria-label="Previous page"
             className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-white/60 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
-          <span className="min-w-[4rem] text-center text-xs text-white/50">
+          <span className="min-w-[4rem] text-center text-xs text-white/50" aria-live="polite">
             {safePage} / {totalPages}
           </span>
           <button
             type="button"
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
+            aria-label="Next page"
             className="rounded-lg border border-white/10 px-2 py-1.5 text-xs text-white/60 transition hover:bg-white/5 disabled:opacity-30"
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="h-4 w-4" aria-hidden />
           </button>
         </div>
       </div>

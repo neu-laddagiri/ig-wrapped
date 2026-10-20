@@ -2,11 +2,14 @@ import { instagramProfileUrl } from "@/lib/formatters";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
 import {
   buildIdentityGraph,
-  normalizeIdentityKey,
   toSourceBreakdownFromPerson,
   type IdentityGraph,
 } from "@/lib/identityResolver";
-import { usernamesMatch, normalizeUsername as identityNormalizeUsername } from "@/lib/accountIdentity";
+import {
+  isLikelyInstagramUsername,
+  usernamesMatch,
+  normalizeUsername as identityNormalizeUsername,
+} from "@/lib/accountIdentity";
 import type {
   DmAnalytics,
   LinkedInHelperEntry,
@@ -19,7 +22,8 @@ import type {
   WhoFollowedFirst,
 } from "@/types/insights";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+/** Follow timestamps are unix seconds. */
+const DAY_SECONDS = 24 * 60 * 60;
 
 function whoFollowedFirst(
   followedMeAt?: number,
@@ -27,7 +31,7 @@ function whoFollowedFirst(
 ): WhoFollowedFirst {
   if (!followedMeAt || !iFollowedAt) return "Unknown";
   const diff = Math.abs(followedMeAt - iFollowedAt);
-  if (diff < DAY_MS) return "Same day";
+  if (diff < DAY_SECONDS) return "Same day";
   return followedMeAt < iFollowedAt ? "Them" : "Me";
 }
 
@@ -36,7 +40,7 @@ function followBackTimeMs(
   iFollowedAt?: number
 ): number | undefined {
   if (!followedMeAt || !iFollowedAt) return undefined;
-  return Math.abs(iFollowedAt - followedMeAt);
+  return Math.abs(iFollowedAt - followedMeAt) * 1000;
 }
 
 function deriveRelationshipLabel(account: {
@@ -119,7 +123,7 @@ function buildDataSourceNotes(
 
   if (person.dm.status === "matched") {
     notes.push(
-      `DM match: ${person.dm.directDmCount.toLocaleString()} messages via ${person.dm.matchMethod?.replace(/-/g, " ") ?? "thread"} (${person.dm.matchConfidence} confidence)`
+      `DM match: ${person.dm.directDmCount.toLocaleString()} message${person.dm.directDmCount === 1 ? "" : "s"} via ${person.dm.matchMethod?.replace(/-/g, " ") ?? "thread"} (${person.dm.matchConfidence} confidence)`
     );
   } else if (person.dm.status === "possible") {
     notes.push(
@@ -180,14 +184,17 @@ export function buildUnifiedAccountsFromGraph(params: {
   const { graph, network, linkedinProgress } = params;
   const linkedinMap = new Map(linkedinProgress.map((e) => [e.username, e]));
 
-  const isBlocked = (username: string) =>
-    network.blocked.some((a) => a.username === username);
-  const isRestricted = (username: string) =>
-    network.restricted.some((a) => a.username === username);
-  const isPending = (username: string) =>
-    network.pendingRequests.some((a) => a.username === username);
+  const usernameSet = (list: NetworkStats["blocked"]) =>
+    new Set(list.map((a) => a.username));
+  const blocked = usernameSet(network.blocked);
+  const restricted = usernameSet(network.restricted);
+  const pending = usernameSet(network.pendingRequests);
+  const recentlyUnfollowed = usernameSet(network.recentlyUnfollowed);
+  const isBlocked = (username: string) => blocked.has(username);
+  const isRestricted = (username: string) => restricted.has(username);
+  const isPending = (username: string) => pending.has(username);
   const isRecentlyUnfollowed = (username: string) =>
-    network.recentlyUnfollowed.some((a) => a.username === username);
+    recentlyUnfollowed.has(username);
 
   const accounts: UnifiedAccount[] = [];
 
@@ -217,15 +224,16 @@ export function buildUnifiedAccountsFromGraph(params: {
     const timestamps = [
       person.followedMeAt,
       person.iFollowedAt,
-      person.dm.lastDmAt,
+      person.dm.firstDmAt,
     ].filter((t): t is number => t !== undefined);
 
     accounts.push({
       username: person.username,
       displayName: formatAccountDisplayName(person.displayName),
-      href: person.isUnknownOrDeleted
-        ? "#"
-        : instagramProfileUrl(person.username),
+      href:
+        person.isUnknownOrDeleted || !isLikelyInstagramUsername(person.username)
+          ? "#"
+          : instagramProfileUrl(person.username),
       followsMe: person.followsMe,
       iFollowThem: person.iFollowThem,
       isMutual: person.isMutual,

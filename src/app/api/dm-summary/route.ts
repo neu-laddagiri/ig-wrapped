@@ -4,6 +4,16 @@ import type {
   DmAiSummaryTone,
   DmSummaryApiRequest,
 } from "@/types/dmAiSummary";
+import {
+  callChatCompletion,
+  cleanText,
+  guardAiRequest,
+  isAiConfigured,
+  isRecord,
+  jsonError,
+} from "@/lib/aiRouteGuard";
+
+export const maxDuration = 30;
 
 function buildSystemPrompt(useRealNames: boolean): string {
   const nameRule = useRealNames
@@ -73,9 +83,21 @@ const TONE_GUIDANCE: Record<Exclude<DmAiSummaryTone, "funny">, string> = {
 
 const MAX_SELECTED_MESSAGES = 100;
 const MAX_MESSAGE_TEXT = 500;
+const MAX_TIMESTAMP_MS = 8.64e15;
+// 100 messages × 500 chars of multi-byte text plus JSON overhead.
+const MAX_BODY_BYTES = 256 * 1024;
+// Generous enough for "thinking" models, which count reasoning toward this cap.
+const MAX_OUTPUT_TOKENS = 8192;
+const MAX_FIELD_CHARS = 1000;
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function toCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0
+    ? Math.min(Math.round(value), 1e9)
+    : 0;
+}
+
+function optionalString(value: unknown, maxLength: number): string | undefined {
+  return typeof value === "string" ? cleanText(value, maxLength) || undefined : undefined;
 }
 
 function isValidTone(tone: unknown): tone is DmAiSummaryTone {
@@ -97,10 +119,6 @@ function resolveTone(tone: DmAiSummaryTone): Exclude<DmAiSummaryTone, "funny"> {
 function validateRequest(body: unknown): DmSummaryApiRequest | string {
   if (!isRecord(body)) return "Invalid request body.";
 
-  const threadTitle =
-    typeof body.threadTitle === "string" ? body.threadTitle.slice(0, 200) : "";
-  const participantCount =
-    typeof body.participantCount === "number" ? body.participantCount : 0;
   const isGroup = body.isGroup === true;
   const useRealNames = body.useRealNames === true;
   const tone = body.tone;
@@ -109,30 +127,31 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
 
   if (!isRecord(body.stats)) return "Missing stats.";
   const stats = body.stats;
-  const totalMessages =
-    typeof stats.totalMessages === "number" ? stats.totalMessages : 0;
 
   if (!Array.isArray(body.selectedMessages)) return "Missing selectedMessages.";
   if (body.selectedMessages.length === 0) {
     return "No message sample available for this thread.";
   }
 
-  const selectedMessages = body.selectedMessages
-    .slice(0, MAX_SELECTED_MESSAGES)
-    .map((m) => {
-      if (!isRecord(m)) return null;
-      const sender =
-        typeof m.sender === "string" ? m.sender.slice(0, 80) : "User";
-      const timestamp_ms =
-        typeof m.timestamp_ms === "number" ? m.timestamp_ms : 0;
-      const text =
-        typeof m.text === "string" ? m.text.slice(0, MAX_MESSAGE_TEXT) : "";
-      if (!text.trim()) return null;
-      return { sender, timestamp_ms, text: text.trim() };
-    })
-    .filter((m): m is { sender: string; timestamp_ms: number; text: string } =>
-      Boolean(m)
-    );
+  const selectedMessages: DmSummaryApiRequest["selectedMessages"] = [];
+  for (const m of body.selectedMessages.slice(0, MAX_SELECTED_MESSAGES)) {
+    if (!isRecord(m)) continue;
+    const ts = m.timestamp_ms ?? 0;
+    if (
+      typeof ts !== "number" ||
+      !Number.isFinite(ts) ||
+      ts < 0 ||
+      ts > MAX_TIMESTAMP_MS
+    ) {
+      return "Invalid message timestamp.";
+    }
+    const text =
+      typeof m.text === "string" ? cleanText(m.text, MAX_MESSAGE_TEXT) : "";
+    if (!text) continue;
+    const sender =
+      typeof m.sender === "string" ? cleanText(m.sender, 80) || "User" : "User";
+    selectedMessages.push({ sender, timestamp_ms: ts, text });
+  }
 
   if (selectedMessages.length === 0) {
     return "No usable message text in sample.";
@@ -141,54 +160,57 @@ function validateRequest(body: unknown): DmSummaryApiRequest | string {
   const messagesBySender = isRecord(stats.messagesBySender)
     ? Object.fromEntries(
         Object.entries(stats.messagesBySender)
-          .filter(([, v]) => typeof v === "number")
+          .filter(
+            ([, v]) => typeof v === "number" && Number.isFinite(v) && v >= 0
+          )
           .slice(0, 20)
-          .map(([k, v]) => [String(k).slice(0, 80), v as number])
+          .map(([k, v]) => [cleanText(k, 80), v as number])
       )
     : {};
 
-  const participants = Array.isArray(body.participants)
-    ? body.participants
-        .filter((p): p is string => typeof p === "string")
-        .map((p) => p.slice(0, 80))
-        .slice(0, 30)
-    : undefined;
+  // Names only reach the prompt when the user opted into real names.
+  const participants =
+    useRealNames && Array.isArray(body.participants)
+      ? body.participants
+          .filter((p): p is string => typeof p === "string")
+          .map((p) => cleanText(p, 80))
+          .filter(Boolean)
+          .slice(0, 30)
+      : undefined;
+
+  const threadTitle = useRealNames
+    ? optionalString(body.threadTitle, 200) ?? "DM thread"
+    : isGroup
+      ? "Group chat"
+      : "Private thread";
+
+  const averageMessageLength =
+    typeof stats.averageMessageLength === "number" &&
+    Number.isFinite(stats.averageMessageLength)
+      ? Math.round(stats.averageMessageLength)
+      : undefined;
 
   return {
-    threadTitle: threadTitle || "DM thread",
-    participantCount,
+    threadTitle,
+    participantCount: Math.min(toCount(body.participantCount), 10_000),
     isGroup,
     useRealNames,
     participants,
     tone,
     stats: {
-      totalMessages,
-      linkCount: typeof stats.linkCount === "number" ? stats.linkCount : 0,
-      reelOrPostCount:
-        typeof stats.reelOrPostCount === "number" ? stats.reelOrPostCount : 0,
-      mediaCount: typeof stats.mediaCount === "number" ? stats.mediaCount : 0,
-      photoCount: typeof stats.photoCount === "number" ? stats.photoCount : 0,
-      videoCount: typeof stats.videoCount === "number" ? stats.videoCount : 0,
-      audioCount: typeof stats.audioCount === "number" ? stats.audioCount : 0,
-      reactionCount:
-        typeof stats.reactionCount === "number" ? stats.reactionCount : 0,
-      callCount: typeof stats.callCount === "number" ? stats.callCount : 0,
-      averageMessageLength:
-        typeof stats.averageMessageLength === "number"
-          ? stats.averageMessageLength
-          : undefined,
-      firstMessageAt:
-        typeof stats.firstMessageAt === "string"
-          ? stats.firstMessageAt.slice(0, 30)
-          : undefined,
-      lastMessageAt:
-        typeof stats.lastMessageAt === "string"
-          ? stats.lastMessageAt.slice(0, 30)
-          : undefined,
-      mostActiveMonth:
-        typeof stats.mostActiveMonth === "string"
-          ? stats.mostActiveMonth.slice(0, 10)
-          : undefined,
+      totalMessages: toCount(stats.totalMessages),
+      linkCount: toCount(stats.linkCount),
+      reelOrPostCount: toCount(stats.reelOrPostCount),
+      mediaCount: toCount(stats.mediaCount),
+      photoCount: toCount(stats.photoCount),
+      videoCount: toCount(stats.videoCount),
+      audioCount: toCount(stats.audioCount),
+      reactionCount: toCount(stats.reactionCount),
+      callCount: toCount(stats.callCount),
+      averageMessageLength,
+      firstMessageAt: optionalString(stats.firstMessageAt, 30),
+      lastMessageAt: optionalString(stats.lastMessageAt, 30),
+      mostActiveMonth: optionalString(stats.mostActiveMonth, 10),
       messagesBySender,
     },
     selectedMessages,
@@ -218,7 +240,9 @@ function parseAiJson(content: string): DmAiSummaryResult | null {
       if (!isRecord(parsed)) continue;
 
       const str = (k: string) =>
-        typeof parsed[k] === "string" ? (parsed[k] as string).trim() : "";
+        typeof parsed[k] === "string"
+          ? (parsed[k] as string).trim().slice(0, MAX_FIELD_CHARS)
+          : "";
       const arr = (k: string) =>
         Array.isArray(parsed[k])
           ? (parsed[k] as unknown[])
@@ -327,132 +351,46 @@ function temperatureForTone(tone: DmAiSummaryTone): number {
   return 0.78;
 }
 
-function mapProviderError(status: number, errText: string): string {
-  const lower = errText.toLowerCase();
-
-  if (
-    status === 429 ||
-    lower.includes("rate limit") ||
-    lower.includes("rate_limit") ||
-    lower.includes("quota") ||
-    lower.includes("resource exhausted") ||
-    lower.includes("too many requests")
-  ) {
-    return "AI summary limit reached. Try again later or check your AI provider quota.";
-  }
-
-  if (status === 401 || (status === 403 && !lower.includes("quota"))) {
-    return "AI authentication failed. Check AI_API_KEY on the server.";
-  }
-
-  if (
-    status === 404 ||
-    (lower.includes("model") && lower.includes("not found"))
-  ) {
-    return "AI model not found. Check AI_MODEL on the server.";
-  }
-
-  if (status >= 500) {
-    return "The AI provider is temporarily unavailable. Try again in a few minutes.";
-  }
-
-  return "The AI provider returned an error. Try again in a moment.";
-}
-
 export async function GET() {
-  return NextResponse.json({
-    configured: Boolean(process.env.AI_API_KEY?.trim()),
-  });
+  return NextResponse.json({ configured: isAiConfigured() });
 }
 
 export async function POST(request: Request) {
-  const apiKey = process.env.AI_API_KEY?.trim();
-  if (!apiKey) {
-    return NextResponse.json(
-      { error: "AI summaries are not configured yet." },
-      { status: 503 }
-    );
-  }
+  const guard = await guardAiRequest(request, {
+    route: "dm-summary",
+    maxBodyBytes: MAX_BODY_BYTES,
+    perMinute: 10,
+    perHour: 60,
+  });
+  if (!guard.ok) return guard.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
-  }
-
-  const validated = validateRequest(body);
-  if (typeof validated === "string") {
-    return NextResponse.json({ error: validated }, { status: 400 });
-  }
-
-  const baseUrl = (
-    process.env.AI_BASE_URL?.trim() || "https://api.openai.com/v1"
-  ).replace(/\/$/, "");
-  const model = process.env.AI_MODEL?.trim() || "gpt-4o-mini";
+  const validated = validateRequest(guard.body);
+  if (typeof validated === "string") return jsonError(validated, 400);
 
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        temperature: temperatureForTone(validated.tone),
-        response_format: { type: "json_object" },
-        messages: [
-          {
-            role: "system",
-            content: buildSystemPrompt(validated.useRealNames),
-          },
-          { role: "user", content: buildUserPrompt(validated) },
-        ],
-      }),
+    const result = await callChatCompletion(guard.config, "dm-summary", {
+      temperature: temperatureForTone(validated.tone),
+      maxTokens: MAX_OUTPUT_TOKENS,
+      json: true,
+      messages: [
+        { role: "system", content: buildSystemPrompt(validated.useRealNames) },
+        { role: "user", content: buildUserPrompt(validated) },
+      ],
     });
+    if (!result.ok) return jsonError(result.error, result.status);
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => "");
-      console.error(
-        "[dm-summary] provider error",
-        response.status,
-        errText.slice(0, 800)
-      );
-      return NextResponse.json(
-        { error: mapProviderError(response.status, errText) },
-        { status: 502 }
-      );
-    }
-
-    const data = await response.json();
-    const content = data?.choices?.[0]?.message?.content;
-    if (typeof content !== "string") {
-      console.error("[dm-summary] empty AI content", JSON.stringify(data).slice(0, 300));
-      return NextResponse.json(
-        { error: "AI returned an empty response. Try regenerating." },
-        { status: 502 }
-      );
-    }
-
-    const summary = parseAiJson(content);
+    const summary = parseAiJson(result.content);
     if (!summary) {
-      console.error("[dm-summary] JSON parse failed", content.slice(0, 500));
-      return NextResponse.json(
-        {
-          error:
-            "The AI response could not be formatted. Try regenerating.",
-        },
-        { status: 502 }
+      console.error("[dm-summary] AI response was not valid summary JSON");
+      return jsonError(
+        "The AI response could not be formatted. Try regenerating.",
+        502
       );
     }
 
     return NextResponse.json({ summary });
   } catch (err) {
-    console.error("[dm-summary] route error:", err);
-    return NextResponse.json(
-      { error: "Failed to generate summary. Try again later." },
-      { status: 500 }
-    );
+    console.error("[dm-summary] route error:", err instanceof Error ? err.name : "unknown");
+    return jsonError("Failed to generate summary. Try again later.", 500);
   }
 }

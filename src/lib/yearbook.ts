@@ -1,12 +1,19 @@
 import type { InsightsBundle, YearbookCard } from "@/types/insights";
 import type { ParsedExportData } from "@/types/instagram";
 import { formatAccountDisplayName } from "@/lib/accountNameFilter";
+import { dmThreadSizes, isDmAwardMeaningful } from "@/lib/funStats";
+import { isGhostAwardCandidate } from "@/lib/hallOfFame";
+
+function plural(n: number, word: string, pluralWord = `${word}s`): string {
+  return `${n.toLocaleString()} ${n === 1 ? word : pluralWord}`;
+}
 
 export function computeYearbook(
   parsed: ParsedExportData,
   bundle: InsightsBundle
 ): YearbookCard[] {
   const cards: YearbookCard[] = [];
+  const threadSizes = dmThreadSizes(parsed.messages);
 
   const reelsDealer = bundle.dmAwards.find((a) => a.id === "reels-dealer");
   if (reelsDealer) {
@@ -22,7 +29,7 @@ export function computeYearbook(
   }
 
   const ghost = bundle.accounts
-    .filter((a) => a.dmMessageCount > 20)
+    .filter((a) => a.dmMessageCount > 20 && a.lastDmAt && isGhostAwardCandidate(a))
     .sort((a, b) => (a.lastDmAt ?? 0) - (b.lastDmAt ?? 0))[0];
   if (ghost) {
     cards.push({
@@ -45,7 +52,9 @@ export function computeYearbook(
       id: "group-carry",
       superlative: "Most likely to carry the group chat",
       winnerLabel: groupHero.topSender ?? groupHero.title,
-      caption: `${groupHero.totalMessages.toLocaleString()} messages`,
+      caption: groupHero.topSender
+        ? `Top sender in your busiest group chat (${plural(groupHero.totalMessages, "message")} total).`
+        : `Your busiest group chat · ${plural(groupHero.totalMessages, "message")}.`,
       category: "Groups",
       confidence: "high",
       icon: "💬",
@@ -72,22 +81,24 @@ export function computeYearbook(
       id: "search",
       superlative: "Most likely to appear in your searches",
       winnerLabel: searchTop.query,
-      caption: `${searchTop.count} searches`,
+      caption: plural(searchTop.count, "search", "searches"),
       category: "Search",
       confidence: "high",
       icon: "🔍",
     });
   }
 
-  const adTarget = parsed.ads?.advertiserNames[0];
-  if (adTarget) {
+  // The export lists advertisers alphabetically with no ranking, so no single
+  // advertiser is called out.
+  const advertisersCount = parsed.ads?.advertisersCount ?? 0;
+  if (advertisersCount > 0) {
     cards.push({
       id: "ad-target",
-      superlative: "Most likely to be Instagram's favorite ad target",
-      winnerLabel: adTarget,
-      caption: "Top advertiser in your export.",
+      superlative: "Most likely to be on advertisers' lists",
+      winnerLabel: plural(advertisersCount, "advertiser"),
+      caption: "Advertisers in your export that may have used your activity.",
       category: "Ads",
-      confidence: "high",
+      confidence: "medium",
       icon: "📢",
     });
   }
@@ -122,7 +133,9 @@ export function computeYearbook(
     });
   }
 
-  const balanced = bundle.dmAwards.find((a) => a.id === "balanced");
+  const balanced = bundle.dmAwards.find(
+    (a) => a.id === "balanced" && isDmAwardMeaningful(a, threadSizes)
+  );
   if (balanced) {
     cards.push({
       id: "revive",
@@ -135,11 +148,13 @@ export function computeYearbook(
     });
   }
 
-  const oneSided = bundle.dmAwards.find((a) => a.id === "one-sided");
+  const oneSided = bundle.dmAwards.find(
+    (a) => a.id === "one-sided" && isDmAwardMeaningful(a, threadSizes)
+  );
   if (oneSided) {
     cards.push({
       id: "no-reply",
-      superlative: "Most likely to never reply but still watch stories",
+      superlative: "Most likely to carry the chat solo",
       winnerLabel: oneSided.threadLabel,
       caption: oneSided.description,
       category: "DMs",
