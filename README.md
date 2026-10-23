@@ -1,14 +1,24 @@
 # IG Wrapped
 
-A privacy-first Instagram data export intelligence dashboard. Upload your official Instagram data export ZIP and explore your social graph, DMs, activity eras, ads, security, and more — all processed locally in your browser.
+**Your Instagram data export, turned into your own Instagram:** a feed, stories, a profile and a DM inbox, all about you. Who doesn't follow you back, your real ones, your peak era, what advertisers think you're into, and more. It's parsed entirely in your browser, and your ZIP never leaves your device.
 
-Optional accounts let you save your full parsed analysis and LinkedIn Helper progress across devices with one click.
+**[Try it live →](https://ig-wrapped-snowy.vercel.app)** No export yet? Hit **Try it with demo data**.
+
+<p align="center">
+  <a href="https://ig-wrapped-snowy.vercel.app/brag.mp4">
+    <img src="docs/brag-preview.gif" alt="IG Wrapped preview: the Instagram-style feed with insight posts" width="640">
+  </a>
+  <br>
+  <a href="https://ig-wrapped-snowy.vercel.app/brag.mp4"><b>▶ Watch the 22-second launch video</b></a>
+</p>
+
+Optional accounts let you save your parsed analysis and LinkedIn Helper progress across devices.
 
 ## Features
 
-### Layout
+### What's inside
 
-The dashboard is laid out like Instagram itself (light and dark mode, following your system setting or the switch under **More**):
+The app is laid out like Instagram itself, in light and dark mode (following your system setting, or the switch under **More**):
 
 - **Home** — A stories row (Story Mode chapters) and a feed of insight posts: your Wrapped carousel, who doesn't follow you back, your Real Ones, peak era, what advertisers think you're into, DM awards, yearbook superlatives, a security check-up and an optional AI recap. Posts can be liked, saved, shared as a card, or asked about with the AI chat.
 - **Profile** — Followers, following and mutuals (each opens a searchable list, with "least / most interacted with" sorting), a personality bio, era highlights that play as stories, a yearbook grid, a **People** tab (Real Ones, cleanup with an unfollow planner, leaderboards) and a **Saved** tab for cloud saves.
@@ -20,36 +30,18 @@ The dashboard is laid out like Instagram itself (light and dark mode, following 
 - **Create** — Upload a new export (drag and drop) or load demo data.
 - **More** — Light/dark switch, Presentation Mode, Saved, Tools (Action plan, LinkedIn helper, Compare exports, CSV downloads, Data explorer), log in/out, and clear the current analysis.
 
-### Intelligence features
+### Under the hood
 
-- **Social Graph** — Unified account model connecting follows, DMs, interactions, and LinkedIn status; cleanup priority scores; Real Ones leaderboards; account leaderboards
-- **Account Detail Drawer** — Identity, follow relationship, timeline, DM connection, interactions, LinkedIn notes, and recommended actions (click any username across tabs)
-- **Cleanup Score** — Smart unfollow priority beyond "don't follow me back" with protective keep signals
-- **Real Ones** — Relationship strength scores and leaderboards (top friends, silent mutuals, longest connections, and more)
-- **DM Wrapped** — Per-thread analytics: message share, reply times, active hours, late-night counts, and fun awards
-- **Group Chat Wrapped** — Participant roles, message share, and anonymized participant labels
-- **Instagram Eras** — Monthly activity timeline with era labels (DM peak, story watcher, doomscroll, follow spree, and more)
-- **Content Diet** — Passive vs active ratio, engagement personality, doomscroll score, and ad resistance
-- **Personality** — Instagram persona based on your full export with shareable summary cards
-- **Search Wrapped** — Privacy-gated search history insights (collapsed by default with warning)
-- **Data Explorer** — Detected JSON files, categories, export completeness, and optional raw preview
-- **Export Completeness** — Export quality score (0–100) with missing categories and re-export tips
-- **Shareable Cards** — Public-safe, network, DM, and ads/privacy summary cards (names hidden by default)
-- **Optional AI Summaries** — User-triggered DM thread summaries via `/api/dm-summary` (Gemini/OpenAI-compatible)
-
-### Advanced features (v4 insights)
-
-- **Demo Mode** — Explore the full dashboard with synthetic fake data (**Try it with demo data** on the front page). No real names or private info. Optional "Save demo analysis" to cloud.
-- **Story Mode** — Instagram-style stories of your export (the **Wrapped** button or the stories row). Arrow keys, tap zones, hold to pause, and a names toggle that is off by default.
-- **Presentation Mode** — Fail-closed screen-sharing mode (under **More**): names, handles, DMs, searches, devices and locations are masked everywhere, and raw-data tools (LinkedIn helper, compare, CSV downloads, data explorer, saved analyses, follower lists) are blocked.
-- **Compare Exports** — Tools: upload an older ZIP or pick a saved analysis; see follower/following/DM deltas.
-- **Action Plan** — Prioritized recommendations that jump to the right section (dismissible locally).
-- **IG Health** — An overall score and verdict, shown in your profile bio and at the end of Story Mode.
-- **AI Chat** — `/api/analysis-chat` answers questions from aggregated metrics only (no raw ZIP).
-- **DM Heatmap and reply speed** — Day × hour activity grid, fastest/slowest responder and ghost gaps (Messages → Inbox insights).
-- **Unfollow planner** — People → Cleanup: projected follow-back ratio, copy usernames, CSV export.
-- **Confidence labels** — Estimated insights say how sure they are (high confidence / estimated / rough guess).
-- **Share Cards** — Gradient cards to download as PNG or copy as text, with names hidden by default.
+- **One identity graph** — Follows, DMs, likes, comments and story interactions are matched to the same account, so every number about a person agrees everywhere (click anyone to open their detail drawer).
+- **Real Ones and cleanup scores** — Relationship strength from 1-on-1 DMs, mutual follows and interactions; cleanup priority goes beyond "doesn't follow back" and protects the people you actually talk to.
+- **DM and group chat analytics** — Message share, reply speed, active hours, late-night counts, chat awards and group roles.
+- **Eras and content diet** — A monthly timeline labeled by what dominated each month, plus how much you watch versus post.
+- **Ads, security and search** — What Instagram's ad profile says about you, login history with a heuristic check for unusual events, and privacy-gated search history.
+- **Story Mode and share cards** — Instagram-style stories of your export and downloadable gradient cards, with names hidden by default.
+- **Presentation Mode** — A fail-closed screen-sharing mode (under **More**): names, handles, DMs, searches, devices and locations are masked everywhere, and raw-data tools are blocked.
+- **Demo Mode** — The whole app with synthetic data, so you can look around without an export.
+- **Optional AI** — Per-chat DM summaries (`/api/dm-summary`), an overall recap and a chat (`/api/analysis-chat`) that only sees aggregated metrics. All user-triggered.
+- **Tools** — Action plan, LinkedIn helper (manual search links only), compare two exports, CSV downloads and a data explorer showing every file in your export.
 
 ## Privacy-first, local-first
 
@@ -106,12 +98,11 @@ npm run dev
 Open [http://localhost:3000](http://localhost:3000) and upload your Instagram export ZIP. The app works fully without signing in.
 
 ```bash
-npm run build   # Production build
-npm test        # Regression suite
-npm run lint    # Static checks
-npm start       # Run production server
-npm run lint    # ESLint (React Compiler rules included)
+npm test                # Regression suite (Vitest)
+npm run lint            # ESLint, including React Compiler rules
 npx tsc --noEmit -p .   # Type-check
+npm run build           # Production build
+npm start               # Run the production build
 ```
 
 If `npm run dev` gets stuck in a reload loop with a Turbopack panic saying
@@ -164,7 +155,7 @@ For a public production deployment, add a distributed rate limiter or provider b
 
 ## Disclaimer
 
-IG Wrapped is an independent tool and is not affiliated with Instagram, Meta, or LinkedIn. It does not scrape Instagram, require login credentials, scrape LinkedIn, or automate LinkedIn connection requests. Use your export data responsibly.
+IG Wrapped is an independent tool and is not affiliated with Instagram, Meta, or LinkedIn. The interface is styled after Instagram for fun, but IG Wrapped never asks for your Instagram password; its optional account is separate. It does not scrape Instagram, scrape LinkedIn, or automate LinkedIn connection requests. Use your export data responsibly.
 
 **Do not commit real Instagram export ZIPs to this repository.** The `.gitignore` excludes `*.zip`, `/private-data`, `/instagram-export`, `/data/private`, and `.env.local`.
 
