@@ -1,65 +1,48 @@
 "use client";
 
 import { useState } from "react";
-import { Sparkles, ChevronDown } from "lucide-react";
+import { ChevronDown } from "lucide-react";
 import type { ConversationChemistry } from "@/lib/conversationChemistry";
-import { ConfidencePill } from "@/components/ConfidencePill";
 
 interface ConversationChemistryPanelProps {
   chemistry: ConversationChemistry;
 }
 
-export function ConversationChemistryPanel({
-  chemistry,
-}: ConversationChemistryPanelProps) {
-  const [open, setOpen] = useState(true);
+export function ConversationChemistryPanel({ chemistry }: ConversationChemistryPanelProps) {
+  const [open, setOpen] = useState(false);
 
   return (
-    <section className="mb-5 rounded-2xl border border-[#DD2A7B]/20 bg-gradient-to-br from-[#F58529]/5 via-[#DD2A7B]/5 to-[#515BD4]/5 p-4">
+    <section className="rounded-xl border border-ig-border">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center justify-between text-left"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left"
       >
-        <div className="flex items-center gap-2">
-          <Sparkles className="h-4 w-4 text-[#DD2A7B]" />
-          <h5 className="text-sm font-semibold text-white">
-            Conversation chemistry
-          </h5>
-          <ConfidencePill level={chemistry.confidence} />
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-lg font-bold text-white">
-            {chemistry.overallScore}
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 text-white/40 transition ${open ? "rotate-180" : ""}`}
-          />
-        </div>
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-ig-gradient text-sm font-bold text-white">
+          {chemistry.overallScore}
+        </span>
+        <span className="min-w-0 flex-1 leading-tight">
+          <span className="block text-base font-semibold">Chat chemistry</span>
+          <span className="block text-xs text-ig-muted">{chemistry.disclaimer}</span>
+        </span>
+        <ChevronDown className={`h-5 w-5 shrink-0 text-ig-muted transition ${open ? "rotate-180" : ""}`} />
       </button>
-      <p className="mt-1 text-[10px] italic text-white/40">{chemistry.disclaimer}</p>
       {open && (
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <ul className="divide-y divide-ig-border border-t border-ig-border px-4">
           {chemistry.metrics.map((m) => (
-            <div
-              key={m.id}
-              className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <p className="text-xs font-medium text-white/75">{m.label}</p>
-                <span className="text-xs tabular-nums text-white/45">{m.score}</span>
+            <li key={m.id} className="py-2.5">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-semibold">{m.label}</span>
+                <span className="tabular-nums text-ig-muted">{m.score}</span>
               </div>
-              <p className="mt-0.5 text-[11px] text-white/45">{m.value}</p>
-              <div className="animated-gradient-progress mt-2 h-1">
-                <div
-                  className="h-full animated-gradient-bar"
-                  style={{ width: `${m.score}%` }}
-                />
+              <p className="mt-0.5 text-xs text-ig-muted">{m.value}</p>
+              <div className="mt-2 h-1 overflow-hidden rounded-full bg-ig-secondary">
+                <div className="h-full rounded-full bg-ig-gradient" style={{ width: `${m.score}%` }} />
               </div>
-            </div>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </section>
   );

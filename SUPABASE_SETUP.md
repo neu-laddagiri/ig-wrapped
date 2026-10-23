@@ -87,9 +87,9 @@ Environment variables are loaded at startup. Restart after changing `.env.local`
 |-------|-----------|
 | Follower/following/mutual lists, blocked & restricted accounts | Original ZIP file |
 | Wrapped activity counts and computed insights (scores, eras, leaderboards) | Media files (photos/videos) |
-| DM thread stats and per-sender counts — real names only if "Show thread names" is on; otherwise anonymized ("Person 1, 2…") | Full DM message histories |
+| DM thread stats and per-sender counts — real names only if chat names are showing (the eye button in Messages); otherwise anonymized ("Person 1, 2…") | Full DM message histories |
 | Up to 100 masked DM messages per thread — **only with the explicit opt-in** at save time, for later AI summaries | Raw search terms and searched accounts |
-| First-message previews — only if you turned previews on before saving | Export file paths |
+| First-message previews — only if you turned message previews on before saving | Export file paths |
 | Search totals and timeline | Login IP addresses, locations and devices |
 | Ad interests and advertiser names | Instagram login credentials |
 | Security event types and dates (login, logout, password and privacy changes) | AI provider API keys |

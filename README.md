@@ -6,18 +6,19 @@ Optional accounts let you save your full parsed analysis and LinkedIn Helper pro
 
 ## Features
 
-### Core dashboard
+### Layout
 
-- **Overview** — High-level stats, export quality score, and data coverage
-- **Network Manager** — Followers, following, mutuals, don't follow me back, blocked, restricted, and account detail drawer
-- **Wrapped Insights** — Likes, comments, saves, stories, polls, quizzes, viewing activity, and content diet
-- **Fun Stats** — DM awards, quirky metrics, and highlights
-- **DMs** — Thread analytics, relationship insights, and optional AI summaries
-- **Ads & Privacy** — Ad categories, advertisers, themed interests, click resistance, and privacy creep score
-- **Security** — Login timeline, connected apps, health score, and suggested actions
-- **LinkedIn Helper** — Manual Google search links for networking (no automation)
-- **Export Data** — CSV exports and summary JSON, generated locally
-- **Saved Analyses** — Optional cloud save of your full parsed snapshot (Supabase)
+The dashboard is laid out like Instagram itself (light and dark mode, following your system setting or the switch under **More**):
+
+- **Home** — A stories row (Story Mode chapters) and a feed of insight posts: your Wrapped carousel, who doesn't follow you back, your Real Ones, peak era, what advertisers think you're into, DM awards, yearbook superlatives, a security check-up and an optional AI recap. Posts can be liked, saved, shared as a card, or asked about with the AI chat.
+- **Profile** — Followers, following and mutuals (each opens a searchable list, with "least / most interacted with" sorting), a personality bio, era highlights that play as stories, a yearbook grid, a **People** tab (Real Ones, cleanup with an unfollow planner, leaderboards) and a **Saved** tab for cloud saves.
+- **Messages** — An inbox of DMs and group chats. Each chat shows who carries it, chemistry, a timeline, shared links and reels, group roles and an optional AI summary; **Inbox insights** has the monthly chart, heatmap and reply speed.
+- **Explore** — Your ad profile as an Explore grid: the ad roast, themed interests, advertisers, ads seen and your feed diet.
+- **Search** — Privacy-gated search history (accounts, terms, searches on repeat).
+- **Notifications** — Logins, devices and account changes by month, flagged events and connected apps.
+- **Wrapped** — Full-screen Instagram-style stories with progress bars and tap / hold controls; names hidden by default.
+- **Create** — Upload a new export (drag and drop) or load demo data.
+- **More** — Light/dark switch, Presentation Mode, Saved, Tools (Action plan, LinkedIn helper, Compare exports, CSV downloads, Data explorer), log in/out, and clear the current analysis.
 
 ### Intelligence features
 
@@ -38,21 +39,17 @@ Optional accounts let you save your full parsed analysis and LinkedIn Helper pro
 
 ### Advanced features (v4 insights)
 
-- **Demo Mode** — Explore the full dashboard with synthetic fake data (`Try Demo Data` on upload). No real names or private info. Optional “Save demo analysis” to cloud.
-- **Story Mode** — Spotify Wrapped–style slideshow from Overview (`View Story Mode`). Keyboard navigation, public-safe name toggle.
-- **Presentation Mode** — Fail-closed screen-sharing mode: audited aggregate/share-safe tabs remain available, while identity, DM, search, security, notes, saved-data, export, and raw-data views are blocked.
-- **Compare Exports** — Data tab: upload an older ZIP or pick a saved analysis; see follower/following/DM deltas.
-- **Since Last Save** — Overview card comparing current snapshot vs your previous cloud save.
-- **Action Plan** — Prioritized recommendations with jump-to-tab actions (dismissible locally).
-- **IG Health Scoreboard** — Social, network, privacy, DM energy, security, cleanup, and completeness scores with verdict.
-- **AI Data Analyst Chat** — `/api/analysis-chat` answers questions from aggregated metrics only (no raw ZIP).
-- **DM Heatmap** — Day × hour activity grid from export timestamps.
-- **Reply Pattern Analyzer** — Fastest/slowest responder, ghost gaps, conversation starters (Fun Stats awards).
-- **Network Clusters** — Social Graph groupings (DM friends, silent mutuals, cleanup candidates, etc.).
-- **Unfollow Impact Preview** — Cleanup tab planning tool with projected follow-back ratio + CSV export.
-- **Red / Green Flag Scanner** — Per-account signals in the account detail drawer.
-- **Explain + Confidence** — Score explanations and high/medium/low confidence pills on key insights.
-- **Share Cards** — Download PNG or copy stats with names hidden by default; Presentation Mode also blocks non-share-safe views.
+- **Demo Mode** — Explore the full dashboard with synthetic fake data (**Try it with demo data** on the front page). No real names or private info. Optional "Save demo analysis" to cloud.
+- **Story Mode** — Instagram-style stories of your export (the **Wrapped** button or the stories row). Arrow keys, tap zones, hold to pause, and a names toggle that is off by default.
+- **Presentation Mode** — Fail-closed screen-sharing mode (under **More**): names, handles, DMs, searches, devices and locations are masked everywhere, and raw-data tools (LinkedIn helper, compare, CSV downloads, data explorer, saved analyses, follower lists) are blocked.
+- **Compare Exports** — Tools: upload an older ZIP or pick a saved analysis; see follower/following/DM deltas.
+- **Action Plan** — Prioritized recommendations that jump to the right section (dismissible locally).
+- **IG Health** — An overall score and verdict, shown in your profile bio and at the end of Story Mode.
+- **AI Chat** — `/api/analysis-chat` answers questions from aggregated metrics only (no raw ZIP).
+- **DM Heatmap and reply speed** — Day × hour activity grid, fastest/slowest responder and ghost gaps (Messages → Inbox insights).
+- **Unfollow planner** — People → Cleanup: projected follow-back ratio, copy usernames, CSV export.
+- **Confidence labels** — Estimated insights say how sure they are (high confidence / estimated / rough guess).
+- **Share Cards** — Gradient cards to download as PNG or copy as text, with names hidden by default.
 
 ## Privacy-first, local-first
 
@@ -75,8 +72,8 @@ When you click **Save full analysis**, IG Wrapped stores a parsed snapshot in yo
 
 - Follower, following, mutual, blocked and restricted account lists
 - Activity counts and computed insights (scores, eras, leaderboards, personality)
-- DM thread stats and per-sender message counts — with real names only if "Show thread names" is on when you save (otherwise threads become "Direct message" and people "Person 1, 2…")
-- First-message previews, only if you turned previews on
+- DM thread stats and per-sender message counts — with real names only if chat names are showing (the eye button in Messages) when you save (otherwise threads become "Direct message" and people "Person 1, 2…")
+- First-message previews, only if you turned message previews on
 - Up to 100 masked DM messages per thread (emails and phone numbers hidden) **only if you opt in** at save time, so new AI summaries work after reloading
 - Ad interests and advertiser names; security event types and dates
 - Search totals and timeline (not the search terms)

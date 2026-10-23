@@ -35,10 +35,10 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
   };
 
   return (
-    <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+    <div className="mt-4 rounded-lg border border-ig-border bg-ig-subtle p-3">
       <label
         htmlFor={noteId}
-        className="block text-[10px] font-semibold uppercase tracking-wider text-white/35"
+        className="block text-[10px] font-semibold uppercase tracking-wider text-ig-muted"
       >
         Private notes
       </label>
@@ -51,9 +51,9 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
         }}
         rows={2}
         placeholder="Your private note…"
-        className="mt-2 w-full resize-none rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-xs text-white outline-none placeholder:text-white/30"
+        className="mt-2 w-full resize-none rounded-lg border border-ig-border bg-ig-secondary px-2 py-1.5 text-xs text-fg outline-none placeholder:text-ig-muted"
       />
-      <label htmlFor={statusId} className="mt-2 block text-[10px] text-white/40">
+      <label htmlFor={statusId} className="mt-2 block text-[10px] text-ig-muted">
         Status
       </label>
       <select
@@ -64,7 +64,7 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
           setStatus(v);
           persist(note, v);
         }}
-        className="mt-1 w-full rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white"
+        className="mt-1 w-full rounded-lg border border-ig-border bg-ig-elevated px-2 py-1.5 text-xs text-fg"
       >
         {Object.entries(CRM_STATUS_LABELS).map(([id, label]) => (
           <option key={id} value={id}>
@@ -72,7 +72,7 @@ export function AccountCrmPanel({ fingerprint, username }: AccountCrmPanelProps)
           </option>
         ))}
       </select>
-      <p className="mt-2 text-[10px] text-white/30">
+      <p className="mt-2 text-[10px] text-ig-muted">
         Stored locally on this device. Included when you save analysis if CRM
         sync is enabled in a future update.
       </p>

@@ -1,263 +1,76 @@
-"use client";
-
-import { useMemo, useState } from "react";
-import type { ElementType } from "react";
-import { AnimatePresence, motion } from "framer-motion";
-import {
-  LayoutDashboard,
-  Users,
-  Sparkles,
-  MessageCircle,
-  ShieldAlert,
-  Lock,
-  Briefcase,
-  Download,
-  Cloud,
-  BarChart3,
-  Network,
-  Calendar,
-  Brain,
-  Database,
-  Search,
-  UsersRound,
-  Trash2,
-  Heart,
-  ChevronDown,
-  Menu,
-  ListChecks,
-  GitCompare,
-  BookOpen,
-} from "lucide-react";
-
+/**
+ * Dashboard routes. The app is laid out like Instagram: a feed, profile,
+ * messages and notifications, with the data tools tucked under "More".
+ */
 export type DashboardTabId =
-  | "overview"
-  | "network"
-  | "social"
-  | "cleanup"
-  | "realones"
-  | "wrapped"
-  | "funstats"
-  | "eras"
-  | "personality"
-  | "dms"
-  | "groups"
-  | "ads"
-  | "security"
+  | "home"
   | "search"
+  | "explore"
+  | "messages"
+  | "activity"
+  | "profile"
+  | "people"
+  | "saved"
+  | "eras"
+  | "network"
   | "linkedin"
   | "explorer"
   | "export"
-  | "saved"
   | "compare"
-  | "actionplan"
-  | "yearbook";
+  | "actionplan";
 
-type NavGroupId = "dashboard" | "people" | "messages" | "privacy" | "data";
+const TAB_IDS = new Set<string>([
+  "home",
+  "search",
+  "explore",
+  "messages",
+  "activity",
+  "profile",
+  "people",
+  "saved",
+  "eras",
+  "network",
+  "linkedin",
+  "explorer",
+  "export",
+  "compare",
+  "actionplan",
+]);
 
-interface TabDef {
+/** Tab ids from before the Instagram layout, as stored in older cloud saves. */
+const LEGACY_TABS: Record<string, DashboardTabId> = {
+  overview: "home",
+  wrapped: "home",
+  funstats: "home",
+  personality: "profile",
+  yearbook: "profile",
+  social: "people",
+  cleanup: "people",
+  realones: "people",
+  dms: "messages",
+  groups: "messages",
+  ads: "explore",
+  security: "activity",
+};
+
+export function normalizeTabId(raw: unknown): DashboardTabId {
+  if (typeof raw !== "string") return "home";
+  if (TAB_IDS.has(raw)) return raw as DashboardTabId;
+  return LEGACY_TABS[raw] ?? "home";
+}
+
+/** Data tools reached from the More menu rather than the main nav. */
+export const TOOL_TABS: {
   id: DashboardTabId;
   label: string;
-  icon: ElementType;
-}
-
-interface NavGroup {
-  id: NavGroupId;
-  label: string;
-  tabs: TabDef[];
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    id: "dashboard",
-    label: "Dashboard",
-    tabs: [
-      { id: "overview", label: "Overview", icon: LayoutDashboard },
-      { id: "actionplan", label: "Action Plan", icon: ListChecks },
-      { id: "wrapped", label: "Wrapped", icon: Sparkles },
-      { id: "funstats", label: "Fun Stats", icon: BarChart3 },
-      { id: "yearbook", label: "Yearbook", icon: BookOpen },
-      { id: "eras", label: "Eras", icon: Calendar },
-      { id: "personality", label: "Personality", icon: Brain },
-    ],
-  },
-  {
-    id: "people",
-    label: "People",
-    tabs: [
-      { id: "network", label: "Network", icon: Users },
-      { id: "social", label: "Leaderboards", icon: Network },
-      { id: "cleanup", label: "Cleanup", icon: Trash2 },
-      { id: "realones", label: "Real Ones", icon: Heart },
-      { id: "linkedin", label: "LinkedIn", icon: Briefcase },
-    ],
-  },
-  {
-    id: "messages",
-    label: "Messages",
-    tabs: [
-      { id: "dms", label: "DMs", icon: MessageCircle },
-      { id: "groups", label: "Groups", icon: UsersRound },
-    ],
-  },
-  {
-    id: "privacy",
-    label: "Privacy",
-    tabs: [
-      { id: "ads", label: "Ads & Privacy", icon: ShieldAlert },
-      { id: "security", label: "Security", icon: Lock },
-      { id: "search", label: "Search", icon: Search },
-    ],
-  },
-  {
-    id: "data",
-    label: "Data",
-    tabs: [
-      { id: "explorer", label: "Explorer", icon: Database },
-      { id: "compare", label: "Compare", icon: GitCompare },
-      { id: "export", label: "Export", icon: Download },
-      { id: "saved", label: "Saved", icon: Cloud },
-    ],
-  },
+  description: string;
+}[] = [
+  { id: "actionplan", label: "Action plan", description: "A short checklist from your export" },
+  { id: "linkedin", label: "LinkedIn helper", description: "Find mutuals on LinkedIn, by hand" },
+  { id: "compare", label: "Compare exports", description: "What changed between two saves" },
+  { id: "export", label: "Download CSVs", description: "Your lists as spreadsheets" },
+  { id: "explorer", label: "Data explorer", description: "Every file in your export" },
 ];
 
-const ALL_TABS = NAV_GROUPS.flatMap((g) => g.tabs);
-
-export function groupForTab(tabId: DashboardTabId): NavGroupId {
-  for (const group of NAV_GROUPS) {
-    if (group.tabs.some((t) => t.id === tabId)) return group.id;
-  }
-  return "dashboard";
-}
-
-interface DashboardTabsProps {
-  activeTab: DashboardTabId;
-  onTabChange: (tab: DashboardTabId) => void;
-}
-
-export function DashboardTabs({ activeTab, onTabChange }: DashboardTabsProps) {
-  const activeGroupId = groupForTab(activeTab);
-  const [mobileOpen, setMobileOpen] = useState(false);
-
-  const activeGroup = useMemo(
-    () => NAV_GROUPS.find((g) => g.id === activeGroupId) ?? NAV_GROUPS[0],
-    [activeGroupId]
-  );
-
-  const activeTabDef =
-    ALL_TABS.find((t) => t.id === activeTab) ?? ALL_TABS[0];
-
-  return (
-    <div className="space-y-3">
-      {/* Mobile: section picker */}
-      <div className="lg:hidden">
-        <button
-          type="button"
-          onClick={() => setMobileOpen((o) => !o)}
-          aria-expanded={mobileOpen}
-          className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-white/[0.04] px-4 py-3 text-sm font-medium text-white"
-        >
-          <span className="flex items-center gap-2">
-            <Menu className="h-4 w-4 text-white/50" />
-            {activeGroup.label} · {activeTabDef.label}
-          </span>
-          <ChevronDown
-            className={`h-4 w-4 text-white/40 transition-transform ${mobileOpen ? "rotate-180" : ""}`}
-          />
-        </button>
-        <AnimatePresence>
-          {mobileOpen && (
-            <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mt-2 overflow-hidden rounded-xl border border-white/10 bg-[#0a0a12]/95"
-            >
-              {NAV_GROUPS.map((group) => (
-                <div key={group.id} className="border-b border-white/5 p-2 last:border-0">
-                  <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-white/35">
-                    {group.label}
-                  </p>
-                  {group.tabs.map((tab) => {
-                    const Icon = tab.icon;
-                    const isActive = activeTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => {
-                          onTabChange(tab.id);
-                          setMobileOpen(false);
-                        }}
-                        aria-current={isActive ? "page" : undefined}
-                        className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                          isActive
-                            ? "tab-selected-gradient font-semibold"
-                            : "text-white/55 hover:bg-white/5 hover:text-white/80"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-              ))}
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      {/* Desktop: group pills + sub-tabs */}
-      <div className="hidden lg:block">
-        <div className="flex flex-wrap gap-1.5">
-          {NAV_GROUPS.map((group) => {
-            const isGroupActive = group.id === activeGroupId;
-            return (
-              <button
-                key={group.id}
-                type="button"
-                onClick={() => {
-                  if (!isGroupActive) {
-                    onTabChange(group.tabs[0].id);
-                  }
-                }}
-                className={
-                  isGroupActive
-                    ? "tab-selected-gradient rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide"
-                    : "tab-inactive-glass rounded-xl px-3.5 py-2 text-xs font-semibold uppercase tracking-wide transition-colors"
-                }
-              >
-                {group.label}
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="mt-2 flex flex-wrap gap-1 rounded-2xl border border-white/10 bg-white/[0.04] p-1.5">
-          {activeGroup.tabs.map((tab) => {
-            const isActive = activeTab === tab.id;
-            const Icon = tab.icon;
-            return (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => onTabChange(tab.id)}
-                aria-current={isActive ? "page" : undefined}
-                className={
-                  isActive
-                    ? "tab-selected-gradient flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold"
-                    : "flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-medium text-white/45 transition-colors hover:text-white/70"
-                }
-              >
-                <Icon className="h-4 w-4 shrink-0" aria-hidden />
-                {tab.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export { ALL_TABS as DASHBOARD_TABS };
+/** Sections that live on the profile page and share its header. */
+export const PROFILE_TABS = new Set<DashboardTabId>(["profile", "people", "saved"]);

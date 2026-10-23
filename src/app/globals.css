@@ -1,310 +1,140 @@
 @import "tailwindcss";
 
+/*
+ * Instagram-style design tokens. Light is the default; dark follows the
+ * system setting unless the viewer picked one (data-theme on <html>, set
+ * before paint by the inline script in layout.tsx).
+ */
 :root {
-  --background: #050509;
-  --foreground: #ffffff;
-  --card: rgba(255, 255, 255, 0.06);
-  --border: rgba(255, 255, 255, 0.12);
-  --muted: rgba(255, 255, 255, 0.45);
-  --accent-orange: #f58529;
-  --accent-pink: #dd2a7b;
-  --accent-magenta: #c13584;
-  --accent-purple: #8134af;
-  --accent-blue: #515bd4;
-  --ig-gradient: linear-gradient(
-    135deg,
-    #f58529 0%,
-    #dd2a7b 25%,
-    #c13584 50%,
-    #8134af 75%,
-    #515bd4 100%
+  color-scheme: light;
+  --ig-bg: #ffffff;
+  --ig-subtle: #fafafa;
+  --ig-secondary-bg: #efefef;
+  --ig-hover: #f2f2f2;
+  --ig-elevated: #ffffff;
+  --ig-text: #000000;
+  --ig-muted: #737373;
+  --ig-border: #dbdbdb;
+  --ig-border-strong: #c7c7c7;
+  --ig-blue: #0095f6;
+  --ig-blue-hover: #1877f2;
+  --ig-link: #00376b;
+  --ig-red: #ff3040;
+  --ig-good: #15803d;
+  --ig-warn: #b45309;
+  --ig-bad: #dc2626;
+  --ig-pink: #d62976;
+  --ig-orange: #e8590c;
+  --ig-purple: #833ab4;
+  --ig-indigo: #405de6;
+  --ig-avatar-bg: #dbdbdb;
+  --ig-avatar-fg: #ffffff;
+  --ig-overlay: rgba(0, 0, 0, 0.65);
+  --ig-story-gradient: linear-gradient(
+    45deg,
+    #ffd600 0%,
+    #ff7a00 25%,
+    #ff0069 52%,
+    #d300c5 78%,
+    #7638fa 100%
   );
-  --ig-gradient-animated: linear-gradient(
-    -45deg,
-    #f58529,
-    #dd2a7b,
-    #c13584,
-    #8134af,
-    #515bd4,
-    #dd2a7b,
-    #f58529
+  --ig-story-conic: conic-gradient(
+    from 210deg,
+    #ffd600,
+    #ff7a00,
+    #ff0069,
+    #d300c5,
+    #7638fa,
+    #ffd600
   );
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --ig-bg: #000000;
+    --ig-subtle: #121212;
+    --ig-secondary-bg: #363636;
+    --ig-hover: #1a1a1a;
+    --ig-elevated: #262626;
+    --ig-text: #f5f5f5;
+    --ig-muted: #a8a8a8;
+    --ig-border: #262626;
+    --ig-border-strong: #363636;
+    --ig-link: #e0f1ff;
+    --ig-good: #4ade80;
+    --ig-warn: #fbbf24;
+    --ig-bad: #f87171;
+    --ig-pink: #ff5c9a;
+    --ig-orange: #ff9a52;
+    --ig-purple: #b980ff;
+    --ig-indigo: #8c9bff;
+    --ig-avatar-bg: #363636;
+    --ig-avatar-fg: #737373;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ig-bg: #000000;
+  --ig-subtle: #121212;
+  --ig-secondary-bg: #363636;
+  --ig-hover: #1a1a1a;
+  --ig-elevated: #262626;
+  --ig-text: #f5f5f5;
+  --ig-muted: #a8a8a8;
+  --ig-border: #262626;
+  --ig-border-strong: #363636;
+  --ig-link: #e0f1ff;
+  --ig-good: #4ade80;
+  --ig-warn: #fbbf24;
+  --ig-bad: #f87171;
+  --ig-pink: #ff5c9a;
+  --ig-orange: #ff9a52;
+  --ig-purple: #b980ff;
+  --ig-indigo: #8c9bff;
+  --ig-avatar-bg: #363636;
+  --ig-avatar-fg: #737373;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-background: var(--ig-bg);
+  --color-foreground: var(--ig-text);
+  --color-fg: var(--ig-text);
+  --color-ig-bg: var(--ig-bg);
+  --color-ig-subtle: var(--ig-subtle);
+  --color-ig-secondary: var(--ig-secondary-bg);
+  --color-ig-hover: var(--ig-hover);
+  --color-ig-elevated: var(--ig-elevated);
+  --color-ig-muted: var(--ig-muted);
+  --color-ig-border: var(--ig-border);
+  --color-ig-border-strong: var(--ig-border-strong);
+  --color-ig-blue: var(--ig-blue);
+  --color-ig-blue-hover: var(--ig-blue-hover);
+  --color-ig-link: var(--ig-link);
+  --color-ig-red: var(--ig-red);
+  --color-ig-good: var(--ig-good);
+  --color-ig-warn: var(--ig-warn);
+  --color-ig-bad: var(--ig-bad);
+  --color-ig-pink: var(--ig-pink);
+  --color-ig-orange: var(--ig-orange);
+  --color-ig-purple: var(--ig-purple);
+  --color-ig-indigo: var(--ig-indigo);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+    Arial, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-logo: var(--font-logo-script), cursive;
 }
 
-@keyframes ig-gradient-shift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
+@utility bg-ig-gradient {
+  background-image: var(--ig-story-gradient);
 }
 
-/* Flowing gradient text — hero title */
-.animated-gradient-text {
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
+@utility text-ig-gradient {
+  background-image: var(--ig-story-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  animation: ig-gradient-shift 10s ease infinite;
-}
-
-/* Flowing gradient fill — buttons, active nav, badges */
-.animated-gradient-bg {
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 14s ease infinite;
-}
-
-/* Selected tabs — bright, stable Instagram sheen (no dim overlay) */
-.tab-selected-gradient {
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 14s ease infinite;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.12) inset,
-    0 4px 14px rgba(221, 42, 123, 0.22);
-}
-
-.tab-inactive-glass {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.03);
-  color: rgba(255, 255, 255, 0.45);
-}
-
-.tab-inactive-glass:hover {
-  color: rgba(255, 255, 255, 0.72);
-  background: rgba(255, 255, 255, 0.06);
-}
-
-/* Subtle animated border — highlight cards only */
-.animated-gradient-border {
-  position: relative;
-  border: 1px solid transparent;
-  background-clip: padding-box;
-}
-
-.animated-gradient-border::before {
-  content: "";
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  padding: 1px;
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 10s linear infinite;
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 0;
-}
-
-/* Progress / score bar fill */
-.animated-gradient-bar {
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 10s linear infinite;
-}
-
-/* Progress track wrapper (optional) */
-.animated-gradient-progress {
-  overflow: hidden;
-  border-radius: 9999px;
-  background: rgba(255, 255, 255, 0.1);
-}
-
-@keyframes beta-pulse-dot {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.2);
-  }
-}
-
-/* Beta build banner — animated border glow + badge shimmer */
-.beta-build-banner {
-  min-height: 4.5rem;
-}
-
-.beta-build-banner-shell {
-  position: relative;
-  border-radius: 1rem;
-  isolation: isolate;
-}
-
-.beta-build-banner-shell::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 7s ease infinite;
-  -webkit-mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  mask:
-    linear-gradient(#fff 0 0) content-box,
-    linear-gradient(#fff 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-}
-
-.beta-build-banner-shell::after {
-  content: "";
-  position: absolute;
-  inset: -3px;
-  z-index: -1;
-  border-radius: inherit;
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 8s ease infinite;
-  filter: blur(10px);
-  opacity: 0.28;
-  pointer-events: none;
-}
-
-.beta-build-banner-inner {
-  position: relative;
-  z-index: 1;
-  border-radius: calc(1rem - 1px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background: rgba(8, 8, 14, 0.72);
-  padding: 0.875rem 1rem;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-@media (min-width: 640px) {
-  .beta-build-banner-inner {
-    padding: 1rem 1.25rem;
-  }
-}
-
-.beta-build-badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 9999px;
-  padding: 0.2rem 0.55rem;
-  font-size: 0.625rem;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-  background: var(--ig-gradient-animated);
-  background-size: 300% 300%;
-  animation: ig-gradient-shift 6s ease infinite;
-  box-shadow:
-    0 1px 0 rgba(255, 255, 255, 0.15) inset,
-    0 2px 8px rgba(221, 42, 123, 0.2);
-}
-
-.beta-build-pulse-dot {
-  top: 50%;
-  left: 50%;
-  width: 0.4rem;
-  height: 0.4rem;
-  margin-top: -0.2rem;
-  margin-left: -0.2rem;
-  border-radius: 9999px;
-  background: #f58529;
-  box-shadow: 0 0 6px rgba(245, 133, 41, 0.65);
-  animation: beta-pulse-dot 6s ease-in-out infinite;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    scroll-behavior: auto !important;
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    transition-delay: 0ms !important;
-  }
-
-  html:focus-within {
-    scroll-behavior: auto !important;
-  }
-
-  .animated-gradient-text,
-  .animated-gradient-bg,
-  .animated-gradient-border::before,
-  .animated-gradient-bar,
-  .tab-selected-gradient {
-    animation: none !important;
-  }
-
-  .animated-gradient-text {
-    background: var(--ig-gradient);
-    background-size: 100% 100%;
-  }
-
-  .animated-gradient-bg,
-  .animated-gradient-bar,
-  .tab-selected-gradient {
-    background: var(--ig-gradient);
-    background-size: 100% 100%;
-  }
-
-  .animated-gradient-border::before {
-    background: var(--ig-gradient);
-    background-size: 100% 100%;
-  }
-
-  .beta-build-banner-shell::before,
-  .beta-build-banner-shell::after,
-  .beta-build-badge,
-  .beta-build-pulse-dot {
-    animation: none !important;
-  }
-
-  .beta-build-banner-shell::before {
-    background: var(--ig-gradient);
-    background-size: 100% 100%;
-    opacity: 1;
-  }
-
-  .beta-build-banner-shell::after {
-    opacity: 0;
-  }
-
-  .beta-build-badge {
-    background: var(--ig-gradient);
-    background-size: 100% 100%;
-  }
-
-  .beta-build-pulse-dot {
-    opacity: 0.85;
-    transform: none;
-  }
 }
 
 * {
@@ -316,10 +146,11 @@ html {
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: var(--font-geist-sans), system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+  background: var(--ig-bg);
+  color: var(--ig-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 18px;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -333,8 +164,8 @@ body {
   summary,
   [tabindex]:not([tabindex="-1"])
 ):focus-visible {
-  outline: 3px solid #f9a8d4;
-  outline-offset: 3px;
+  outline: 2px solid var(--ig-blue);
+  outline-offset: 2px;
 }
 
 @media (forced-colors: active) {
@@ -352,8 +183,7 @@ body {
 }
 
 ::selection {
-  background: rgba(221, 42, 123, 0.35);
-  color: #fff;
+  background: rgba(0, 149, 246, 0.25);
 }
 
 ::-webkit-scrollbar {
@@ -366,23 +196,245 @@ body {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--ig-border-strong);
   border-radius: 4px;
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
 }
 
 code {
-  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 0.875em;
   padding: 0.125rem 0.375rem;
   border-radius: 0.375rem;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--ig-secondary-bg);
 }
 
 select option {
-  background: #12121a;
+  background: var(--ig-elevated);
+  color: var(--ig-text);
+}
+
+/* ---- Instagram primitives ---- */
+
+/* Gradient story ring around an avatar. data-state: unseen | seen | loading */
+.story-ring {
+  position: relative;
+  display: inline-flex;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  padding: 4px;
+}
+
+.story-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--ig-story-gradient);
+}
+
+.story-ring[data-state="seen"]::before {
+  inset: 1px;
+  background: var(--ig-border-strong);
+}
+
+.story-ring[data-state="loading"]::before {
+  background: var(--ig-story-conic);
+  animation: story-ring-spin 0.8s linear infinite;
+}
+
+.story-ring > * {
+  position: relative;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px var(--ig-bg);
+}
+
+@keyframes story-ring-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Story viewer progress segment fill */
+@keyframes story-progress {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+.story-progress-fill {
+  transform-origin: left center;
+  animation: story-progress var(--story-duration, 5s) linear forwards;
+}
+
+.story-progress-fill[data-paused="true"] {
+  animation-play-state: paused;
+}
+
+/* Like heart pop on tap / double-tap */
+@keyframes heart-pop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.25);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.heart-pop {
+  animation: heart-pop 0.35s ease-out;
+}
+
+@keyframes heart-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.2);
+  }
+  15% {
+    opacity: 0.95;
+    transform: scale(1.15);
+  }
+  30% {
+    transform: scale(0.95);
+  }
+  45%,
+  80% {
+    opacity: 0.95;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+}
+
+.heart-burst {
+  animation: heart-burst 0.9s ease-out forwards;
+}
+
+@keyframes ig-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.ig-fade-up {
+  animation: ig-fade-up 0.25s ease-out both;
+}
+
+/* Landing-page phone: three screens crossfading on a 12s loop */
+@keyframes phone-cycle {
+  0% {
+    opacity: 0;
+  }
+  4%,
+  33% {
+    opacity: 1;
+  }
+  37%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.phone-screen {
+  opacity: 0;
+  animation: phone-cycle 12s infinite;
+}
+
+.phone-screen:nth-child(2) {
+  animation-delay: 4s;
+}
+
+.phone-screen:nth-child(3) {
+  animation-delay: 8s;
+}
+
+/* ---- Legacy class names kept so older sections render in the new theme ---- */
+
+.animated-gradient-text {
+  color: var(--ig-text);
+}
+
+.animated-gradient-bg {
+  background: var(--ig-blue);
   color: #fff;
+}
+
+.tab-selected-gradient {
+  background: var(--ig-secondary-bg);
+  color: var(--ig-text);
+}
+
+.tab-inactive-glass {
+  border: 1px solid var(--ig-border);
+  background: transparent;
+  color: var(--ig-muted);
+}
+
+.tab-inactive-glass:hover {
+  color: var(--ig-text);
+  background: var(--ig-hover);
+}
+
+.animated-gradient-border {
+  border: 1px solid var(--ig-border);
+}
+
+.animated-gradient-bar {
+  background-image: var(--ig-story-gradient);
+}
+
+.animated-gradient-progress {
+  overflow: hidden;
+  border-radius: 9999px;
+  background: var(--ig-secondary-bg);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    transition-delay: 0ms !important;
+  }
+
+  html:focus-within {
+    scroll-behavior: auto !important;
+  }
+
+  .phone-screen {
+    animation: none !important;
+  }
+
+  .phone-screen:first-child {
+    opacity: 1;
+  }
+
+  /* Story progress still has to advance, just without the smooth fill. */
+  .story-progress-fill {
+    animation-duration: var(--story-duration, 5s) !important;
+    animation-timing-function: steps(1, end) !important;
+  }
 }

@@ -24,6 +24,34 @@ function locationKey(event: SecurityEvent): string | null {
   return loc;
 }
 
+const OS_NAMES: [RegExp, string][] = [
+  [/iphone/, "iPhone"],
+  [/ipad/, "iPad"],
+  [/android/, "Android"],
+  [/windows/, "Windows"],
+  [/mac os|macintosh/, "Mac"],
+  [/cros/, "Chromebook"],
+  [/linux/, "Linux"],
+];
+
+const CLIENT_NAMES: [RegExp, string][] = [
+  [/instagram/, "Instagram app"],
+  [/edg\//, "Edge"],
+  [/firefox|fxios/, "Firefox"],
+  [/chrome|crios/, "Chrome"],
+  [/safari/, "Safari"],
+];
+
+/** Readable device label from a raw user agent, e.g. "Chrome on Windows". */
+export function describeDevice(device?: string): string | null {
+  const dev = device?.trim().toLowerCase();
+  if (!dev || dev === "unknown" || dev === "—") return null;
+  const os = OS_NAMES.find(([re]) => re.test(dev))?.[1];
+  const client = CLIENT_NAMES.find(([re]) => re.test(dev))?.[1];
+  if (client && os) return `${client} on ${os}`;
+  return client ?? os ?? device?.trim() ?? null;
+}
+
 /** Coarse device family, so app-version bumps in user agents don't look like new devices. */
 function deviceKey(event: SecurityEvent): string | null {
   const dev = event.device?.trim().toLowerCase();

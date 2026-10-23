@@ -72,14 +72,14 @@ export function SaveFullAnalysisPanel({
 
   if (!isConfigured) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+      <div className="rounded-xl border border-ig-border bg-ig-subtle p-5">
         <div className="flex items-start gap-3">
-          <Cloud className="mt-0.5 h-5 w-5 text-white/30" />
+          <Cloud className="mt-0.5 h-5 w-5 text-ig-muted" />
           <div>
-            <p className="text-sm font-medium text-white">
+            <p className="text-sm font-medium text-fg">
               Cloud save not configured yet
             </p>
-            <p className="mt-1 text-xs text-white/45">
+            <p className="mt-1 text-xs text-ig-muted">
               Add Supabase environment variables to enable optional account
               saving. Your analysis still works fully in local mode.
             </p>
@@ -180,24 +180,24 @@ export function SaveFullAnalysisPanel({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5 sm:p-6">
+    <div className="rounded-xl border border-ig-border bg-ig-subtle p-5 sm:p-6">
       <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-[#F58529]/20 via-[#DD2A7B]/20 to-[#515BD4]/20">
-          <CloudUpload className="h-5 w-5 text-[#DD2A7B]" />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-ig-gradient text-white">
+          <CloudUpload className="h-5 w-5" />
         </div>
         <div className="flex-1">
-          <h3 className="font-semibold text-white">
+          <h3 className="font-semibold text-fg">
             {user ? "Save your full analysis" : "Want to save this analysis?"}
           </h3>
-          <p className="mt-1 text-sm text-white/45">
+          <p className="mt-1 text-sm text-ig-muted">
             {user
               ? "Save your parsed dashboard, network data, insights, and LinkedIn Helper progress."
               : "Create an optional account to save your full IG Wrapped analysis and LinkedIn Helper progress across devices."}
           </p>
-          <p className="mt-2 text-xs text-white/35">
+          <p className="mt-2 text-xs text-ig-muted">
             {isDemoMode
               ? "Demo mode uses synthetic data. Cloud save is optional — use “Save full analysis” only if you want a demo snapshot on your account."
-              : `Saves your parsed dashboard: follower/following lists, activity counts and insights, DM thread stats (names only while “Show thread names” is on), ad interests and advertisers, security event types and dates, LinkedIn Helper notes, and any AI summaries. Not saved: your ZIP, media files, raw search terms, archive paths, login IP addresses or devices, or DM message text — unless you opt in below to up to ${MAX_AI_SAMPLE_MESSAGES} masked messages per thread for later AI summaries.`}
+              : `Saves your parsed dashboard: follower/following lists, activity counts and insights, DM thread stats (names only while chat names are showing in Messages), ad interests and advertisers, security event types and dates, LinkedIn Helper notes, and any AI summaries. Not saved: your ZIP, media files, raw search terms, archive paths, login IP addresses or devices, or DM message text — unless you opt in below to up to ${MAX_AI_SAMPLE_MESSAGES} masked messages per thread for later AI summaries.`}
           </p>
         </div>
       </div>
@@ -205,7 +205,7 @@ export function SaveFullAnalysisPanel({
       {!isDemoMode && (
         <label
           htmlFor="include-ai-message-samples"
-          className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-white/10 bg-black/15 p-3 text-sm text-white/65"
+          className="mt-4 flex cursor-pointer items-start gap-3 rounded-lg border border-ig-border bg-black/15 p-3 text-sm text-fg"
         >
           <input
             id="include-ai-message-samples"
@@ -214,13 +214,13 @@ export function SaveFullAnalysisPanel({
             onChange={(event) =>
               setIncludeAiMessageSamples(event.target.checked)
             }
-            className="mt-0.5 h-4 w-4 accent-[#DD2A7B]"
+            className="mt-0.5 h-4 w-4 accent-ig-blue"
           />
           <span>
-            <span className="block font-medium text-white/85">
+            <span className="block font-medium text-fg">
               Save limited DM excerpts for future AI summaries
             </span>
-            <span className="mt-0.5 block text-xs text-white/50">
+            <span className="mt-0.5 block text-xs text-ig-muted">
               Off by default. When enabled, masked excerpts and optional sender
               names are stored with your cloud snapshot.
             </span>
@@ -259,7 +259,7 @@ export function SaveFullAnalysisPanel({
             <button
               type="button"
               onClick={onLoadSaved}
-              className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-2 text-sm font-medium text-white/80 transition hover:bg-white/10"
+              className="inline-flex items-center gap-2 rounded-full border border-ig-border bg-ig-secondary px-4 py-2 text-sm font-medium text-fg transition hover:bg-ig-hover"
             >
               <FolderOpen className="h-4 w-4" />
               Load saved analyses
@@ -269,7 +269,7 @@ export function SaveFullAnalysisPanel({
                 type="button"
                 onClick={handleDelete}
                 disabled={deleting}
-                className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+                className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-4 py-2 text-sm font-medium text-ig-bad transition hover:bg-red-500/15 disabled:opacity-50"
               >
                 {deleting ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -282,7 +282,7 @@ export function SaveFullAnalysisPanel({
             <button
               type="button"
               onClick={onClearLocal}
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 px-4 py-2 text-sm text-white/50 transition hover:bg-white/5 hover:text-white/70"
+              className="inline-flex items-center gap-2 rounded-full border border-ig-border px-4 py-2 text-sm text-ig-muted transition hover:bg-ig-hover hover:text-fg"
             >
               Clear local session
             </button>
@@ -293,8 +293,8 @@ export function SaveFullAnalysisPanel({
       {message && (
         <p
           className={`mt-3 flex items-center gap-2 text-sm ${
-            message.type === "success" ? "text-emerald-400" : "text-red-300"
-          }`}
+ message.type === "success" ? "text-ig-good" : "text-ig-bad"
+ }`}
         >
           {message.type === "success" ? (
             <CheckCircle2 className="h-4 w-4" />

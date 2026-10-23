@@ -3,9 +3,10 @@
 # IG Wrapped
 
 Single-page Next.js 16 / React 19 / Tailwind 4 app. A user uploads their official
-Instagram data-export ZIP; it is parsed **entirely in the browser** and shown as a
-tabbed dashboard. Optional extras: Supabase email auth + "cloud save" of the parsed
-snapshot, and AI summaries/chat via server route handlers.
+Instagram data-export ZIP; it is parsed **entirely in the browser** and shown as an
+app styled like Instagram itself (feed, profile, DM inbox, notifications, stories).
+Optional extras: Supabase email auth + "cloud save" of the parsed snapshot, and AI
+summaries/chat via server route handlers.
 
 ## Commands
 
@@ -39,9 +40,42 @@ snapshot, and AI summaries/chat via server route handlers.
    `resolveInsightsBundle` reuses it when `version >= INSIGHTS_BUNDLE_VERSION`,
    otherwise recomputes **without the raw files** (loses like/comment attribution,
    heatmap, reply patterns) — so don't bump the version casually.
-5. Tabs (`src/components/*Tab.tsx`, ids in `DashboardTabs.tsx`) render from
-   `parsedData` + `insights`. Account clicks open `AccountDetailDrawer` via
-   `useAccountDetail`.
+5. Sections render from `parsedData` + `insights`. Route ids are `DashboardTabId`
+   in `src/components/DashboardTabs.tsx`; `normalizeTabId` maps the pre-redesign
+   ids stored in older cloud saves (`overview`, `dms`, `security`…). `page.tsx`
+   renders the landing page (`LandingView`) until an export is loaded, then
+   `SideNav` + one section:
+   - `home` → `feed/HomeFeed.tsx` (stories row, insight posts, right rail)
+   - `profile` / `people` / `saved` → `profile/ProfileView.tsx` (header, era
+     highlights, yearbook grid; People = `SocialGraphTab`, Saved = cloud save)
+   - `messages` → `DmsTab.tsx` (inbox list + chat pane + "Inbox insights")
+   - `explore` → `explore/ExploreView.tsx`, `search` → `SearchWrappedTab`,
+     `activity` (Notifications) → `SecurityTab`, `eras` → `ErasTab`
+   - tools from **More** (`TOOL_TABS`): `actionplan`, `linkedin`, `compare`,
+     `export`, `explorer`. `network` opens the follower-list modal on the profile.
+   Overlays: `FollowListModal`, `ShareSheet`, `StoryModeModal`, Create (upload)
+   modal, `AccountDetailDrawer` (via `useAccountDetail`), `AnalysisChatPanel`.
+
+## Design system
+
+- Instagram look: system font stack, white/black surfaces, 1px hairlines, blue
+  (`#0095f6`) buttons and links. The brand gradient is only for story rings, the
+  `ig.wrapped` avatar and post "canvases" — no glass, blur, glows or animated
+  gradients. `Grand Hotel` (next/font) is used for the wordmark only.
+- Colors are CSS variables in `globals.css` (`--ig-*`): light by default, dark via
+  `prefers-color-scheme` unless `<html data-theme>` is set. `useTheme()`
+  (`src/lib/useTheme.ts`) toggles and persists it; `THEME_INIT_SCRIPT`
+  (`src/lib/theme.ts`) applies it before paint. Use the Tailwind names —
+  `bg-ig-bg`, `text-fg`, `text-ig-muted`, `border-ig-border`, `bg-ig-secondary`,
+  `hover:bg-ig-hover`, `bg-ig-elevated`, `bg-ig-blue`, `text-ig-good/warn/bad`,
+  `bg-ig-gradient` — never raw `white/NN` or hex colors, or one theme breaks.
+- Primitives live in `src/components/ig/`: `Avatar`/`BrandAvatar`/`StoryRing`,
+  `Post` (carousel, double-tap like, share, save), `Modal`, `SideNav` (+ More
+  menu), `Logo`. Post media are `feed/Canvas.tsx` canvases with fixed colors
+  (`CANVAS_TONES`) and container-query units: put `@container` on a parent, never
+  on the element whose padding/size uses `cqw`.
+- z-index layers: nav 40, More menu 50, `Modal` 80, chat 82, drawer 85, auth 86–87,
+  popovers 88, story viewer 90, toast 95.
 
 ## Instagram export facts the code relies on
 
@@ -72,17 +106,24 @@ snapshot, and AI summaries/chat via server route handlers.
 - **Presentation Mode** (`usePresentationMode()`) must hide every person name,
   handle, profile link, note, DM preview, search term, IP/device/location shown
   anywhere. Mask names with `redactNameLabel(label, !presentationMode)` from
-  `src/lib/dmDisplayLabels.ts`. Raw-data tabs (`PRESENTATION_GUARDED_TABS` in
-  `page.tsx`) are replaced by `PresentationPrivacyGuard` instead. Share cards and
-  Story Mode hide names by default.
+  `src/lib/dmDisplayLabels.ts`; the owner's handle comes from
+  `resolveProfileOwner(insights, showNames)` (`your.profile` while hidden). Raw-data
+  sections (`PRESENTATION_GUARDED_TABS` in `page.tsx`) and the follower-list modal
+  are replaced by a privacy notice instead. Share cards and Story Mode hide names
+  by default.
+- **Not an Instagram login.** The UI deliberately looks like Instagram, so never
+  add anything that resembles Instagram's sign-in, keep the "not affiliated with
+  Instagram or Meta" line (`NOT_AFFILIATED`), and keep the AuthModal warning that
+  the IG Wrapped account is separate from Instagram.
 - **Overlays** (`fixed` drawers/modals) render through `createPortal` to
-  `document.body`: the tab panel has `backdrop-blur`, which makes it the containing
-  block for fixed children.
+  `document.body` (`Modal` does this) so no transformed ancestor can trap them.
 - **Cloud save** content is decided by `sanitizeParsedForCloudSave` in
   `src/types/analysis.ts`; keep README.md, SUPABASE_SETUP.md and the in-app save
   copy in sync with it.
-- Tabs are wrapped in `TabErrorBoundary` so one broken tab doesn't drop the
-  parsed export (which only lives in page state).
+- Sections are wrapped in `TabErrorBoundary` so one broken section doesn't drop
+  the parsed export (which only lives in page state).
+- Counts in copy go through `plural()` (`src/lib/profileOwner.ts`) — no
+  "1 group chats".
 
 ## Backend
 

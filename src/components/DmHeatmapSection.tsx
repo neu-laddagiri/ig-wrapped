@@ -12,7 +12,7 @@ interface DmHeatmapSectionProps {
 export function DmHeatmapSection({ heatmap }: DmHeatmapSectionProps) {
   if (!heatmap?.available) {
     return (
-      <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4 text-sm text-white/45">
+      <div className="rounded-lg border border-ig-border bg-ig-subtle p-4 text-sm text-ig-muted">
         Not enough timestamped DM messages for a heatmap. Re-upload an export
         with message timestamps.
       </div>
@@ -22,22 +22,22 @@ export function DmHeatmapSection({ heatmap }: DmHeatmapSectionProps) {
   const max = Math.max(...heatmap.cells.map((c) => c.count), 1);
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-      <h4 className="font-semibold text-white">DM activity heatmap</h4>
-      <p className="mt-1 text-xs text-white/40">
+    <div className="rounded-xl border border-ig-border p-4">
+      <h4 className="font-semibold text-fg">When you message</h4>
+      <p className="mt-1 text-xs text-ig-muted">
         Day × hour from export timestamps. {heatmap.totalTimestamped} messages
         mapped.
       </p>
       <div className="mt-4 grid grid-cols-[2rem_repeat(24,minmax(0,1fr))] gap-0.5 text-[9px]">
         <div />
         {Array.from({ length: 24 }, (_, h) => (
-          <div key={h} className="text-center text-white/25">
+          <div key={h} className="text-center text-ig-muted">
             {h % 6 === 0 ? h : ""}
           </div>
         ))}
         {DAY_LABELS.map((day, dayIdx) => (
           <Fragment key={day}>
-            <div className="text-white/35">{day}</div>
+            <div className="text-ig-muted">{day}</div>
             {Array.from({ length: 24 }, (_, hour) => {
               const cell = heatmap.cells.find(
                 (c) => c.day === dayIdx && c.hour === hour
@@ -52,8 +52,8 @@ export function DmHeatmapSection({ heatmap }: DmHeatmapSectionProps) {
                   style={{
                     background:
                       count === 0
-                        ? "rgba(255,255,255,0.04)"
-                        : `rgba(221, 42, 123, ${0.15 + intensity * 0.75})`,
+                        ? "var(--ig-secondary-bg)"
+                        : `rgba(255, 0, 105, ${0.18 + intensity * 0.77})`,
                   }}
                 />
               );
@@ -61,7 +61,7 @@ export function DmHeatmapSection({ heatmap }: DmHeatmapSectionProps) {
           </Fragment>
         ))}
       </div>
-      <div className="mt-4 flex flex-wrap gap-4 text-xs text-white/50">
+      <div className="mt-4 flex flex-wrap gap-4 text-xs text-ig-muted">
         <span>Peak day: {heatmap.mostActiveDay}</span>
         <span>Peak hour: {heatmap.mostActiveHour}</span>
         <span>Late-night msgs: {heatmap.lateNightStreak}</span>

@@ -77,10 +77,10 @@ export function AccountSourcesPopover({
 
   const confidenceColor =
     breakdown.confidence === "high"
-      ? "text-emerald-400"
+      ? "text-ig-good"
       : breakdown.confidence === "medium"
-        ? "text-amber-300"
-        : "text-white/45";
+        ? "text-ig-warn"
+        : "text-ig-muted";
 
   const toggle = () => {
     if (open || !buttonRef.current) {
@@ -98,9 +98,9 @@ export function AccountSourcesPopover({
         onClick={toggle}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
-        className={`inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 text-white/50 hover:bg-white/10 hover:text-white/70 ${
-          compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs"
-        }`}
+        className={`inline-flex items-center gap-1 rounded-lg border border-ig-border bg-ig-secondary text-ig-muted hover:bg-ig-hover hover:text-fg ${
+ compact ? "px-1.5 py-0.5 text-[10px]" : "px-2 py-1 text-xs"
+ }`}
       >
         <Info className={compact ? "h-3 w-3" : "h-3.5 w-3.5"} aria-hidden />
         Sources
@@ -117,12 +117,12 @@ export function AccountSourcesPopover({
             role="region"
             aria-label="Data sources for this account"
             style={{ ...position, width: PANEL_WIDTH }}
-            className="fixed z-[70] rounded-xl border border-white/10 bg-[#0a0a12]/98 p-3 text-xs shadow-xl backdrop-blur-xl"
+            className="fixed z-[88] rounded-lg border border-ig-border bg-ig-elevated p-3 text-xs shadow-xl"
           >
             <p className={`font-semibold ${confidenceColor}`}>
               Confidence: {breakdown.confidence}
             </p>
-            <ul className="mt-2 space-y-1 text-white/55">
+            <ul className="mt-2 space-y-1 text-ig-muted">
               <li>Direct DMs: {breakdown.directDmMessages.toLocaleString()}</li>
               <li>Group msgs sent: {breakdown.groupMessagesSent.toLocaleString()}</li>
               {breakdown.isMutual && <li>Mutual follow</li>}
@@ -137,14 +137,14 @@ export function AccountSourcesPopover({
               )}
             </ul>
             {!presentationMode && breakdown.explanations.length > 0 && (
-              <ul className="mt-2 space-y-0.5 border-t border-white/8 pt-2 text-white/40">
+              <ul className="mt-2 space-y-0.5 border-t border-ig-border pt-2 text-ig-muted">
                 {breakdown.explanations.map((e, i) => (
                   <li key={`${i}-${e}`}>· {e}</li>
                 ))}
               </ul>
             )}
             {breakdown.isUnknownAccount && (
-              <p className="mt-2 text-[10px] leading-relaxed text-amber-200/70">
+              <p className="mt-2 text-[10px] leading-relaxed text-ig-warn">
                 Instagram export did not include a stable name for this account.
               </p>
             )}

@@ -8,7 +8,6 @@ import {
   Trash2,
   FolderOpen,
   LogIn,
-  HardDrive,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -72,12 +71,12 @@ export function SavedAnalysesTab({
 
   if (!isSupabaseConfigured()) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
-        <Cloud className="mx-auto h-10 w-10 text-white/20" />
-        <h3 className="mt-4 text-lg font-semibold text-white">
+      <div className="rounded-xl border border-ig-border bg-ig-subtle px-6 py-16 text-center">
+        <Cloud className="mx-auto h-10 w-10 text-ig-muted" />
+        <h3 className="mt-4 text-lg font-semibold text-fg">
           Cloud save not configured
         </h3>
-        <p className="mx-auto mt-2 max-w-md text-sm text-white/45">
+        <p className="mx-auto mt-2 max-w-md text-sm text-ig-muted">
           Add Supabase environment variables to enable saved analyses. The app
           works fully in local mode without this feature.
         </p>
@@ -87,37 +86,19 @@ export function SavedAnalysesTab({
 
   if (!user) {
     return (
-      <div className="space-y-6">
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-          <div className="flex items-start gap-3">
-            <HardDrive className="mt-0.5 h-5 w-5 text-[#DD2A7B]" />
-            <div>
-              <h3 className="font-semibold text-white">Local mode</h3>
-              <p className="mt-2 text-sm text-white/45">
-                You can analyze exports without signing in. Create an optional
-                account to save your full parsed analysis and LinkedIn Helper
-                progress across devices.
-              </p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center">
-          <LogIn className="mx-auto h-10 w-10 text-white/20" />
-          <h3 className="mt-4 text-lg font-semibold text-white">
-            Sign in to view saved analyses
-          </h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-white/45">
-            Saved analyses are stored in your account — not uploaded as raw ZIP
-            files.
-          </p>
-          <button
-            type="button"
-            onClick={onSignIn}
-            className="mt-6 rounded-full animated-gradient-bg px-6 py-2.5 text-sm font-semibold text-white"
-          >
-            Sign in
-          </button>
-        </div>
+      <div className="px-6 py-10 text-center">
+        <LogIn className="mx-auto h-10 w-10" strokeWidth={1.5} />
+        <h3 className="mt-3 text-lg font-semibold">Log in to see saved analyses</h3>
+        <p className="mx-auto mt-1 max-w-sm text-sm text-ig-muted">
+          IG Wrapped works without an account. Logging in only adds saving across devices.
+        </p>
+        <button
+          type="button"
+          onClick={onSignIn}
+          className="mt-5 rounded-lg bg-ig-blue px-5 py-2 text-sm font-semibold text-white hover:bg-ig-blue-hover"
+        >
+          Log in
+        </button>
       </div>
     );
   }
@@ -159,31 +140,27 @@ export function SavedAnalysesTab({
 
   return (
     <div id="saved-analyses-section" className="scroll-mt-28 space-y-6">
-      <div className="rounded-2xl border border-[#515BD4]/20 bg-[#515BD4]/10 p-4">
-        <p className="text-sm text-white/70">
-          <span className="font-medium text-white">Account save enabled.</span>{" "}
-          These are parsed analysis snapshots — not your original ZIP or media
-          files.
-        </p>
-      </div>
+      <p className="text-xs text-ig-muted">
+        Saved snapshots hold parsed stats — never your original ZIP or media files.
+      </p>
 
       {shownError && (
-        <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+        <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-ig-bad">
           {shownError}
         </p>
       )}
 
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-[#DD2A7B]" />
+          <Loader2 className="h-8 w-8 animate-spin text-fg" />
         </div>
       ) : items.length === 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
-          <Cloud className="mx-auto h-10 w-10 text-white/20" />
-          <h3 className="mt-4 text-lg font-semibold text-white">
+        <div className="rounded-xl border border-ig-border bg-ig-subtle px-6 py-16 text-center">
+          <Cloud className="mx-auto h-10 w-10 text-ig-muted" />
+          <h3 className="mt-4 text-lg font-semibold text-fg">
             No saved analyses yet
           </h3>
-          <p className="mx-auto mt-2 max-w-md text-sm text-white/45">
+          <p className="mx-auto mt-2 max-w-md text-sm text-ig-muted">
             Upload and parse an export, then click &quot;Save full analysis&quot;
             to store it here.
           </p>
@@ -193,19 +170,19 @@ export function SavedAnalysesTab({
           {items.map((item) => (
             <div
               key={item.id}
-              className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 sm:flex-row sm:items-center sm:justify-between"
+              className="flex flex-col gap-4 rounded-xl border border-ig-border bg-ig-subtle p-4 sm:flex-row sm:items-center sm:justify-between"
             >
               <div>
-                <p className="font-medium text-white">{item.title}</p>
-                <p className="mt-0.5 text-xs text-white/40">
+                <p className="font-medium text-fg">{item.title}</p>
+                <p className="mt-0.5 text-xs text-ig-muted">
                   {item.exportName} · {item.analysisMode}
                 </p>
-                <p className="mt-1 text-xs text-white/35">
+                <p className="mt-1 text-xs text-ig-muted">
                   Saved {format(new Date(item.createdAt), "MMM d, yyyy")} ·
                   Updated {format(new Date(item.updatedAt), "MMM d, yyyy h:mm a")}
                 </p>
                 {(item.followerCount != null || item.followingCount != null) && (
-                  <p className="mt-2 text-xs text-white/50">
+                  <p className="mt-2 text-xs text-ig-muted">
                     {item.followerCount != null &&
                       `${formatNumber(item.followerCount)} followers`}
                     {item.followingCount != null &&
@@ -220,7 +197,7 @@ export function SavedAnalysesTab({
                   type="button"
                   onClick={() => handleLoad(item.id)}
                   disabled={loadingId === item.id}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-white/5 px-3 py-2 text-xs font-medium text-white transition hover:bg-white/10 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-ig-blue px-3 py-1.5 text-sm font-semibold text-white transition hover:bg-ig-blue-hover disabled:opacity-50"
                 >
                   {loadingId === item.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -233,7 +210,7 @@ export function SavedAnalysesTab({
                   type="button"
                   onClick={() => handleDelete(item.id)}
                   disabled={deletingId === item.id}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs font-medium text-red-300 transition hover:bg-red-500/15 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-1.5 text-sm font-semibold text-ig-bad transition hover:bg-ig-hover disabled:opacity-50"
                 >
                   {deletingId === item.id ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

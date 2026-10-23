@@ -87,7 +87,7 @@ export function AnalysisChatPanel({
   };
 
   return (
-    <div className="fixed inset-0 z-[65] flex items-end justify-center bg-black/60 p-4 sm:items-center">
+    <div className="fixed inset-0 z-[82] flex items-end justify-center bg-black/60 p-4 sm:items-center">
       <div
         ref={dialogRef}
         role="dialog"
@@ -95,20 +95,20 @@ export function AnalysisChatPanel({
         aria-labelledby={titleId}
         aria-describedby={descriptionId}
         tabIndex={-1}
-        className="flex h-[calc(100dvh-2rem)] max-h-[560px] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#0c0c12] shadow-2xl"
+        className="flex h-[calc(100dvh-2rem)] max-h-[560px] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-ig-border bg-ig-elevated shadow-2xl"
       >
-        <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
+        <div className="flex items-center justify-between border-b border-ig-border px-4 py-3">
           <div className="flex items-center gap-2">
-            <Bot className="h-5 w-5 text-[#DD2A7B]" aria-hidden="true" />
-            <h2 id={titleId} className="font-semibold text-white">
-              AI Data Analyst
+            <Bot className="h-5 w-5 text-fg" aria-hidden="true" />
+            <h2 id={titleId} className="font-semibold text-fg">
+              Ask IG Wrapped AI
             </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close AI Data Analyst"
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-white/60 hover:bg-white/10 hover:text-white"
+            aria-label="Close IG Wrapped AI"
+            className="inline-flex h-11 w-11 items-center justify-center rounded-lg text-fg hover:bg-ig-hover hover:text-fg"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
@@ -116,7 +116,7 @@ export function AnalysisChatPanel({
 
         <p
           id={descriptionId}
-          className="border-b border-white/5 px-4 py-2 text-xs text-white/60"
+          className="border-b border-ig-border px-4 py-2 text-xs text-fg"
         >
           Uses parsed summaries only — not your raw ZIP. Search history excluded
           unless enabled below.
@@ -125,13 +125,13 @@ export function AnalysisChatPanel({
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
           {messages.length === 0 && (
             <div className="space-y-2">
-              <p className="text-xs text-white/45">Suggested prompts:</p>
+              <p className="text-xs text-ig-muted">Suggested prompts:</p>
               {SUGGESTED.map((s) => (
                 <button
                   key={s}
                   type="button"
                   onClick={() => void send(s)}
-                  className="block min-h-11 w-full rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-left text-xs text-white/70 hover:bg-white/5"
+                  className="block min-h-11 w-full rounded-lg border border-ig-border bg-ig-subtle px-3 py-2 text-left text-xs text-fg hover:bg-ig-hover"
                 >
                   {s}
                 </button>
@@ -148,11 +148,11 @@ export function AnalysisChatPanel({
             {messages.map((m, i) => (
               <div
                 key={i}
-                className={`rounded-xl px-3 py-2 text-sm ${
-                  m.role === "user"
-                    ? "ml-8 bg-[#DD2A7B]/15 text-white"
-                    : "mr-8 border border-white/10 bg-white/[0.04] text-white/80"
-                }`}
+                className={`rounded-lg px-3 py-2 text-sm ${
+ m.role === "user"
+ ? "ml-8 bg-ig-secondary text-fg"
+ : "mr-8 border border-ig-border bg-ig-subtle text-fg"
+ }`}
               >
                 <span className="sr-only">
                   {m.role === "user" ? "You: " : "AI Analyst: "}
@@ -162,7 +162,7 @@ export function AnalysisChatPanel({
             ))}
           </div>
           {loading && (
-            <div role="status" className="flex items-center gap-2 text-sm text-white/60">
+            <div role="status" className="flex items-center gap-2 text-sm text-fg">
               <Loader2
                 className="h-4 w-4 animate-spin"
                 aria-hidden="true"
@@ -171,19 +171,19 @@ export function AnalysisChatPanel({
             </div>
           )}
           {error && (
-            <p role="alert" className="text-sm text-red-300/90">
+            <p role="alert" className="text-sm text-ig-bad">
               {error}
             </p>
           )}
         </div>
 
-        <div className="border-t border-white/10 p-3">
-          <label className="mb-2 flex min-h-11 items-center gap-2 text-xs text-white/60">
+        <div className="border-t border-ig-border p-3">
+          <label className="mb-2 flex min-h-11 items-center gap-2 text-xs text-fg">
             <input
               type="checkbox"
               checked={includeSearch}
               onChange={(e) => setIncludeSearch(e.target.checked)}
-              className="accent-[#DD2A7B]"
+              className="accent-ig-blue"
             />
             Include search history summary (sensitive)
           </label>
@@ -195,7 +195,7 @@ export function AnalysisChatPanel({
             }}
           >
             <label htmlFor={inputId} className="sr-only">
-              Ask the AI Data Analyst a question
+              Ask IG Wrapped AI a question
             </label>
             <input
               ref={inputRef}
@@ -204,12 +204,12 @@ export function AnalysisChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="Ask about your parsed data…"
-              className="min-w-0 flex-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+              className="min-w-0 flex-1 rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-sm text-fg outline-none"
             />
             <button
               type="submit"
               disabled={loading}
-              className="min-h-11 rounded-xl animated-gradient-bg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+              className="min-h-11 rounded-lg animated-gradient-bg px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
             >
               Send
             </button>
@@ -217,7 +217,7 @@ export function AnalysisChatPanel({
               type="button"
               onClick={() => setMessages([])}
               aria-label="Clear chat"
-              className="inline-flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 text-white/60 hover:bg-white/5 hover:text-white"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-lg border border-ig-border text-fg hover:bg-ig-hover hover:text-fg"
               title="Clear chat"
             >
               <Trash2 className="h-4 w-4" aria-hidden="true" />

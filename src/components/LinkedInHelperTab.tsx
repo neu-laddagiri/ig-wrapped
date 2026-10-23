@@ -374,7 +374,7 @@ export function LinkedInHelperTab({
 
   if (!network) {
     return (
-      <p className="py-12 text-center text-sm text-white/40">
+      <p className="py-12 text-center text-sm text-ig-muted">
         Upload an export with followers/following data to use LinkedIn helper.
       </p>
     );
@@ -384,8 +384,8 @@ export function LinkedInHelperTab({
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-white">LinkedIn helper</h2>
-          <p className="text-xs text-white/40">
+          <h2 className="text-lg font-semibold text-fg">LinkedIn helper</h2>
+          <p className="text-xs text-ig-muted">
             Ranked from the same 1-on-1 DM threads as the DMs tab. Network-only
             accounts appear after everyone you actually DM.
           </p>
@@ -394,7 +394,7 @@ export function LinkedInHelperTab({
           <button
             type="button"
             onClick={handleExport}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/70 hover:bg-white/10"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-xs text-fg hover:bg-ig-hover"
           >
             <Download className="h-3.5 w-3.5" />
             Export CSV
@@ -402,7 +402,7 @@ export function LinkedInHelperTab({
           <button
             type="button"
             onClick={handleClearProgress}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300/80 hover:bg-red-500/20"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-ig-bad hover:bg-red-500/20"
           >
             <Trash2 className="h-3.5 w-3.5" />
             Clear progress
@@ -412,7 +412,7 @@ export function LinkedInHelperTab({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ig-muted" aria-hidden />
           <input
             type="search"
             aria-label="Search LinkedIn helper accounts"
@@ -425,7 +425,7 @@ export function LinkedInHelperTab({
             placeholder={
               showNames ? "Search username or name…" : "Search hidden while presenting"
             }
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#DD2A7B]/40 disabled:opacity-60"
+            className="w-full rounded-lg border border-ig-border bg-ig-secondary py-2 pl-9 pr-3 text-sm text-fg placeholder:text-ig-muted outline-none focus:border-ig-muted disabled:opacity-60"
           />
         </div>
         <select
@@ -435,7 +435,7 @@ export function LinkedInHelperTab({
             setSource(e.target.value as LinkedInSource);
             setPage(1);
           }}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+          className="rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-sm text-fg outline-none"
         >
           {SOURCE_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -450,7 +450,7 @@ export function LinkedInHelperTab({
             setSortMode(e.target.value as SortMode);
             setPage(1);
           }}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+          className="rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-sm text-fg outline-none"
         >
           {SORT_OPTIONS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -465,7 +465,7 @@ export function LinkedInHelperTab({
             setInteractionFilter(e.target.value as InteractionFilter);
             setPage(1);
           }}
-          className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-white outline-none"
+          className="rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-sm text-fg outline-none"
         >
           {INTERACTION_FILTERS.map((opt) => (
             <option key={opt.value} value={opt.value}>
@@ -475,18 +475,18 @@ export function LinkedInHelperTab({
         </select>
       </div>
 
-      <div className="flex items-start gap-2 rounded-xl border border-[#515BD4]/20 bg-[#515BD4]/8 px-3 py-2 text-xs text-white/50">
-        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#818cf8]" />
+      <div className="flex items-start gap-2 rounded-lg border border-ig-border bg-ig-secondary px-3 py-2 text-xs text-ig-muted">
+        <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg" />
         <p>
           Most interacted: direct DM count → last DM date → mutual / follower /
           following → username. No likes, comments, or fuzzy name matching.
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded-2xl border border-white/10">
+      <div className="overflow-x-auto rounded-xl border border-ig-border">
         <table className="w-full min-w-[720px] table-fixed text-left text-sm">
           <thead>
-            <tr className="border-b border-white/10 bg-white/[0.02] text-xs uppercase tracking-wider text-white/40">
+            <tr className="border-b border-ig-border bg-ig-subtle text-xs uppercase tracking-wider text-ig-muted">
               <th className="w-[22%] px-4 py-3">Account</th>
               <th className="w-[9%] px-4 py-3">Direct DMs</th>
               <th className="w-[22%] px-4 py-3">Why ranked</th>
@@ -501,7 +501,7 @@ export function LinkedInHelperTab({
               <tr>
                 <td
                   colSpan={7}
-                  className="px-4 py-12 text-center text-white/40"
+                  className="px-4 py-12 text-center text-ig-muted"
                 >
                   No accounts match your filters.
                 </td>
@@ -533,7 +533,7 @@ export function LinkedInHelperTab({
                 return (
                   <tr
                     key={`${accountKey}:${threadId ?? "network"}`}
-                    className="cursor-pointer border-b border-white/5 hover:bg-white/[0.03]"
+                    className="cursor-pointer border-b border-ig-border hover:bg-ig-hover"
                     onClick={() => onOpenAccount({ accountKey, threadId })}
                   >
                     <td className="px-4 py-3 align-top">
@@ -543,24 +543,24 @@ export function LinkedInHelperTab({
                           stopRowClick(e);
                           onOpenAccount({ accountKey, threadId });
                         }}
-                        className="text-left font-medium text-white hover:text-[#DD2A7B]"
+                        className="text-left font-medium text-fg hover:text-ig-muted"
                       >
                         {showNames
                           ? displayLabel
                           : redactNameLabel(displayLabel, false)}
                       </button>
                       {showNames && (
-                        <p className="text-[10px] text-white/35">
+                        <p className="text-[10px] text-ig-muted">
                           {secondaryLabel}
                         </p>
                       )}
                     </td>
-                    <td className="px-4 py-3 align-top font-semibold tabular-nums text-white">
+                    <td className="px-4 py-3 align-top font-semibold tabular-nums text-fg">
                       {directDmCount > 0
                         ? directDmCount.toLocaleString()
                         : "—"}
                     </td>
-                    <td className="px-4 py-3 align-top text-xs leading-snug text-white/45">
+                    <td className="px-4 py-3 align-top text-xs leading-snug text-ig-muted">
                       {reason}
                     </td>
                     <td
@@ -573,13 +573,13 @@ export function LinkedInHelperTab({
                           target="_blank"
                           rel="noopener noreferrer"
                           onClick={stopRowClick}
-                          className="inline-flex items-center gap-1 text-[#DD2A7B] hover:underline"
+                          className="inline-flex items-center gap-1 text-ig-blue hover:underline"
                         >
                           IG profile
                           <ExternalLink className="h-3 w-3" aria-hidden />
                         </a>
                       ) : (
-                        <span className="text-xs text-white/30">
+                        <span className="text-xs text-ig-muted">
                           {showNames ? "No profile link" : "Hidden"}
                         </span>
                       )}
@@ -599,13 +599,13 @@ export function LinkedInHelperTab({
                               linkedInSearchContext
                             );
                           }}
-                          className="inline-flex items-center gap-1 rounded-lg border border-[#515BD4]/30 bg-[#515BD4]/10 px-2 py-1 text-xs text-[#818cf8] hover:bg-[#515BD4]/20"
+                          className="inline-flex items-center gap-1 rounded-lg border border-ig-border bg-ig-secondary px-2 py-1 text-xs text-fg hover:bg-ig-hover"
                         >
                           <Briefcase className="h-3 w-3" aria-hidden />
                           Search LinkedIn
                         </button>
                       ) : (
-                        <span className="text-xs text-white/30">Hidden</span>
+                        <span className="text-xs text-ig-muted">Hidden</span>
                       )}
                     </td>
                     <td
@@ -627,7 +627,7 @@ export function LinkedInHelperTab({
                             entry
                           );
                         }}
-                        className="w-full max-w-[140px] rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white outline-none"
+                        className="w-full max-w-[140px] rounded-lg border border-ig-border bg-ig-elevated px-2 py-1.5 text-xs text-fg outline-none"
                       >
                         {STATUS_OPTIONS.map((opt) => (
                           <option key={opt.value} value={opt.value}>
@@ -658,10 +658,10 @@ export function LinkedInHelperTab({
                             );
                           }}
                           placeholder="Add note…"
-                          className="w-full min-w-0 rounded-lg border border-white/10 bg-[#12121a] px-2 py-1.5 text-xs text-white placeholder:text-white/25 outline-none focus:border-[#DD2A7B]/40"
+                          className="w-full min-w-0 rounded-lg border border-ig-border bg-ig-elevated px-2 py-1.5 text-xs text-fg placeholder:text-ig-muted outline-none focus:border-ig-muted"
                         />
                       ) : (
-                        <span className="text-xs text-white/30">
+                        <span className="text-xs text-ig-muted">
                           {notes.trim() ? "Hidden" : "—"}
                         </span>
                       )}

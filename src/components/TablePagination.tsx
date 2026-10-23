@@ -25,12 +25,12 @@ export function TablePagination({
   const end = Math.min(safePage * pageSize, total);
 
   return (
-    <div className="flex flex-col gap-3 border-t border-white/10 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-      <p className="text-xs text-white/40">
+    <div className="flex flex-col gap-3 border-t border-ig-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-xs text-ig-muted">
         Showing {start}–{end} of {total.toLocaleString()} accounts
       </p>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs text-white/50">
+        <label className="flex items-center gap-2 text-xs text-ig-muted">
           Per page
           <select
             value={pageSize}
@@ -38,7 +38,7 @@ export function TablePagination({
               onPageSizeChange(Number(e.target.value) as PageSize);
               onPageChange(1);
             }}
-            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-white outline-none"
+            className="rounded-lg border border-ig-border bg-ig-secondary px-2 py-1 text-fg outline-none"
           >
             {PAGE_SIZE_OPTIONS.map((n) => (
               <option key={n} value={n}>
@@ -53,11 +53,11 @@ export function TablePagination({
             disabled={safePage <= 1}
             onClick={() => onPageChange(safePage - 1)}
             aria-label="Previous page"
-            className="rounded-lg border border-white/10 p-2 text-white/60 transition hover:bg-white/5 disabled:opacity-30"
+            className="rounded-lg border border-ig-border p-2 text-fg transition hover:bg-ig-hover disabled:opacity-30"
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
           </button>
-          <span className="min-w-[4rem] text-center text-xs text-white/50" aria-live="polite">
+          <span className="min-w-[4rem] text-center text-xs text-ig-muted" aria-live="polite">
             {safePage} / {totalPages}
           </span>
           <button
@@ -65,7 +65,7 @@ export function TablePagination({
             disabled={safePage >= totalPages}
             onClick={() => onPageChange(safePage + 1)}
             aria-label="Next page"
-            className="rounded-lg border border-white/10 p-2 text-white/60 transition hover:bg-white/5 disabled:opacity-30"
+            className="rounded-lg border border-ig-border p-2 text-fg transition hover:bg-ig-hover disabled:opacity-30"
           >
             <ChevronRight className="h-4 w-4" aria-hidden />
           </button>

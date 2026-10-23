@@ -2,10 +2,10 @@
 
 import type { ConfidenceLevel } from "@/types/insights";
 
-const STYLES: Record<ConfidenceLevel, string> = {
-  high: "border-emerald-500/30 bg-emerald-500/10 text-emerald-200/90",
-  medium: "border-amber-500/30 bg-amber-500/10 text-amber-200/90",
-  low: "border-white/15 bg-white/5 text-white/50",
+const DOTS: Record<ConfidenceLevel, string> = {
+  high: "bg-ig-good",
+  medium: "bg-ig-warn",
+  low: "bg-ig-border-strong",
 };
 
 const TOOLTIPS: Record<ConfidenceLevel, string> = {
@@ -19,19 +19,21 @@ interface ConfidencePillProps {
   className?: string;
 }
 
+/** A quiet dot-and-label note on how sure an estimate is. */
 export function ConfidencePill({ level, className = "" }: ConfidencePillProps) {
   const label =
     level === "high"
       ? "High confidence"
       : level === "medium"
-        ? "Medium confidence"
-        : "Low confidence";
+        ? "Estimated"
+        : "Rough guess";
 
   return (
     <span
       title={TOOLTIPS[level]}
-      className={`inline-flex rounded-full border px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${STYLES[level]} ${className}`}
+      className={`inline-flex items-center gap-1.5 text-xs font-normal text-ig-muted ${className}`}
     >
+      <span className={`h-1.5 w-1.5 rounded-full ${DOTS[level]}`} aria-hidden />
       {label}
     </span>
   );

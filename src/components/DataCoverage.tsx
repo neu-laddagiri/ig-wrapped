@@ -67,13 +67,13 @@ export function DataCoverage({
       initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.2 }}
-      className="rounded-3xl border border-white/10 bg-white/[0.06] backdrop-blur-xl"
+      className="rounded-xl border border-ig-border bg-ig-secondary"
     >
       <div className="flex flex-col gap-3 px-6 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
         <div>
-          <h2 className="text-lg font-semibold text-white">Data Coverage</h2>
-          <p className="mt-0.5 text-sm text-white/45">
-            <span className="font-semibold text-white">{detectedCount}</span> of{" "}
+          <h2 className="text-lg font-semibold text-fg">Data Coverage</h2>
+          <p className="mt-0.5 text-sm text-ig-muted">
+            <span className="font-semibold text-fg">{detectedCount}</span> of{" "}
             {items.length} categories found
           </p>
         </div>
@@ -82,7 +82,7 @@ export function DataCoverage({
           onClick={() => onExpandedChange(!expanded)}
           aria-expanded={expanded}
           aria-controls={panelId}
-          className="inline-flex items-center gap-1.5 self-start rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-white/75 transition hover:bg-white/10 sm:self-auto"
+          className="inline-flex items-center gap-1.5 self-start rounded-full border border-ig-border bg-ig-secondary px-4 py-1.5 text-xs font-medium text-fg transition hover:bg-ig-hover sm:self-auto"
         >
           {expanded ? (
             <>
@@ -99,21 +99,21 @@ export function DataCoverage({
       </div>
 
       {!expanded && previewItems.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-t border-white/10 px-6 py-3 sm:px-8">
+        <div className="flex flex-wrap gap-2 border-t border-ig-border px-6 py-3 sm:px-8">
           {previewItems.map((item) => {
             const Icon = iconMap[item.id];
             return (
               <span
                 key={item.id}
-                className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/65"
+                className="inline-flex items-center gap-1.5 rounded-full border border-ig-border bg-ig-secondary px-2.5 py-1 text-xs text-fg"
               >
-                <Icon className="h-3 w-3 text-[#DD2A7B]" />
+                <Icon className="h-3 w-3 text-fg" />
                 {item.label}
               </span>
             );
           })}
           {detectedCount > previewItems.length && (
-            <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-white/40">
+            <span className="rounded-full border border-ig-border bg-ig-secondary px-2.5 py-1 text-xs text-ig-muted">
               +{detectedCount - previewItems.length} more
             </span>
           )}
@@ -130,7 +130,7 @@ export function DataCoverage({
             transition={{ duration: 0.25 }}
             className="overflow-hidden"
           >
-            <div className="border-t border-white/10 px-6 pb-6 pt-2 sm:px-8 sm:pb-8">
+            <div className="border-t border-ig-border px-6 pb-6 pt-2 sm:px-8 sm:pb-8">
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 {items.map((item, i) => {
                   const Icon = iconMap[item.id];
@@ -140,41 +140,41 @@ export function DataCoverage({
                       initial={{ opacity: 0, scale: 0.98 }}
                       animate={{ opacity: 1, scale: 1 }}
                       transition={{ delay: 0.03 * i }}
-                      className={`rounded-2xl border p-4 transition ${
-                        item.detected
-                          ? "border-white/12 bg-white/[0.04]"
-                          : "border-white/5 bg-white/[0.02] opacity-60"
-                      }`}
+                      className={`rounded-xl border p-4 transition ${
+ item.detected
+ ? "border-ig-border bg-ig-subtle"
+ : "border-ig-border bg-ig-subtle opacity-60"
+ }`}
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex items-center gap-3">
                           <div
-                            className={`flex h-9 w-9 items-center justify-center rounded-xl ${
-                              item.detected
-                                ? "bg-gradient-to-br from-[#F58529]/20 via-[#DD2A7B]/15 to-[#515BD4]/20"
-                                : "bg-white/5"
-                            }`}
+                            className={`flex h-9 w-9 items-center justify-center rounded-lg ${
+ item.detected
+ ? "bg-ig-secondary text-fg"
+ : "bg-ig-secondary"
+ }`}
                           >
                             <Icon
-                              className={`h-4 w-4 ${item.detected ? "text-[#DD2A7B]" : "text-white/30"}`}
+                              className={`h-4 w-4 ${item.detected ? "text-fg" : "text-ig-muted"}`}
                             />
                           </div>
                           <div>
-                            <p className="text-sm font-medium text-white">
+                            <p className="text-sm font-medium text-fg">
                               {item.label}
                             </p>
-                            <p className="text-xs text-white/40">
+                            <p className="text-xs text-ig-muted">
                               {item.description}
                             </p>
                           </div>
                         </div>
                         {item.detected ? (
-                          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                          <CheckCircle2 className="h-4 w-4 shrink-0 text-ig-good" />
                         ) : (
-                          <XCircle className="h-4 w-4 shrink-0 text-white/25" />
+                          <XCircle className="h-4 w-4 shrink-0 text-ig-muted" />
                         )}
                       </div>
-                      <p className="mt-3 text-xs text-white/35">
+                      <p className="mt-3 text-xs text-ig-muted">
                         {item.detected
                           ? `${item.fileCount} file${item.fileCount === 1 ? "" : "s"} found`
                           : "Not found"}

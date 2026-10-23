@@ -113,13 +113,13 @@ export function AuthModal({
 
   return (
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="fixed inset-0 z-[86] flex items-center justify-center p-4">
         <motion.div
           initial={prefersReducedMotion ? false : { opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={prefersReducedMotion ? { duration: 0 } : undefined}
-          className="absolute inset-0 bg-black/70 backdrop-blur-sm"
+          className="absolute inset-0 bg-black/70"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -138,28 +138,33 @@ export function AuthModal({
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 12 }}
           transition={prefersReducedMotion ? { duration: 0 } : undefined}
-          className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-3xl border border-white/10 bg-[#0c0c12]/95 p-6 shadow-2xl backdrop-blur-xl"
+          className="relative max-h-[calc(100dvh-2rem)] w-full max-w-md overflow-y-auto rounded-xl border border-ig-border bg-ig-elevated p-6 shadow-2xl"
         >
           <button
             type="button"
             onClick={onClose}
             aria-label="Close account dialog"
-            className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-xl text-white/60 transition hover:bg-white/10 hover:text-white"
+            className="absolute right-3 top-3 inline-flex h-11 w-11 items-center justify-center rounded-lg text-fg transition hover:bg-ig-hover hover:text-fg"
           >
             <X className="h-5 w-5" aria-hidden="true" />
           </button>
 
-          <h2 id={titleId} className="pr-12 text-xl font-semibold text-white">
-            {mode === "signin" && "Sign in"}
-            {mode === "signup" && "Create account"}
+          <h2 id={titleId} className="pr-12 text-xl font-semibold text-fg">
+            {mode === "signin" && "Log in to IG Wrapped"}
+            {mode === "signup" && "Create an IG Wrapped account"}
             {mode === "reset" && "Reset password"}
           </h2>
-          <p id={descriptionId} className="mt-1 pr-10 text-sm text-white/60">
-            Optional — only needed to save your full analysis across devices.
+          <p id={descriptionId} className="mt-1 pr-10 text-sm text-fg">
+            Optional — only needed to save your analysis across devices.
+          </p>
+          {/* The UI looks like Instagram, so say plainly this is a separate account. */}
+          <p className="mt-3 rounded-lg bg-ig-secondary px-3 py-2 text-xs leading-relaxed text-fg">
+            <span className="font-semibold">This isn&apos;t your Instagram login.</span> Use an
+            email and a new password just for IG Wrapped — never your Instagram password.
           </p>
 
           {!isSupabaseConfigured() ? (
-            <div className="mt-6 rounded-xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-amber-200">
+            <div className="mt-6 rounded-lg border border-amber-500/20 bg-amber-500/10 p-4 text-sm text-ig-warn">
               Cloud save is not configured yet. Add Supabase environment
               variables to enable accounts.
             </div>
@@ -172,13 +177,13 @@ export function AuthModal({
               <div>
                 <label
                   htmlFor={emailId}
-                  className="mb-1.5 block text-xs font-medium text-white/70"
+                  className="mb-1.5 block text-xs font-medium text-fg"
                 >
                   Email
                 </label>
                 <div className="relative">
                   <Mail
-                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40"
+                    className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ig-muted"
                     aria-hidden="true"
                   />
                   <input
@@ -189,7 +194,7 @@ export function AuthModal({
                     autoComplete="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[#DD2A7B]/40"
+                    className="w-full rounded-lg border border-ig-border bg-ig-secondary py-2.5 pl-10 pr-3 text-sm text-fg outline-none focus:border-ig-muted"
                     placeholder="you@example.com"
                   />
                 </div>
@@ -199,13 +204,13 @@ export function AuthModal({
                 <div>
                   <label
                     htmlFor={passwordId}
-                    className="mb-1.5 block text-xs font-medium text-white/70"
+                    className="mb-1.5 block text-xs font-medium text-fg"
                   >
                     Password
                   </label>
                   <div className="relative">
                     <Lock
-                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/40"
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ig-muted"
                       aria-hidden="true"
                     />
                     <input
@@ -218,7 +223,7 @@ export function AuthModal({
                       }
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[#DD2A7B]/40"
+                      className="w-full rounded-lg border border-ig-border bg-ig-secondary py-2.5 pl-10 pr-3 text-sm text-fg outline-none focus:border-ig-muted"
                       placeholder="••••••••"
                     />
                   </div>
@@ -228,7 +233,7 @@ export function AuthModal({
               {error && (
                 <p
                   role="alert"
-                  className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300"
+                  className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-ig-bad"
                 >
                   {error}
                 </p>
@@ -238,7 +243,7 @@ export function AuthModal({
                 <p
                   role="status"
                   aria-live="polite"
-                  className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300"
+                  className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-ig-good"
                 >
                   <CheckCircle2
                     className="h-4 w-4 shrink-0"
@@ -267,7 +272,7 @@ export function AuthModal({
           )}
 
           {isSupabaseConfigured() && (
-            <div className="mt-4 flex flex-wrap justify-center gap-3 text-xs text-white/40">
+            <div className="mt-4 flex flex-wrap justify-center gap-3 text-xs text-ig-muted">
               {mode === "signin" && (
                 <>
                   <button
@@ -276,7 +281,7 @@ export function AuthModal({
                       resetForm();
                       setMode("signup");
                     }}
-                    className="hover:text-white/70"
+                    className="hover:text-fg"
                   >
                     Need an account? Sign up
                   </button>
@@ -287,7 +292,7 @@ export function AuthModal({
                       resetForm();
                       setMode("reset");
                     }}
-                    className="hover:text-white/70"
+                    className="hover:text-fg"
                   >
                     Forgot password?
                   </button>
@@ -300,7 +305,7 @@ export function AuthModal({
                     resetForm();
                     setMode("signin");
                   }}
-                  className="hover:text-white/70"
+                  className="hover:text-fg"
                 >
                   Already have an account? Sign in
                 </button>
@@ -312,7 +317,7 @@ export function AuthModal({
                     resetForm();
                     setMode("signin");
                   }}
-                  className="hover:text-white/70"
+                  className="hover:text-fg"
                 >
                   Back to sign in
                 </button>
@@ -369,19 +374,19 @@ export function SetNewPasswordModal({ open, onClose }: SetNewPasswordModalProps)
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
-      <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-3xl border border-white/10 bg-[#0c0c12]/95 p-6 shadow-2xl backdrop-blur-xl">
+    <div className="fixed inset-0 z-[87] flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+      <div className="relative w-full max-w-md rounded-xl border border-ig-border bg-ig-elevated p-6 shadow-2xl">
         <button
           type="button"
           onClick={onClose}
-          className="absolute right-4 top-4 rounded-lg p-1.5 text-white/40 transition hover:bg-white/10 hover:text-white"
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-ig-muted transition hover:bg-ig-hover hover:text-fg"
         >
           <X className="h-5 w-5" />
         </button>
 
-        <h2 className="text-xl font-semibold text-white">Set a new password</h2>
-        <p className="mt-1 text-sm text-white/45">
+        <h2 className="text-xl font-semibold text-fg">Set a new password</h2>
+        <p className="mt-1 text-sm text-ig-muted">
           You opened a password reset link. Choose a new password for your account.
         </p>
 
@@ -391,11 +396,11 @@ export function SetNewPasswordModal({ open, onClose }: SetNewPasswordModalProps)
             { label: "Confirm new password", value: confirmPassword, onChange: setConfirmPassword },
           ].map((field) => (
             <div key={field.label}>
-              <label className="mb-1.5 block text-xs font-medium text-white/50">
+              <label className="mb-1.5 block text-xs font-medium text-ig-muted">
                 {field.label}
               </label>
               <div className="relative">
-                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" />
+                <Lock className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ig-muted" />
                 <input
                   type="password"
                   required
@@ -403,7 +408,7 @@ export function SetNewPasswordModal({ open, onClose }: SetNewPasswordModalProps)
                   autoComplete="new-password"
                   value={field.value}
                   onChange={(e) => field.onChange(e.target.value)}
-                  className="w-full rounded-xl border border-white/10 bg-white/5 py-2.5 pl-10 pr-3 text-sm text-white outline-none focus:border-[#DD2A7B]/40"
+                  className="w-full rounded-lg border border-ig-border bg-ig-secondary py-2.5 pl-10 pr-3 text-sm text-fg outline-none focus:border-ig-muted"
                   placeholder="••••••••"
                 />
               </div>
@@ -411,13 +416,13 @@ export function SetNewPasswordModal({ open, onClose }: SetNewPasswordModalProps)
           ))}
 
           {error && (
-            <p className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-red-300">
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-sm text-ig-bad">
               {error}
             </p>
           )}
 
           {success && (
-            <p className="flex items-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-emerald-300">
+            <p className="flex items-center gap-2 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-3 py-2 text-sm text-ig-good">
               <CheckCircle2 className="h-4 w-4 shrink-0" />
               Password updated.
             </p>

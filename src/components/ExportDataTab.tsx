@@ -79,9 +79,9 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-6">
-        <h3 className="font-semibold text-white">Export your analysis</h3>
-        <p className="mt-2 text-sm text-white/45">
+      <div className="rounded-xl border border-ig-border bg-ig-subtle p-6">
+        <h3 className="font-semibold text-fg">Export your analysis</h3>
+        <p className="mt-2 text-sm text-ig-muted">
           Download CSV files and a summary JSON. All exports are generated
           locally in your browser. CSVs include usernames and profile links;
           the summary JSON also includes login IPs and devices.
@@ -89,7 +89,7 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
       </div>
 
       {!network ? (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-12 text-center text-sm text-white/45">
+        <div className="rounded-xl border border-ig-border bg-ig-subtle px-6 py-12 text-center text-sm text-ig-muted">
           Upload an export with network data to enable CSV exports.
         </div>
       ) : (
@@ -100,15 +100,15 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
               type="button"
               onClick={item.action}
               disabled={item.count === 0}
-              className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-left transition hover:border-white/20 hover:bg-white/[0.06] disabled:opacity-40"
+              className="flex items-center justify-between rounded-xl border border-ig-border bg-ig-subtle p-4 text-left transition hover:border-ig-border-strong hover:bg-ig-hover disabled:opacity-40"
             >
               <div>
-                <p className="font-medium text-white">{item.label}</p>
-                <p className="text-xs text-white/40">
+                <p className="font-medium text-fg">{item.label}</p>
+                <p className="text-xs text-ig-muted">
                   {item.count} account{item.count === 1 ? "" : "s"}
                 </p>
               </div>
-              <FileSpreadsheet className="h-5 w-5 text-[#DD2A7B]" />
+              <FileSpreadsheet className="h-5 w-5 text-fg" />
             </button>
           ))}
         </div>
@@ -117,20 +117,20 @@ export function ExportDataTab({ data, network }: ExportDataTabProps) {
       <button
         type="button"
         onClick={handleSummaryExport}
-        className="flex w-full items-center justify-between rounded-2xl border border-white/10 bg-gradient-to-r from-[#F58529]/10 via-[#DD2A7B]/10 to-[#515BD4]/10 p-5 text-left transition hover:border-white/20"
+        className="flex w-full items-center justify-between rounded-xl border border-ig-border p-5 text-left transition hover:bg-ig-hover"
       >
         <div>
-          <p className="font-semibold text-white">Summary JSON</p>
-          <p className="mt-1 text-sm text-white/45">
+          <p className="font-semibold text-fg">Summary JSON</p>
+          <p className="mt-1 text-sm text-ig-muted">
             Counts and coverage, plus your security events (login IP addresses,
             devices/user agents and locations) and the advertiser and ad
             category names from your export. Treat the file as private.
           </p>
         </div>
-        <FileJson className="h-6 w-6 text-[#515BD4]" />
+        <FileJson className="h-6 w-6 text-fg" />
       </button>
 
-      <div className="flex items-center gap-2 text-xs text-white/35">
+      <div className="flex items-center gap-2 text-xs text-ig-muted">
         <Download className="h-3.5 w-3.5" />
         Files download directly to your device. Nothing is sent to a server.
       </div>

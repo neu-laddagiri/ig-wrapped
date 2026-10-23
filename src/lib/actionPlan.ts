@@ -31,7 +31,7 @@ export function buildActionPlan(
       title: `Review ${highCleanup.length} high-priority follow${highCleanup.length === 1 ? "" : "s"}`,
       reason: "These accounts score high on cleanup priority based on export signals.",
       priority: "high",
-      tab: "cleanup",
+      tab: "people",
     });
   }
 
@@ -52,7 +52,7 @@ export function buildActionPlan(
       title: "Review flagged security events",
       reason: `${flagged.length} login or security event${flagged.length === 1 ? "" : "s"} worth a glance.`,
       priority: "high",
-      tab: "security",
+      tab: "activity",
     });
   }
 
@@ -62,7 +62,7 @@ export function buildActionPlan(
       title: "Review advertisers using your info",
       reason: `${ads.advertisersCount} advertisers detected in your export.`,
       priority: "medium",
-      tab: "ads",
+      tab: "explore",
     });
   }
 
@@ -90,7 +90,7 @@ export function buildActionPlan(
       title: "Enable Presentation Mode before sharing",
       reason: "Hide sensitive names and previews when showing friends or recruiters.",
       priority: "low",
-      tab: "overview",
+      tab: "home",
     });
   }
 
@@ -99,7 +99,7 @@ export function buildActionPlan(
     title: "Try Story Mode / share cards",
     reason: "Wrapped slideshow and downloadable cards for sharing highlights.",
     priority: "low",
-    tab: "overview",
+    tab: "home",
   });
 
   return items;

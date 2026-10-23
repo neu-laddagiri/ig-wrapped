@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Sparkles, Copy, Check, Download } from "lucide-react";
+import { Check, Copy, Download } from "lucide-react";
 import { toPng } from "html-to-image";
 import type { ShareCardData } from "@/types/insights";
 import { renderShareCardLines } from "@/lib/shareCard";
+import { CANVAS_TONES } from "@/components/feed/Canvas";
 
 async function copyText(text: string): Promise<boolean> {
   try {
@@ -36,14 +37,13 @@ async function copyText(text: string): Promise<boolean> {
 interface ShareWrappedCardProps {
   card: ShareCardData;
   hideNames: boolean;
-  variant?: "hero" | "compact";
   personalityTitle?: string;
 }
 
+/** A 4:5 card in the Instagram gradient, made to be screenshotted or downloaded. */
 export function ShareWrappedCard({
   card,
   hideNames,
-  variant = "compact",
   personalityTitle,
 }: ShareWrappedCardProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -55,7 +55,6 @@ export function ShareWrappedCard({
   useEffect(() => () => window.clearTimeout(timerRef.current), []);
 
   const lines = renderShareCardLines(card, hideNames);
-  const isHero = variant === "hero" || card.id === "overall";
 
   const flash = (update: () => void, reset: () => void, ms: number) => {
     update();
@@ -88,11 +87,7 @@ export function ShareWrappedCard({
     setDownloading(true);
     setNotice(null);
     try {
-      const dataUrl = await toPng(ref.current, {
-        cacheBust: true,
-        pixelRatio: 2,
-        backgroundColor: "#050509",
-      });
+      const dataUrl = await toPng(ref.current, { cacheBust: true, pixelRatio: 2 });
       const link = document.createElement("a");
       link.download = `ig-wrapped-${card.id}.png`;
       link.href = dataUrl;
@@ -100,8 +95,7 @@ export function ShareWrappedCard({
     } catch (err) {
       console.error("Share card PNG export failed", err);
       flash(
-        () =>
-          setNotice("Couldn't create the PNG. Try again, or take a screenshot."),
+        () => setNotice("Couldn't create the PNG. Try again, or take a screenshot."),
         () => setNotice(null),
         5000
       );
@@ -114,97 +108,61 @@ export function ShareWrappedCard({
     <div className="space-y-3">
       <div
         ref={ref}
-        className={`relative overflow-hidden rounded-3xl animated-gradient-border bg-[#0a0a12]/90 ${
-          isHero ? "min-h-[320px]" : ""
-        }`}
+        className="@container relative aspect-[4/5] w-full overflow-hidden rounded-xl"
+        style={CANVAS_TONES.gradient}
       >
-        <div
-          className={`animated-gradient-bg ${isHero ? "h-2" : "h-1.5"}`}
-          aria-hidden
-        />
-        <div className={isHero ? "p-8" : "p-6"}>
-        <div className="relative">
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-[#DD2A7B]" />
-            <p className="text-xs font-bold uppercase tracking-[0.2em] text-white/50">
-              IG Wrapped
-            </p>
-          </div>
-          <h3
-            className={`mt-3 font-bold text-white ${
-              isHero ? "text-3xl sm:text-4xl" : "text-xl"
-            }`}
-          >
-            {card.title}
-          </h3>
-          {personalityTitle && isHero && (
-            <span className="mt-3 inline-block rounded-full border border-[#DD2A7B]/40 bg-[#DD2A7B]/15 px-4 py-1.5 text-sm font-semibold text-[#f9a8d4]">
-              {personalityTitle}
+        <div className="absolute inset-0 flex flex-col p-[8cqw]">
+          <div className="flex items-center justify-between">
+            <span className="font-logo text-[10cqw] leading-none">IG Wrapped</span>
+            <span className="text-[3.3cqw] font-semibold uppercase tracking-[0.16em] opacity-85">
+              {new Date().getFullYear()}
             </span>
-          )}
-
-          <ul
-            className={`mt-6 space-y-2 ${
-              isHero ? "grid gap-3 sm:grid-cols-2" : ""
-            }`}
-          >
-            {lines.map((line) => {
-              const [label, ...rest] = line.split(":");
-              const value = rest.join(":").trim();
-              return (
-                <li
-                  key={line}
-                  className={
-                    isHero
-                      ? "rounded-xl border border-white/10 bg-black/20 px-4 py-3 backdrop-blur-sm"
-                      : "text-sm text-white/80"
-                  }
-                >
-                  {isHero ? (
-                    <>
-                      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
-                        {label}
-                      </p>
-                      <p className="mt-0.5 text-lg font-bold text-white">
-                        {value || label}
-                      </p>
-                    </>
-                  ) : (
-                    line
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+          </div>
+          <div className="flex flex-1 flex-col justify-center">
+            <p className="text-[9cqw] font-bold leading-none tracking-tight">{card.title}</p>
+            {personalityTitle && (
+              <p className="mt-[2.5cqw] text-[5cqw] font-semibold opacity-90">{personalityTitle}</p>
+            )}
+            <ul className="mt-[7cqw] grid grid-cols-2 gap-x-[6cqw] gap-y-[5cqw]">
+              {lines.slice(0, 8).map((line) => {
+                const [label, ...rest] = line.split(":");
+                const value = rest.join(":").trim();
+                return (
+                  <li key={line} className="min-w-0">
+                    <p className="truncate text-[7.5cqw] font-bold leading-none tabular-nums">
+                      {value || label}
+                    </p>
+                    {value && <p className="mt-[1.2cqw] truncate text-[3.6cqw] opacity-85">{label}</p>}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+          <p className="text-[3.2cqw] opacity-80">Made from my Instagram data export</p>
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <button
           type="button"
           onClick={copyStats}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white/70 hover:bg-white/10"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-2 text-sm font-semibold text-fg hover:bg-ig-hover"
         >
-          {copied ? (
-            <Check className="h-3.5 w-3.5 text-emerald-400" />
-          ) : (
-            <Copy className="h-3.5 w-3.5" />
-          )}
-          Copy stats
+          {copied ? <Check className="h-4 w-4 text-ig-good" /> : <Copy className="h-4 w-4" />}
+          {copied ? "Copied" : "Copy stats"}
         </button>
         <button
           type="button"
           onClick={downloadPng}
           disabled={downloading}
-          className="inline-flex items-center gap-1.5 rounded-lg animated-gradient-bg px-3 py-1.5 text-xs font-semibold text-white hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-ig-blue px-3 py-2 text-sm font-semibold text-white hover:bg-ig-blue-hover disabled:opacity-50"
         >
-          <Download className="h-3.5 w-3.5" />
-          {downloading ? "Saving…" : "Download PNG"}
+          <Download className="h-4 w-4" />
+          {downloading ? "Saving…" : "Download"}
         </button>
       </div>
       {notice && (
-        <p role="alert" className="text-xs text-amber-300/90">
+        <p role="alert" className="text-xs text-ig-warn">
           {notice}
         </p>
       )}

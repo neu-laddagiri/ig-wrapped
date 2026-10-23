@@ -31,18 +31,18 @@ export class TabErrorBoundary extends Component<Props, State> {
   render() {
     if (!this.state.error) return this.props.children;
     return (
-      <div className="rounded-2xl border border-rose-400/25 bg-rose-500/10 px-5 py-6 text-sm text-white/75">
-        <p className="font-medium text-white">
+      <div className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-5 py-6 text-sm text-fg">
+        <p className="font-medium text-fg">
           {this.props.label ? `${this.props.label} couldn't be displayed.` : "This section couldn't be displayed."}
         </p>
-        <p className="mt-1 text-white/55">
+        <p className="mt-1 text-ig-muted">
           Something in this export tripped up this view. Your other tabs still
           work — try another tab or reload the page.
         </p>
         <button
           type="button"
           onClick={() => this.setState({ error: null })}
-          className="mt-4 rounded-full border border-white/15 px-4 py-1.5 text-xs text-white/80 hover:bg-white/10"
+          className="mt-4 rounded-full border border-ig-border px-4 py-1.5 text-xs text-fg hover:bg-ig-hover"
         >
           Try again
         </button>

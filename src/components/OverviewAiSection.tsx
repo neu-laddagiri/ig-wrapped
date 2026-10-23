@@ -59,14 +59,14 @@ export function OverviewAiSection({
   };
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+    <div>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <Sparkles className="h-5 w-5 text-[#DD2A7B]" />
-            <h3 className="font-semibold text-white">AI Overall Recap</h3>
+            <Sparkles className="h-5 w-5 text-fg" />
+            <h3 className="font-semibold text-fg">AI Overall Recap</h3>
           </div>
-          <p className="mt-1 text-xs text-white/40">
+          <p className="mt-1 text-xs text-ig-muted">
             Optional. Uses aggregated metrics only — no raw DMs or search history.
           </p>
         </div>
@@ -95,7 +95,7 @@ export function OverviewAiSection({
       </button>
 
       {error && (
-        <p className="mt-3 rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-100/90">
+        <p className="mt-3 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-ig-warn">
           {error}
         </p>
       )}
@@ -126,16 +126,16 @@ function RecapCard({
   if (!text) return null;
   return (
     <div
-      className={`rounded-xl border p-4 ${
-        accent
-          ? "animated-gradient-border bg-gradient-to-br from-[#F58529]/10 to-[#515BD4]/10"
-          : "border-white/10 bg-white/[0.03]"
-      }`}
+      className={`rounded-lg border p-4 ${
+ accent
+ ? "border-ig-border bg-ig-secondary"
+ : "border-ig-border bg-ig-subtle"
+ }`}
     >
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+      <p className="text-[10px] font-semibold uppercase tracking-wider text-ig-muted">
         {title}
       </p>
-      <p className="mt-2 text-sm leading-relaxed text-white/80">{text}</p>
+      <p className="mt-2 text-sm leading-relaxed text-fg">{text}</p>
     </div>
   );
 }

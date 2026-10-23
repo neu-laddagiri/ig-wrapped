@@ -22,9 +22,9 @@ interface ActionPlanTabProps {
 }
 
 const PRIORITY_STYLE = {
-  high: "border-red-500/30 bg-red-500/10 text-red-200",
-  medium: "border-amber-500/30 bg-amber-500/10 text-amber-200",
-  low: "border-white/15 bg-white/5 text-white/50",
+  high: "border-red-500/30 bg-red-500/10 text-ig-bad",
+  medium: "border-amber-500/30 bg-amber-500/10 text-ig-warn",
+  low: "border-ig-border bg-ig-secondary text-ig-muted",
 };
 
 export function ActionPlanTab({
@@ -61,19 +61,19 @@ export function ActionPlanTab({
 
   return (
     <div className="space-y-6">
-      <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
+      <div className="rounded-xl border border-ig-border bg-ig-subtle p-5">
         <div className="flex items-center gap-2">
-          <ListChecks className="h-5 w-5 text-[#DD2A7B]" />
-          <h3 className="font-semibold text-white">Action Plan</h3>
+          <ListChecks className="h-5 w-5 text-fg" />
+          <h3 className="font-semibold text-fg">Action Plan</h3>
         </div>
-        <p className="mt-2 text-sm text-white/50">
+        <p className="mt-2 text-sm text-ig-muted">
           Actionable next steps from your parsed export. Dismiss items you have
           handled.
         </p>
       </div>
 
       {items.length === 0 ? (
-        <p className="text-sm text-white/40">All caught up — no pending actions.</p>
+        <p className="text-sm text-ig-muted">All caught up — no pending actions.</p>
       ) : (
         <ul className="space-y-3">
           {items.map((item) => (
@@ -100,7 +100,7 @@ function ActionRow({
   onDismiss: () => void;
 }) {
   return (
-    <li className="rounded-xl border border-white/10 bg-white/[0.04] p-4">
+    <li className="rounded-lg border border-ig-border bg-ig-subtle p-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
@@ -109,9 +109,9 @@ function ActionRow({
             >
               {item.priority}
             </span>
-            <h4 className="font-medium text-white">{item.title}</h4>
+            <h4 className="font-medium text-fg">{item.title}</h4>
           </div>
-          <p className="mt-1.5 text-sm text-white/45">{item.reason}</p>
+          <p className="mt-1.5 text-sm text-ig-muted">{item.reason}</p>
         </div>
         <div className="flex shrink-0 gap-2">
           <button
@@ -124,7 +124,7 @@ function ActionRow({
           <button
             type="button"
             onClick={onDismiss}
-            className="rounded-lg border border-white/10 p-1.5 text-white/40 hover:bg-white/5"
+            className="rounded-lg border border-ig-border p-1.5 text-ig-muted hover:bg-ig-hover"
             aria-label="Dismiss"
           >
             <X className="h-4 w-4" />

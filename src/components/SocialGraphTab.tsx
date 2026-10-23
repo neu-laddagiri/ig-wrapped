@@ -1,17 +1,15 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Users, Trash2, Heart, Trophy, Search } from "lucide-react";
+import { ChevronDown, Search, Users } from "lucide-react";
 import type { InsightsBundle } from "@/types/insights";
+import type { NetworkStats } from "@/types/instagram";
 import { AccountSourcesPopover } from "@/components/AccountSourcesPopover";
 import { redactNameLabel } from "@/lib/dmDisplayLabels";
 import { getSecondaryLabel } from "@/lib/accountIdentity";
-import type { NetworkStats } from "@/types/instagram";
-import { TAB_SELECTED_PILL, TAB_INACTIVE_PILL } from "@/lib/tabStyles";
 import { UnfollowImpactPanel } from "@/components/UnfollowImpactPanel";
-import { ConfidencePill } from "@/components/ConfidencePill";
 import { LeaderboardSection } from "@/components/LeaderboardSection";
-import { SocialGraphMap } from "@/components/SocialGraphMap";
+import { Avatar } from "@/components/ig/Avatar";
 import { usePresentationMode } from "@/contexts/PresentationContext";
 
 interface SocialGraphTabProps {
@@ -19,288 +17,262 @@ interface SocialGraphTabProps {
   network?: NetworkStats | null;
   onOpenAccount?: (username: string) => void;
   defaultSubTab?: SubTab;
-  showSubNav?: boolean;
   showUnfollowImpact?: boolean;
 }
 
-type SubTab = "cleanup" | "realones" | "leaderboards";
+type SubTab = "realones" | "cleanup" | "leaderboards";
 
+const SUBS: { id: SubTab; label: string; blurb: string }[] = [
+  {
+    id: "realones",
+    label: "Real Ones",
+    blurb: "Ranked from 1-on-1 DMs, mutual follows, likes and comments. Group chat membership alone doesn't count.",
+  },
+  {
+    id: "cleanup",
+    label: "Cleanup",
+    blurb: "Accounts you follow with the least going on. IG Wrapped never unfollows anyone for you.",
+  },
+  {
+    id: "leaderboards",
+    label: "Leaderboards",
+    blurb: "Who shows up most in your DMs, likes and comments.",
+  },
+];
+
+const PRIORITY_TONE: Record<string, string> = {
+  high: "text-ig-bad",
+  medium: "text-ig-warn",
+  low: "text-ig-muted",
+};
+
+/** The profile's People tab: Real Ones, cleanup candidates and leaderboards. */
 export function SocialGraphTab({
   insights,
   network = null,
   onOpenAccount,
-  defaultSubTab = "leaderboards",
-  showSubNav = true,
+  defaultSubTab = "realones",
   showUnfollowImpact = false,
 }: SocialGraphTabProps) {
   const [subTab, setSubTab] = useState<SubTab>(defaultSubTab);
   const [query, setQuery] = useState("");
+  const [planOpen, setPlanOpen] = useState(false);
   const { presentationMode } = usePresentationMode();
   const showNames = !presentationMode;
   // A typed query can be a name, so it is neither shown nor applied while presenting.
   const activeQuery = showNames ? query.trim().toLowerCase() : "";
 
-  const filteredCleanup = useMemo(() => {
+  const realOnes = useMemo(() => {
     if (!insights) return [];
-    const q = activeQuery;
-    return insights.cleanup.filter(
-      (c) =>
-        !q ||
-        c.displayName.toLowerCase().includes(q) ||
-        c.username.toLowerCase().includes(q)
-    );
-  }, [insights, activeQuery]);
-
-  const filteredRealOnes = useMemo(() => {
-    if (!insights) return [];
-    const q = activeQuery;
     return insights.realOnes
       .filter((c) => !c.isSilentMutual && c.dmMessageCount > 0)
       .filter(
         (c) =>
-          !q ||
-          c.displayName.toLowerCase().includes(q) ||
-          c.username.toLowerCase().includes(q)
+          !activeQuery ||
+          c.displayName.toLowerCase().includes(activeQuery) ||
+          c.username.toLowerCase().includes(activeQuery)
       );
+  }, [insights, activeQuery]);
+
+  const cleanup = useMemo(() => {
+    if (!insights) return [];
+    return insights.cleanup.filter(
+      (c) =>
+        !activeQuery ||
+        c.displayName.toLowerCase().includes(activeQuery) ||
+        c.username.toLowerCase().includes(activeQuery)
+    );
   }, [insights, activeQuery]);
 
   if (!insights) {
     return (
-      <EmptyState message="Re-upload your export and save again to unlock social graph insights." />
+      <div className="flex flex-col items-center py-16 text-center">
+        <Users className="h-10 w-10 text-ig-muted" strokeWidth={1.5} />
+        <p className="mt-3 max-w-sm text-sm text-ig-muted">
+          Re-upload your export to unlock people insights.
+        </p>
+      </div>
     );
   }
 
-  const subs: { id: SubTab; label: string; icon: typeof Users }[] = [
-    { id: "cleanup", label: "Cleanup", icon: Trash2 },
-    { id: "realones", label: "Real Ones", icon: Heart },
-    { id: "leaderboards", label: "Leaderboards", icon: Trophy },
-  ];
+  const current = SUBS.find((s) => s.id === subTab) ?? SUBS[0];
 
   return (
-    <div className="space-y-6">
-      <div className="rounded-2xl border border-[#DD2A7B]/20 bg-gradient-to-br from-[#F58529]/10 via-[#DD2A7B]/10 to-[#515BD4]/10 p-5">
-        <div className="flex items-center gap-2">
-          <Users className="h-5 w-5 text-[#DD2A7B]" />
-          <h3 className="font-semibold text-white">Social Graph</h3>
-        </div>
-        <p className="mt-2 text-sm text-white/50">
-          {insights.accounts.length.toLocaleString()} accounts unified from
-          network, direct DMs, and interactions.
-        </p>
-        <p className="mt-1 text-xs text-white/35">
-          Estimated from export data. Group chat totals count actual sender
-          messages, not membership.
-        </p>
-      </div>
-
-      {showSubNav && (
-      <div className="flex flex-wrap gap-2">
-        {subs.map((s) => (
+    <div className="mx-auto max-w-[614px]">
+      <div className="flex rounded-lg bg-ig-secondary p-1" role="tablist" aria-label="People">
+        {SUBS.map((s) => (
           <button
             key={s.id}
             type="button"
+            role="tab"
+            aria-selected={subTab === s.id}
             onClick={() => setSubTab(s.id)}
-            className={`inline-flex items-center gap-1.5 ${
-              subTab === s.id ? TAB_SELECTED_PILL : TAB_INACTIVE_PILL
+            className={`flex-1 rounded-md py-1.5 text-sm font-semibold transition-colors ${
+              subTab === s.id ? "bg-ig-bg text-fg shadow-sm" : "text-ig-muted hover:text-fg"
             }`}
           >
-            <s.icon className="h-3.5 w-3.5" />
             {s.label}
           </button>
         ))}
       </div>
-      )}
+      <p className="mt-3 text-sm text-ig-muted">{current.blurb}</p>
 
-      {showUnfollowImpact && insights && (
-        <UnfollowImpactPanel network={network} cleanup={insights.cleanup} />
-      )}
-
-      {(insights.networkClusters?.length ?? 0) > 0 && subTab === "leaderboards" && (
-        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-          <h3 className="mb-3 font-semibold text-white">Network clusters</h3>
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {insights.networkClusters!.map((cluster) => (
-              <div
-                key={cluster.id}
-                className="rounded-xl border border-white/10 bg-white/[0.03] p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium text-white">{cluster.title}</p>
-                  <ConfidencePill level={cluster.confidence} />
-                </div>
-                <p className="mt-1 text-2xl font-bold text-white">{cluster.count}</p>
-                <p className="mt-1 text-xs text-white/40">{cluster.description}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {(subTab === "cleanup" || subTab === "realones") && (
-        <div className="relative max-w-md">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-white/30" aria-hidden />
+      {subTab !== "leaderboards" && (
+        <label className="relative mt-4 flex items-center">
+          <span className="sr-only">Search accounts</span>
+          <Search className="pointer-events-none absolute left-3 h-4 w-4 text-ig-muted" aria-hidden />
           <input
             type="search"
-            aria-label="Search accounts"
             value={showNames ? query : ""}
             disabled={!showNames}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder={showNames ? "Search accounts…" : "Search hidden while presenting"}
-            className="w-full rounded-xl border border-white/10 bg-white/5 py-2 pl-9 pr-3 text-sm text-white outline-none placeholder:text-white/30 disabled:opacity-60"
+            placeholder={showNames ? "Search" : "Search is off while presenting"}
+            className="h-9 w-full rounded-lg bg-ig-secondary pl-9 pr-3 text-sm text-fg outline-none placeholder:text-ig-muted disabled:opacity-60"
           />
-        </div>
+        </label>
       )}
 
       {subTab === "realones" && (
-        <p className="text-xs text-white/40 -mt-2">
-          Relationship score from direct 1-on-1 DMs, mutual status, and
-          likes/comments. Group membership alone does not count.
-        </p>
+        <PeopleList
+          showNames={showNames}
+          onOpen={onOpenAccount}
+          rows={realOnes.slice(0, 30).map((c, i) => ({
+            username: c.username,
+            name: redactNameLabel(c.displayName, showNames),
+            rank: i + 1,
+            detail: c.rankReason ?? `${c.dmMessageCount.toLocaleString()} direct DMs`,
+            badge: `${c.realOnesScore}`,
+            sourceBreakdown: c.sourceBreakdown,
+          }))}
+          empty="No direct-message friends found in this export."
+        />
       )}
 
       {subTab === "cleanup" && (
-        <AccountTable
-          rows={filteredCleanup.slice(0, 50).map((c) => ({
-            username: c.username,
-            name: redactNameLabel(c.displayName, showNames),
-            score: c.cleanupPriorityScore,
-            label: c.label,
-            action: c.recommendedAction,
-            meta: `${c.dmMessageCount} direct DMs`,
-          }))}
-          scoreLabel="Priority"
-          onOpen={onOpenAccount}
-          showNames={showNames}
-        />
-      )}
-
-      {subTab === "realones" && (
-        <AccountTable
-          rows={filteredRealOnes.slice(0, 30).map((c) => ({
-            username: c.username,
-            name: redactNameLabel(c.displayName, showNames),
-            score: c.realOnesScore,
-            label: c.isSilentMutual ? "Silent mutual" : c.relationshipLabel,
-            action: c.rankReason ?? `${c.dmMessageCount} direct DMs`,
-            meta: `Score ${c.realOnesScore} · direct DMs only`,
-            sourceBreakdown: c.sourceBreakdown,
-          }))}
-          scoreLabel="Real Ones"
-          onOpen={onOpenAccount}
-          showNames={showNames}
-        />
+        <>
+          {showUnfollowImpact && network && (
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => setPlanOpen((v) => !v)}
+                aria-expanded={planOpen}
+                className="flex w-full items-center justify-between rounded-lg border border-ig-border px-4 py-3 text-left text-sm font-semibold hover:bg-ig-hover"
+              >
+                <span>
+                  Plan an unfollow batch
+                  <span className="block text-xs font-normal text-ig-muted">
+                    See how your follow-back rate would change before you unfollow anyone
+                  </span>
+                </span>
+                <ChevronDown className={`h-5 w-5 shrink-0 transition-transform ${planOpen ? "rotate-180" : ""}`} />
+              </button>
+              {planOpen && (
+                <div className="mt-3">
+                  <UnfollowImpactPanel network={network} cleanup={insights.cleanup} />
+                </div>
+              )}
+            </div>
+          )}
+          <PeopleList
+            showNames={showNames}
+            onOpen={onOpenAccount}
+            rows={cleanup.slice(0, 50).map((c) => {
+              const level = c.label.toLowerCase().includes("high")
+                ? "high"
+                : c.label.toLowerCase().includes("medium")
+                  ? "medium"
+                  : "low";
+              return {
+                username: c.username,
+                name: redactNameLabel(c.displayName, showNames),
+                detail: c.recommendedAction,
+                tag: { text: c.label, tone: PRIORITY_TONE[level] },
+              };
+            })}
+            empty="Nothing to clean up — everyone you follow has some signal."
+          />
+        </>
       )}
 
       {subTab === "leaderboards" && (
-        <div className="space-y-4">
-          <p className="text-xs text-white/40">
-            Highlight rankings from your export — expand any card for the full list.
-          </p>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {insights.leaderboards
-              .filter((board) => board.id !== "silent-mutuals")
-              .map((board) => (
-              <LeaderboardSection
-                key={board.id}
-                board={board}
-                onOpenAccount={onOpenAccount}
-              />
+        <div className="mt-5 space-y-4">
+          {insights.leaderboards
+            .filter((board) => board.id !== "silent-mutuals")
+            .map((board) => (
+              <LeaderboardSection key={board.id} board={board} onOpenAccount={onOpenAccount} />
             ))}
-          </div>
-          <SocialGraphMap
-            accounts={insights.accounts}
-            showNames={showNames}
-            onOpenAccount={onOpenAccount}
-          />
         </div>
       )}
     </div>
   );
 }
 
-function AccountTable({
-  rows,
-  scoreLabel,
-  onOpen,
-  showNames,
-}: {
-  rows: {
-    username: string;
-    name: string;
-    score: number;
-    label: string;
-    action: string;
-    meta: string;
-    sourceBreakdown?: import("@/types/insights").AccountSourceBreakdown;
-  }[];
-  scoreLabel: string;
-  onOpen?: (username: string) => void;
-  showNames: boolean;
-}) {
-  if (!rows.length) {
-    return (
-      <p className="text-sm text-white/45">No accounts match your filters.</p>
-    );
-  }
-  return (
-    <div className="overflow-x-auto rounded-2xl border border-white/10">
-      <table className="w-full min-w-[520px] text-left text-sm">
-        <thead>
-          <tr className="border-b border-white/10 bg-white/[0.03] text-xs uppercase tracking-wider text-white/40">
-            <th className="px-4 py-3">Account</th>
-            <th className="px-4 py-3">{scoreLabel}</th>
-            <th className="px-4 py-3">Label</th>
-            <th className="px-4 py-3">Notes</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr
-              key={row.username}
-              className="border-b border-white/5 hover:bg-white/[0.02]"
-            >
-              <td className="px-4 py-3">
-                <button
-                  type="button"
-                  onClick={() => onOpen?.(row.username)}
-                  className="font-medium text-white hover:text-[#DD2A7B]"
-                >
-                  {row.name}
-                </button>
-                {showNames && (
-                  <p className="text-xs text-white/35">
-                    {row.username.startsWith("unknown:")
-                      ? "Deleted / unavailable in export"
-                      : getSecondaryLabel({ username: row.username })}
-                  </p>
-                )}
-              </td>
-              <td className="px-4 py-3 font-semibold text-white">
-                {row.score}
-              </td>
-              <td className="px-4 py-3 text-xs text-white/55">{row.label}</td>
-              <td className="px-4 py-3 text-xs text-white/45">
-                <div className="flex items-center gap-2">
-                  <span>{row.action}</span>
-                  <AccountSourcesPopover
-                    breakdown={row.sourceBreakdown}
-                    compact
-                  />
-                </div>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
+interface PeopleRow {
+  username: string;
+  name: string;
+  rank?: number;
+  detail: string;
+  badge?: string;
+  tag?: { text: string; tone: string };
+  sourceBreakdown?: import("@/types/insights").AccountSourceBreakdown;
 }
 
-function EmptyState({ message }: { message: string }) {
+function PeopleList({
+  rows,
+  showNames,
+  onOpen,
+  empty,
+}: {
+  rows: PeopleRow[];
+  showNames: boolean;
+  onOpen?: (username: string) => void;
+  empty: string;
+}) {
+  if (!rows.length) {
+    return <p className="py-12 text-center text-sm text-ig-muted">{empty}</p>;
+  }
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] px-6 py-16 text-center">
-      <Users className="mx-auto h-10 w-10 text-white/20" />
-      <p className="mx-auto mt-4 max-w-md text-sm text-white/45">{message}</p>
-    </div>
+    <ul className="mt-4 divide-y divide-ig-border">
+      {rows.map((row) => (
+        <li key={row.username} className="flex items-center gap-3 py-3">
+          {row.rank !== undefined && (
+            <span className="w-6 shrink-0 text-center text-sm font-semibold tabular-nums text-ig-muted">
+              {row.rank}
+            </span>
+          )}
+          <Avatar size={44} />
+          <div className="min-w-0 flex-1 leading-tight">
+            <p className="truncate text-sm font-semibold">{row.name}</p>
+            {showNames && (
+              <p className="truncate text-xs text-ig-muted">
+                {row.username.startsWith("unknown:")
+                  ? "Deleted or unavailable in export"
+                  : getSecondaryLabel({ username: row.username })}
+              </p>
+            )}
+            <div className="mt-0.5 flex items-center gap-1.5 text-xs text-ig-muted">
+              {row.tag && <span className={`font-semibold ${row.tag.tone}`}>{row.tag.text}</span>}
+              {row.tag && <span aria-hidden>·</span>}
+              <span className="truncate">{row.detail}</span>
+              <AccountSourcesPopover breakdown={row.sourceBreakdown} compact />
+            </div>
+          </div>
+          {row.badge && (
+            <span className="shrink-0 rounded-full bg-ig-gradient px-2.5 py-1 text-xs font-bold tabular-nums text-white" title="Real Ones score">
+              {row.badge}
+            </span>
+          )}
+          {onOpen && showNames && (
+            <button
+              type="button"
+              onClick={() => onOpen(row.username)}
+              className="shrink-0 rounded-lg bg-ig-secondary px-4 py-1.5 text-sm font-semibold hover:bg-ig-hover"
+            >
+              View
+            </button>
+          )}
+        </li>
+      ))}
+    </ul>
   );
 }

@@ -85,27 +85,27 @@ export function DmRelationshipTimeline({
 
   return (
     <section className="mb-5">
-      <h5 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-white/35">
+      <h5 className="mb-3 text-[11px] font-semibold uppercase tracking-widest text-ig-muted">
         Relationship timeline
       </h5>
       <div className="relative pl-4">
-        <div className="absolute bottom-2 left-[7px] top-2 w-px bg-gradient-to-b from-[#DD2A7B]/50 via-[#8134AF]/40 to-[#515BD4]/30" />
+        <div className="absolute bottom-2 left-[7px] top-2 w-px bg-ig-gradient " />
         <ul className="space-y-3">
           {events.map((ev) => (
             <li key={ev.label} className="relative flex gap-3">
-              <span className="absolute -left-4 mt-1.5 h-2.5 w-2.5 rounded-full border border-[#DD2A7B]/50 bg-[#0a0a12]" />
-              <div className="min-w-0 flex-1 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-white/40">
+              <span className="absolute -left-4 mt-1.5 h-2.5 w-2.5 rounded-full border border-ig-border bg-ig-elevated" />
+              <div className="min-w-0 flex-1 rounded-lg border border-ig-border bg-ig-subtle px-3 py-2">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-ig-muted">
                   {ev.label}
                 </p>
-                <p className="mt-0.5 text-sm text-white/80">{ev.detail}</p>
+                <p className="mt-0.5 text-sm text-fg">{ev.detail}</p>
               </div>
             </li>
           ))}
         </ul>
       </div>
       {!showNames && (
-        <p className="mt-2 text-[10px] text-white/35">
+        <p className="mt-2 text-[10px] text-ig-muted">
           Names are hidden.
         </p>
       )}

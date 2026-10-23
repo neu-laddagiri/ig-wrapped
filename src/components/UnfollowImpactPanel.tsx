@@ -120,9 +120,9 @@ export function UnfollowImpactPanel({
   if (!network) return null;
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-5">
-      <h4 className="font-semibold text-white">Unfollow impact preview</h4>
-      <p className="mt-1 text-xs text-white/45">
+    <div className="rounded-xl border border-ig-border p-4">
+      <h4 className="font-semibold text-fg">Unfollow impact preview</h4>
+      <p className="mt-1 text-xs text-ig-muted">
         Manual planning tool — IG Wrapped does not unfollow anyone automatically.
       </p>
 
@@ -171,7 +171,7 @@ export function UnfollowImpactPanel({
           type="button"
           onClick={() => setSelection(new Set(candidates.map((c) => c.username)))}
           disabled={removeCount === candidates.length}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-1.5 text-sm font-semibold text-fg hover:bg-ig-hover disabled:opacity-40"
         >
           Select all
         </button>
@@ -179,7 +179,7 @@ export function UnfollowImpactPanel({
           type="button"
           onClick={() => setSelection(new Set())}
           disabled={removeCount === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-1.5 text-sm font-semibold text-fg hover:bg-ig-hover disabled:opacity-40"
         >
           Select none
         </button>
@@ -188,10 +188,10 @@ export function UnfollowImpactPanel({
             type="button"
             onClick={copyUsernames}
             disabled={removeCount === 0}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-1.5 text-sm font-semibold text-fg hover:bg-ig-hover disabled:opacity-40"
           >
             {copied ? (
-              <Check className="h-3.5 w-3.5 text-emerald-400" aria-hidden />
+              <Check className="h-3.5 w-3.5 text-ig-good" aria-hidden />
             ) : (
               <Copy className="h-3.5 w-3.5" aria-hidden />
             )}
@@ -202,7 +202,7 @@ export function UnfollowImpactPanel({
           type="button"
           onClick={exportCsv}
           disabled={removeCount === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 px-3 py-1.5 text-xs text-white/70 hover:bg-white/5 disabled:opacity-40"
+          className="inline-flex items-center gap-1.5 rounded-lg bg-ig-secondary px-3 py-1.5 text-sm font-semibold text-fg hover:bg-ig-hover disabled:opacity-40"
         >
           <Download className="h-3.5 w-3.5" aria-hidden />
           Export CSV
@@ -212,31 +212,31 @@ export function UnfollowImpactPanel({
       <ul className="mt-4 max-h-48 space-y-1 overflow-y-auto">
         {candidates.slice(0, VISIBLE_LIMIT).map((c) => (
           <li key={c.username}>
-            <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-white/5">
+            <label className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm hover:bg-ig-hover">
               <input
                 type="checkbox"
                 checked={selected.has(c.username)}
                 onChange={(e) => toggle(c.username, e.target.checked)}
-                className="accent-[#DD2A7B]"
+                className="accent-ig-blue"
               />
-              <span className="text-white/80">
+              <span className="text-fg">
                 {redactNameLabel(c.displayName, showNames)}
               </span>
               {showNames && (
-                <span className="text-xs text-white/35">@{c.username}</span>
+                <span className="text-xs text-ig-muted">@{c.username}</span>
               )}
             </label>
           </li>
         ))}
       </ul>
       {candidates.length > VISIBLE_LIMIT && (
-        <p className="mt-2 text-xs text-white/40">
+        <p className="mt-2 text-xs text-ig-muted">
           Showing {VISIBLE_LIMIT} of {candidates.length} candidates. Select
           all / none, copy, and export apply to every candidate.
         </p>
       )}
 
-      <p className="mt-3 flex items-start gap-2 text-xs text-amber-200/70">
+      <p className="mt-3 flex items-start gap-2 text-xs text-ig-warn">
         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
         Open Instagram profiles manually to unfollow. This is an estimate based
         on export data.
@@ -247,9 +247,9 @@ export function UnfollowImpactPanel({
 
 function ImpactStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-white/[0.03] px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wider text-white/35">{label}</p>
-      <p className="mt-0.5 text-sm font-medium text-white">{value}</p>
+    <div className="rounded-lg bg-ig-secondary px-3 py-2.5">
+      <p className="text-xs text-ig-muted">{label}</p>
+      <p className="mt-0.5 text-sm font-semibold text-fg">{value}</p>
     </div>
   );
 }
